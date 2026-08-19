@@ -200,7 +200,7 @@ describe("Change inspection CLI", () => {
           policy: {
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
             prepare: null,
-            checks: [],
+            checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
           },
         },
         currentCandidate: null,

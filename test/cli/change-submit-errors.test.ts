@@ -166,29 +166,4 @@ describe("Change Submit Change Policy errors", () => {
       },
     });
   });
-
-  it("serializes an exact Change Policy rejection with supplied message and help", () => {
-    const result = submitResult(
-      {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
-      },
-      "change-1",
-    );
-
-    expect(result).toEqual({
-      exitCode: 1,
-      stdout: {
-        error: {
-          code: "validation_policy_invalid",
-          message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
-        },
-        help: [
-          "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
-          "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
-        ],
-      },
-    });
-  });
 });

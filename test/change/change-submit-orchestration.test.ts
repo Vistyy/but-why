@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
@@ -115,6 +118,76 @@ describe("Change Submit orchestration", () => {
       expect(lockCalls).toBe(1);
     }),
   );
+
+  it.effect("requires and then reuses a restored frozen Global reviewer resource", () => {
+    const globalConfigDirectory = mkdtempSync(join(tmpdir(), "by-submit-resource-"));
+    const extensionDirectory = join(globalConfigDirectory, "extensions");
+    const extensionPath = join(extensionDirectory, "review.ts");
+    const events: string[] = [];
+    const change = readyChange({
+      policy: {
+        reviewerConfiguration: {
+          acceptanceReview: {
+            ...storedAcceptanceReviewer,
+            profile: {
+              ...storedAcceptanceReviewer.profile,
+              globalConfigDirectory,
+              profile: {
+                agentRuntime: "pi",
+                runtimeConfig: {
+                  model: "test/model",
+                  extensions: ["extensions/review.ts"],
+                },
+              },
+            },
+          },
+          specialistReviews: [],
+        },
+        prepare: null,
+        checks: changeWithoutTaskPolicy.checks,
+      },
+    });
+    const submit = openChangeSubmit(dependencies({ events, change }));
+    const validationLayer = Layer.succeed(CandidateValidation, {
+      validateCandidate: () =>
+        Effect.sync(() => {
+          events.push("validate");
+          return {
+            ok: true,
+            reused: false,
+            validationRunId: 1,
+            outcome: "passed",
+          } as const;
+        }),
+      validateAcceptanceContextCandidate: () =>
+        Effect.die("Acceptance Context validation was not expected"),
+      listFindings: () => Effect.succeed([]),
+      listToolingFailures: () => Effect.succeed([]),
+      listPhaseResults: () => Effect.succeed([]),
+    });
+
+    return Effect.gen(function* () {
+      const missing = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      expect(missing).toMatchObject({
+        ok: false,
+        code: "validation_policy_invalid",
+        message: expect.stringContaining(extensionPath),
+      });
+      expect(events).not.toContain("validate");
+      expect(events).not.toContain("publish");
+
+      mkdirSync(extensionDirectory);
+      writeFileSync(extensionPath, "export default {};\n");
+      const restored = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      expect(restored).toMatchObject({ ok: true, status: "published" });
+      expect(events).toContain("validate");
+      expect(events).toContain("publish");
+    }).pipe(Effect.ensuring(Effect.sync(() => rmSync(globalConfigDirectory, { recursive: true }))));
+  });
 
   it.effect(
     "uses the Agent Environment to validate and publish a passing Change without a Task Candidate",

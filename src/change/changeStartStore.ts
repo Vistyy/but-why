@@ -16,13 +16,8 @@ export type ChangeStartRecord = {
 };
 
 export type CreateChangeStartInput = {
-  readonly id: string;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
   readonly baseRef: string;
   readonly baseRemoteUrl: string;
-  readonly startingCommit: string;
-  readonly worktreePath: string;
+  readonly managedWorktreeParent: string;
   readonly policy: ChangePolicy;
-  readonly now: string;
 };

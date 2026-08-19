@@ -12,7 +12,11 @@ import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 
 export type ChangePolicyResolution =
   | { readonly ok: true; readonly policy: ChangePolicy }
-  | { readonly ok: false; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly code?: "committed_repo_config_missing" | "committed_repo_config_invalid";
+    };
 
 const snapshotProfile = (
   profile: ResolvedReviewerPiAgentProfile,
@@ -41,14 +45,21 @@ export const resolveChangePolicyAtCommit = (input: {
     if (!source.ok) {
       return {
         ok: false,
+        code: "committed_repo_config_missing",
         message: `Repo Config is missing at Change Base ${input.commit}.`,
       };
     }
     const decoded = decodeRepoConfigSource(source.content);
-    if (!decoded.ok) return { ok: false, message: decoded.error.message };
+    if (!decoded.ok)
+      return {
+        ok: false,
+        code: "committed_repo_config_invalid",
+        message: decoded.error.message,
+      };
     if (decoded.config.idPrefix !== input.expectedIdPrefix) {
       return {
         ok: false,
+        code: "committed_repo_config_invalid",
         message: "Change Base Repo Config idPrefix does not match Shared Repository State.",
       };
     }

@@ -24,7 +24,9 @@ const specialistReviewPolicySnapshotSchema = Schema.Struct({
 const changeReviewerConfigurationSchema = Schema.Struct({
   acceptanceReview: Schema.NullOr(acceptanceReviewPolicySnapshotSchema),
   specialistReviews: Schema.Array(specialistReviewPolicySnapshotSchema),
-  agentEnvironment: Schema.optionalWith(Schema.Array(nonBlankStringSchema), { exact: true }),
+  agentEnvironment: Schema.optionalWith(Schema.NonEmptyArray(nonBlankStringSchema), {
+    exact: true,
+  }),
 }).pipe(
   Schema.filter(
     (configuration) => {

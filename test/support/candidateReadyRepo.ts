@@ -27,7 +27,7 @@ export const candidateReadyRepo = (workspace?: string): string => {
           reviewer_configuration, checks_definition, cleanup_pending
         ) VALUES (1, 'refs/heads/feature', 'refs/remotes/origin/main',
           'https://github.com/acme/widgets.git', ?,
-          '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0)
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
       `)
       .run(root);
   } finally {
@@ -49,7 +49,7 @@ export const registerCandidateChange = (
           branch_ref, base_ref, base_remote_url, worktree_path,
           reviewer_configuration, checks_definition, cleanup_pending
         ) VALUES (?, 'refs/remotes/origin/main', 'https://github.com/acme/widgets.git', ?,
-          '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0)
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
       `)
       .run(branchRef, worktreePath);
   } finally {

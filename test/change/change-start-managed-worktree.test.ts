@@ -62,6 +62,31 @@ describe("Change Start Managed Worktree boundaries", () => {
       }),
   );
 
+  it.effect("rejects a Change Base without Checks before creating a Change", () =>
+    Effect.gen(function* () {
+      const root = initializedRepository();
+      writeFileSync(
+        join(root, ".but-why", "config.json"),
+        `${JSON.stringify({ idPrefix: "BY" }, null, 2)}\n`,
+      );
+      git(root, "add", ".but-why/config.json");
+      git(root, "commit", "-m", "Remove required Checks");
+
+      const started = yield* runByInProcessEffect(root, ["change", "start"], now);
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: {
+          code: "reviewer_configuration_invalid",
+          message: "Repo config must define at least one validation.checks entry.",
+        },
+      });
+
+      const listed = yield* runByInProcessEffect(root, ["change", "list", "--all"], now);
+      expect(listed.status).toBe(0);
+      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
+    }),
+  );
+
   it.effect("ignores the retired Change Start placeholder branch", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
@@ -750,7 +775,7 @@ const changeStartRecord = (
     policy: {
       reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
       prepare: null,
-      checks: [],
+      checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
     },
     prepareFailure: null,
     state: "open",

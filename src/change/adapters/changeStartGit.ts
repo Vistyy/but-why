@@ -2,10 +2,8 @@ import { spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
-import { changeBranchRefForSlug } from "../changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
@@ -14,7 +12,6 @@ import type { ChangeStartRecord } from "../changeStartStore.js";
 
 export const resolveChangeStartGitIntent = (
   context: LocalRepositoryContext,
-  slug: string,
   requestedBaseBranch?: string,
 ): ResolveChangeStartGitResult => {
   const fetched = fetchRemoteChangeBase(context.root, requestedBaseBranch);
@@ -22,37 +19,17 @@ export const resolveChangeStartGitIntent = (
   const baseRef = fetched.base.ref;
   const startingCommit = fetched.base.commit;
 
-  const configSource = git(context.root, "show", `${startingCommit}:.but-why/config.json`);
-  if (!configSource.ok) return { ok: false, code: "committed_repo_config_missing" };
-
-  const config = decodeRepoConfigSource(configSource.stdout);
-  if (!config.ok || config.config.idPrefix !== context.idPrefix) {
-    return { ok: false, code: "committed_repo_config_invalid" };
-  }
-
-  const branchRef = changeBranchRefForSlug(slug);
   return {
     ok: true,
     intent: {
-      repositoryCommonDirectory: context.commonDirectory,
       baseRef,
       baseRemoteUrl: fetched.base.remoteUrl,
-      branchRef,
       startingCommit,
-      worktreePath: join(
+      managedWorktreeParent: join(
         dirname(context.root),
         `${basename(context.root)}-worktrees`,
         "but-why",
-        slug,
       ),
-      ...(config.config.prepare === undefined
-        ? {}
-        : {
-            prepare: {
-              command: config.config.prepare.command,
-              timeoutSeconds: config.config.prepare.timeoutSeconds ?? 1200,
-            },
-          }),
     },
   };
 };

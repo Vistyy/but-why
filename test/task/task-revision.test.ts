@@ -108,7 +108,7 @@ it.scoped(
           1, 'refs/heads/change-linked', 'refs/remotes/origin/main',
           'https://example.test/repo.git', '/repo-worktrees/change-linked',
           '{"version":1,"title":"Linked","description":"Linked intent"}',
-          '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
         )`,
         );
         yield* repository.operation(

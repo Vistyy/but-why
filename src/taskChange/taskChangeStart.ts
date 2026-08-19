@@ -79,11 +79,13 @@ export const startTaskChange = (
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
   input: TaskChangeStartInput,
-  resolvePolicy: (
-    startingCommit: string,
-  ) => Effect.Effect<
+  resolvePolicy: (startingCommit: string) => Effect.Effect<
     | { readonly ok: true; readonly policy: ChangePolicy }
-    | { readonly ok: false; readonly message: string }
+    | {
+        readonly ok: false;
+        readonly message: string;
+        readonly code?: "committed_repo_config_missing" | "committed_repo_config_invalid";
+      }
   >,
 ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
   Effect.gen(function* () {

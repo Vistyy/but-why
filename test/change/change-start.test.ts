@@ -15,21 +15,25 @@ const now = "2026-06-30T12:00:00.000Z";
 const policy = {
   reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
   prepare: null,
-  checks: [],
+  checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
 } as const;
 
 const intent = {
-  repositoryCommonDirectory: "/repo/.git",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.com/acme/repo.git",
-  branchRef: "refs/heads/but-why/change-1",
   startingCommit: "abc123",
-  worktreePath: "/repo-worktrees/but-why/change-1",
+  managedWorktreeParent: "/repo-worktrees/but-why",
 };
 
 const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
-  ...input,
+  id: "change-1",
+  repositoryCommonDirectory: "/repo/.git",
+  branchRef: "refs/heads/but-why/change-1",
+  baseRef: input.baseRef,
+  baseRemoteUrl: input.baseRemoteUrl,
+  worktreePath: `${input.managedWorktreeParent}/change-1`,
   acceptanceContext: null,
+  policy: input.policy,
   prepareFailure: null,
   state: "open",
 });
@@ -75,8 +79,8 @@ const fixture = (options: FixtureOptions = {}) => {
     },
   };
   const git: ChangeStartGitOperations = {
-    resolveIntent: (slug, base) => {
-      events.push(`resolveIntent:${slug}:${base ?? "default"}`);
+    resolveIntent: (base) => {
+      events.push(`resolveIntent:${base ?? "default"}`);
       return { ok: true, intent };
     },
     provisionWorktree: (_change, recovering) => {
@@ -110,7 +114,7 @@ describe("Change Start orchestration", () => {
         change: { acceptanceContext: null },
       });
       expect(changeWithoutTask.events).toEqual([
-        "resolveIntent:pending-change-start:default",
+        "resolveIntent:default",
         "create",
         "provisionWorktree:create",
         expect.stringMatching(/^recordPrepareOutcome:/u),
@@ -132,10 +136,23 @@ describe("Change Start orchestration", () => {
         code: "reviewer_configuration_invalid",
         message: "Exact-base Change policy is invalid.",
       });
-      expect(captured.events).toEqual([
-        "resolveIntent:pending-change-start:default",
-        "resolvePolicy:abc123",
-      ]);
+      expect(captured.events).toEqual(["resolveIntent:default", "resolvePolicy:abc123"]);
+    }),
+  );
+
+  it.effect("preserves categorized exact-base Repo Config failures", () =>
+    Effect.gen(function* () {
+      for (const code of [
+        "committed_repo_config_missing",
+        "committed_repo_config_invalid",
+      ] as const) {
+        const captured = fixture();
+        const result = yield* captured.operations.startWithPolicyResolver(() =>
+          Effect.succeed({ ok: false as const, code, message: "categorized failure" }),
+        );
+        expect(result).toEqual({ ok: false, code });
+        expect(captured.events).toEqual(["resolveIntent:default"]);
+      }
     }),
   );
 
@@ -151,7 +168,7 @@ describe("Change Start orchestration", () => {
       if (!("change" in result)) return;
       expect(result.change).toBe(captured.current());
       expect(captured.events).toEqual([
-        "resolveIntent:pending-change-start:default",
+        "resolveIntent:default",
         "create",
         "provisionWorktree:create",
       ]);
@@ -214,7 +231,9 @@ describe("Change Start orchestration", () => {
           change: { id, prepareFailure: null },
         });
         expect(commands.filter(({ command }) => command.includes("timeout 17s"))).toHaveLength(4);
-        expect(commands.every(({ cwd }) => cwd === intent.worktreePath)).toBe(true);
+        expect(
+          commands.every(({ cwd }) => cwd === `${intent.managedWorktreeParent}/change-1`),
+        ).toBe(true);
         expect(
           captured.events.filter((event) => event === "provisionWorktree:recover"),
         ).toHaveLength(3);

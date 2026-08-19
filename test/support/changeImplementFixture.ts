@@ -75,7 +75,7 @@ export const createChangeImplementFixture = (
                       timeoutSeconds: 1200,
                     })
               },
-              '[]',
+              '[{"id":"quality","command":"true","timeoutSeconds":30}]',
               ${
                 options.prepareFailure === undefined ? null : JSON.stringify(options.prepareFailure)
               },

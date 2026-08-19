@@ -210,7 +210,7 @@ describe("Acceptance Review phase", () => {
           description: "Accepted detail. ".repeat(10_000),
         },
         policy: actualPolicy,
-        agentEnvironment: [],
+        agentEnvironment: ["env"],
         agentPersistence,
         linkAgentInvocation,
         settleAgentInvocationResult,

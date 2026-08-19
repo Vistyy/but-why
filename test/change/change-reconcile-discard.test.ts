@@ -49,25 +49,19 @@ const sqlConfig = (fixture: ReconcileFixture): RepositorySqlConfig => ({
   lifecycle: "initialize",
 });
 
-const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
+const createTerminalChange = (fixture: ReconcileFixture) =>
   Effect.gen(function* () {
     const starts = yield* openSqliteChangeStartPersistence();
     const changes = yield* openSqliteChangeTestDependencies();
-    const worktreePath = join(fixture.root, "worktrees", "but-why", id);
 
     const created = yield* starts.create({
-      id,
-      repositoryCommonDirectory: fixture.commonDirectory,
-      branchRef: `refs/heads/but-why/${id}`,
       baseRef: "refs/heads/main",
       baseRemoteUrl: "https://github.com/acme/repo.git",
-      startingCommit: "base",
-      worktreePath,
-      now,
+      managedWorktreeParent: join(fixture.root, "worktrees", "but-why"),
       policy: {
         reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         prepare: null,
-        checks: [],
+        checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
       },
     });
     if (!created.ok) throw new Error(created.code);
@@ -107,8 +101,8 @@ describe("Change reconciliation discard boundary", () => {
       withReconcileRepository((fixture) =>
         Effect.gen(function* () {
           const changes = yield* openSqliteChangeTestDependencies();
-          const first = yield* createTerminalChange(fixture, "change-a");
-          const second = yield* createTerminalChange(fixture, "change-b");
+          const first = yield* createTerminalChange(fixture);
+          const second = yield* createTerminalChange(fixture);
           const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
           const cleanupDirtyManagedWorktreeAndUniqueBranch: ChangeCleanupOperation = (input) => {
             cleanupInputs.push(input);
@@ -174,7 +168,7 @@ describe("Change reconciliation discard boundary", () => {
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
         const changes = yield* openSqliteChangeTestDependencies();
-        const terminal = yield* createTerminalChange(fixture, "change-a");
+        const terminal = yield* createTerminalChange(fixture);
         const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
         const reconciliation = openChangeReconciliation({
           persistence: {
@@ -236,20 +230,14 @@ describe("Change reconciliation discard boundary", () => {
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
-        const worktreePath = join(fixture.root, "worktrees", "but-why", "change-open");
         const created = yield* starts.create({
-          id: "change-open",
-          repositoryCommonDirectory: fixture.commonDirectory,
-          branchRef: "refs/heads/but-why/change-open",
           baseRef: "refs/heads/main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
-          startingCommit: "base",
-          worktreePath,
-          now,
+          managedWorktreeParent: join(fixture.root, "worktrees", "but-why"),
           policy: {
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
             prepare: null,
-            checks: [],
+            checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
           },
         });
         if (!created.ok) throw new Error(created.code);
@@ -318,7 +306,7 @@ describe("Change reconciliation discard boundary", () => {
         const columnsBefore = yield* readChangesColumns("read changes columns before discard");
 
         const changes = yield* openSqliteChangeTestDependencies();
-        const terminal = yield* createTerminalChange(fixture, "change-a");
+        const terminal = yield* createTerminalChange(fixture);
         const reconciliation = openChangeReconciliation({
           persistence: {
             getChangeById: changes.delivery.getChangeById,

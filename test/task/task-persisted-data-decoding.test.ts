@@ -39,19 +39,14 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
         `),
       );
       const started = yield* starts.create({
-        id: "change-with-resolution",
-        repositoryCommonDirectory: commonDirectory,
-        branchRef: "refs/heads/but-why/change-with-resolution",
         baseRef: "refs/remotes/origin/main",
         baseRemoteUrl: "https://github.com/acme/repo.git",
-        startingCommit: "1111111111111111111111111111111111111111",
-        worktreePath: `${commonDirectory}/worktrees/change-with-resolution`,
+        managedWorktreeParent: `${commonDirectory}/worktrees`,
         taskId: publicTaskId("BY-5"),
-        now: secondNow,
         policy: {
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           prepare: null,
-          checks: [],
+          checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
         },
       });
       if (!started.ok) throw new Error(started.code);
@@ -123,19 +118,14 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
       );
 
       const started = yield* starts.create({
-        id: "change-with-malformed-task-state",
-        repositoryCommonDirectory: commonDirectory,
-        branchRef: "refs/heads/but-why/change-with-malformed-task-state",
         baseRef: "refs/remotes/origin/main",
         baseRemoteUrl: "https://github.com/acme/repo.git",
-        startingCommit: "1111111111111111111111111111111111111111",
-        worktreePath: `${commonDirectory}/worktrees/change-with-malformed-task-state`,
+        managedWorktreeParent: `${commonDirectory}/worktrees`,
         taskId: publicTaskId("BY-3"),
-        now: secondNow,
         policy: {
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           prepare: null,
-          checks: [],
+          checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
         },
       });
       if (!started.ok) throw new Error(started.code);

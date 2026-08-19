@@ -29,8 +29,8 @@ export const openTaskChangeStartOperation = (input: {
         ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
           Effect.gen(function* () {
             const git: ChangeStartGitOperations = {
-              resolveIntent: (slug, requestedBaseBranch) =>
-                resolveChangeStartGitIntent(input.context, slug, requestedBaseBranch),
+              resolveIntent: (requestedBaseBranch) =>
+                resolveChangeStartGitIntent(input.context, requestedBaseBranch),
               provisionWorktree: (change, recovering, startingCommit) =>
                 provisionChangeWorktree(input.context.root, change, recovering, startingCommit),
             };

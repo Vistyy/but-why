@@ -152,7 +152,7 @@ export const createChangeFixture = (
             ${branchRef}, ${options.baseRef ?? "refs/remotes/origin/main"},
             'https://github.test/acme/repo.git',
             ${options.worktreePath ?? join(root, `worktree-${branchRef.split("/").at(-1) ?? "change"}`)},
-            ${acceptanceContext}, '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
+            ${acceptanceContext}, '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
           )
           RETURNING id
         `,
@@ -342,14 +342,18 @@ const recordValidationCompletionEvidence = (
   }
   if (outcome === "passed") {
     return sql`
-      DELETE FROM validation_phase_results WHERE validation_run_id = ${validationRunId}
+      INSERT INTO validation_phase_results (
+        validation_run_id, phase, producer, outcome, findings, artifacts
+      ) VALUES (
+        ${validationRunId}, 'checks', 'quality', 'passed', '[]', '[]'
+      )
     `;
   }
   return sql`
     INSERT INTO validation_phase_results (
       validation_run_id, phase, producer, outcome, findings, artifacts
     ) VALUES (
-      ${validationRunId}, 'checks', 'types', 'failed',
+      ${validationRunId}, 'checks', 'quality', 'failed',
       ${JSON.stringify([
         {
           title: "Check failed: types",

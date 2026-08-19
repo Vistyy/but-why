@@ -83,8 +83,8 @@ export const withChangeStart = <A, E, R>(
         use((command) =>
           Effect.gen(function* () {
             const git: ChangeStartGitOperations = {
-              resolveIntent: (slug, requestedBaseBranch) =>
-                resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
+              resolveIntent: (requestedBaseBranch) =>
+                resolveChangeStartGitIntent(context, requestedBaseBranch),
               provisionWorktree: (change, recovering, startingCommit) =>
                 provisionChangeWorktree(context.root, change, recovering, startingCommit),
             };
@@ -129,8 +129,8 @@ export const withChangePrepare = <A, E, R>(
           prepareChange(
             store,
             {
-              resolveIntent: (slug, requestedBaseBranch) =>
-                resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
+              resolveIntent: (requestedBaseBranch) =>
+                resolveChangeStartGitIntent(context, requestedBaseBranch),
               provisionWorktree: (change, recovering, startingCommit) =>
                 provisionChangeWorktree(context.root, change, recovering, startingCommit),
             },

@@ -43,31 +43,35 @@ export const startChange = <CreationFailure extends object = never>(
   executor: RepositoryPreparationEffectExecutor,
   input: {
     readonly baseBranch?: string;
-    readonly resolvePolicy: (
-      startingCommit: string,
-    ) => Effect.Effect<
+    readonly resolvePolicy: (startingCommit: string) => Effect.Effect<
       | { readonly ok: true; readonly policy: ChangePolicy }
-      | { readonly ok: false; readonly message: string }
+      | {
+          readonly ok: false;
+          readonly message: string;
+          readonly code?: "committed_repo_config_missing" | "committed_repo_config_invalid";
+        }
     >;
     readonly now: string;
   },
 ): Effect.Effect<ChangeStartResult | CreationFailure, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
+    const gitIntent = git.resolveIntent(input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
     const policy = yield* input.resolvePolicy(gitIntent.intent.startingCommit);
     if (!policy.ok) {
-      return {
-        ok: false as const,
-        code: "reviewer_configuration_invalid" as const,
-        message: policy.message,
-      };
+      return policy.code === undefined
+        ? {
+            ok: false as const,
+            code: "reviewer_configuration_invalid" as const,
+            message: policy.message,
+          }
+        : { ok: false as const, code: policy.code };
     }
     const created = yield* store.create({
-      id: "pending-change-start",
-      ...gitIntent.intent,
+      baseRef: gitIntent.intent.baseRef,
+      baseRemoteUrl: gitIntent.intent.baseRemoteUrl,
+      managedWorktreeParent: gitIntent.intent.managedWorktreeParent,
       policy: policy.policy,
-      now: input.now,
     });
     if (!("ok" in created)) return created;
     if (!created.ok) return created;

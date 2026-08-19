@@ -6,9 +6,7 @@ import type {
   CandidateValidationRunRecord,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { ChangePolicy } from "../change/changePolicy.js";
-import { decodeSqliteChangeChecks } from "../change/changePolicy.js";
-import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
+import { type ChangePolicy, decodeSqliteChangePolicy } from "../change/changePolicy.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
@@ -21,7 +19,6 @@ import {
   readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
-import { decodePrepareDefinition } from "./sqliteChangeStartPersistence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { decodeSqliteValidationInputSnapshot } from "./sqliteValidationInputSnapshot.js";
 
@@ -174,7 +171,7 @@ export const readValidationExecutionAuthorityById = (
     const rows = yield* sql<{
       readonly reviewerConfiguration: string;
       readonly prepareDefinition: string | null;
-      readonly checksDefinition: string | null;
+      readonly checksDefinition: string;
     }>`
       SELECT change_row.reviewer_configuration AS reviewerConfiguration,
         change_row.prepare_definition AS prepareDefinition,
@@ -187,12 +184,7 @@ export const readValidationExecutionAuthorityById = (
     return yield* decodePersisted(operationName, () => {
       const row = rows[0];
       if (row === undefined) throw new Error("Validation Run owning Change was not selected");
-      const changePolicy = {
-        reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(row.reviewerConfiguration),
-        prepare:
-          row.prepareDefinition === null ? null : decodePrepareDefinition(row.prepareDefinition),
-        checks: row.checksDefinition === null ? [] : decodeSqliteChangeChecks(row.checksDefinition),
-      } satisfies ChangePolicy;
+      const changePolicy = decodeSqliteChangePolicy(row);
       return { run, changePolicy } satisfies ValidationExecutionAuthority;
     });
   });

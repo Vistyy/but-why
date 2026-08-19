@@ -2,13 +2,10 @@ import type { RemoteChangeBaseError } from "../submissionEnvironment/remoteChang
 import type { ChangeStartRecord } from "./changeStartStore.js";
 
 export type ChangeStartGitIntent = {
-  readonly repositoryCommonDirectory: string;
   readonly baseRef: string;
   readonly baseRemoteUrl: string;
-  readonly branchRef: string;
   readonly startingCommit: string;
-  readonly worktreePath: string;
-  readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
+  readonly managedWorktreeParent: string;
 };
 
 export type ResolveChangeStartGitResult =
@@ -59,10 +56,7 @@ export type ProvisionChangeWorktreeFailure = Exclude<
 >;
 
 export type ChangeStartGitOperations = {
-  readonly resolveIntent: (
-    slug: string,
-    requestedBaseBranch?: string,
-  ) => ResolveChangeStartGitResult;
+  readonly resolveIntent: (requestedBaseBranch?: string) => ResolveChangeStartGitResult;
   readonly provisionWorktree: (
     start: ChangeStartRecord,
     recovering: boolean,

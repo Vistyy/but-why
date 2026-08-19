@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
@@ -64,18 +64,13 @@ describe("by change reconcile", () => {
         Effect.gen(function* () {
           const starts = yield* openSqliteChangeStartPersistence();
           const created = yield* starts.create({
-            id: "change-1",
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/change-1",
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
-            startingCommit: "head",
-            worktreePath: join(input.commonDirectory, "worktree"),
-            now,
+            managedWorktreeParent: dirname(join(input.commonDirectory, "worktree")),
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
               prepare: null,
-              checks: [],
+              checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
           });
           if (!created.ok) throw new Error(created.code);
@@ -164,18 +159,13 @@ describe("by change reconcile", () => {
         Effect.gen(function* () {
           const starts = yield* openSqliteChangeStartPersistence();
           const created = yield* starts.create({
-            id: "change-1",
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/change-1",
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
-            startingCommit: "head",
-            worktreePath: join(input.commonDirectory, "worktree"),
-            now,
+            managedWorktreeParent: dirname(join(input.commonDirectory, "worktree")),
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
               prepare: null,
-              checks: [],
+              checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
           });
           if (!created.ok) throw new Error(created.code);
@@ -279,19 +269,14 @@ describe("by change reconcile", () => {
         const prepared = yield* starts.prepareTask(taskId);
         if (!prepared.ok) throw new Error(prepared.code);
         const created = yield* starts.create({
-          id: "change-1",
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/change-1",
           baseRef: "refs/remotes/origin/main",
           baseRemoteUrl: "https://github.com/acme/widgets.git",
-          startingCommit: "head",
-          worktreePath: join(input.commonDirectory, "uncreated-worktree"),
+          managedWorktreeParent: dirname(join(input.commonDirectory, "uncreated-worktree")),
           taskId,
-          now,
           policy: {
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
             prepare: null,
-            checks: [],
+            checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
           },
         });
         if (!created.ok) throw new Error(created.code);
@@ -417,18 +402,13 @@ describe("by change reconcile", () => {
         Effect.gen(function* () {
           const starts = yield* openSqliteChangeStartPersistence();
           const created = yield* starts.create({
-            id: "change-without-task",
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/but-why/change-without-task",
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
-            startingCommit: "head",
-            worktreePath: join(input.commonDirectory, "worktree"),
-            now,
+            managedWorktreeParent: dirname(join(input.commonDirectory, "worktree")),
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
               prepare: null,
-              checks: [],
+              checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
           });
           if (!created.ok) throw new Error(created.code);
@@ -525,19 +505,14 @@ describe("by change reconcile", () => {
           const prepared = yield* starts.prepareTask(taskId);
           if (!prepared.ok) throw new Error(prepared.code);
           const created = yield* starts.create({
-            id: "change-blocked-merged",
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/but-why/change-blocked-merged",
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
-            startingCommit: "head",
-            worktreePath: join(input.commonDirectory, "uncreated-worktree"),
+            managedWorktreeParent: dirname(join(input.commonDirectory, "uncreated-worktree")),
             taskId,
-            now,
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
               prepare: null,
-              checks: [],
+              checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
           });
           if (!created.ok) throw new Error(created.code);
@@ -647,19 +622,14 @@ describe("by change reconcile", () => {
           const prepared = yield* starts.prepareTask(taskId);
           if (!prepared.ok) throw new Error(prepared.code);
           const created = yield* starts.create({
-            id: "change-single-observation",
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/but-why/change-single-observation",
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
-            startingCommit: "head",
-            worktreePath: join(input.commonDirectory, "worktree"),
+            managedWorktreeParent: dirname(join(input.commonDirectory, "worktree")),
             taskId,
-            now,
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
               prepare: null,
-              checks: [],
+              checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
           });
           if (!created.ok) throw new Error(created.code);

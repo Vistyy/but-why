@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
@@ -43,18 +43,13 @@ describe("by change reconcile --discard-work", () => {
             const starts = yield* openSqliteChangeStartPersistence();
             const changes = yield* openSqliteChangeTestDependencies();
             const created = yield* starts.create({
-              id: "BY-C1",
-              repositoryCommonDirectory: commonDirectory,
-              branchRef: "refs/heads/but-why/BY-C1",
               baseRef: "refs/heads/main",
               baseRemoteUrl: "https://github.com/acme/repo.git",
-              startingCommit: git(root, "rev-parse", "refs/heads/main"),
-              worktreePath: join(root, "uncreated-worktree"),
-              now,
+              managedWorktreeParent: dirname(join(root, "uncreated-worktree")),
               policy: {
                 reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
                 prepare: null,
-                checks: [],
+                checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
               },
             });
             if (!created.ok) throw new Error(created.code);
@@ -93,7 +88,6 @@ describe("by change reconcile --discard-work", () => {
       Effect.gen(function* () {
         const root = createInitializedRepo();
         commitButWhyConfigAndRecordDefault(root);
-        const commonDirectory = join(root, ".git");
         const recordedWorktreePath = join(root, "worktrees", "but-why", "BY-C1");
         const actualWorktree = join(root, "actual", "BY-C1");
         git(root, "worktree", "add", "-b", "but-why/BY-C1", actualWorktree, "main");
@@ -109,18 +103,13 @@ describe("by change reconcile --discard-work", () => {
             const starts = yield* openSqliteChangeStartPersistence();
             const changes = yield* openSqliteChangeTestDependencies();
             const created = yield* starts.create({
-              id: "BY-C1",
-              repositoryCommonDirectory: commonDirectory,
-              branchRef: "refs/heads/but-why/BY-C1",
               baseRef: "refs/heads/main",
               baseRemoteUrl: "https://github.com/acme/repo.git",
-              startingCommit: git(root, "rev-parse", "refs/heads/main"),
-              worktreePath: recordedWorktreePath,
-              now,
+              managedWorktreeParent: dirname(recordedWorktreePath),
               policy: {
                 reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
                 prepare: null,
-                checks: [],
+                checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
               },
             });
             if (!created.ok) throw new Error(created.code);

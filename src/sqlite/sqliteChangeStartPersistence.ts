@@ -1,15 +1,11 @@
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangePrepareDefinition, ChangePrepareFailure } from "../change/change.js";
+import type { ChangePrepareFailure } from "../change/change.js";
 import { changeBranchRefForSlug } from "../change/changeBranch.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { decodeSqliteChangeChecks, encodeSqliteChangeChecks } from "../change/changePolicy.js";
-import {
-  decodeSqliteChangeReviewerConfiguration,
-  encodeSqliteChangeReviewerConfiguration,
-} from "../change/changeReviewerConfiguration.js";
+import { decodeSqliteChangePolicy, encodeSqliteChangePolicy } from "../change/changePolicy.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
@@ -74,17 +70,8 @@ const insertChangeRow = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const conflicts = yield* sql<{ readonly id: number }>`
-      SELECT id FROM changes
-      WHERE branch_ref = ${input.branchRef} OR worktree_path = ${input.worktreePath}
-      LIMIT 1
-    `;
-    if (conflicts.length > 0) {
-      return { ok: false as const, code: "change_start_conflict" as const };
-    }
-
-    const reviewerConfiguration = yield* Effect.try({
-      try: () => encodeSqliteChangeReviewerConfiguration(input.policy.reviewerConfiguration),
+    const policy = yield* Effect.try({
+      try: () => encodeSqliteChangePolicy(input.policy),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({ operationName: "create Change Start", cause }),
     });
@@ -95,11 +82,13 @@ const insertChangeRow = (
         prepare_definition, checks_definition, prepare_failure, close_reason, cancel_reason,
         cleanup_pending, cleanup_blocking_reason
       ) VALUES (
-        ${input.branchRef}, ${input.baseRef}, ${input.baseRemoteUrl}, ${input.worktreePath},
+        'refs/heads/but-why/pending-' || lower(hex(randomblob(16))),
+        ${input.baseRef}, ${input.baseRemoteUrl},
+        'pending-worktree-' || lower(hex(randomblob(16))),
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
-        ${reviewerConfiguration},
-        ${input.policy.prepare === null ? null : JSON.stringify(input.policy.prepare)},
-        ${input.policy.checks.length === 0 ? null : encodeSqliteChangeChecks(input.policy.checks)},
+        ${policy.reviewerConfiguration},
+        ${policy.prepareDefinition},
+        ${policy.checksDefinition},
         NULL, NULL, NULL, 0, NULL
       )
       RETURNING id
@@ -110,7 +99,7 @@ const insertChangeRow = (
     }
     const changeId = publicChangeId(idPrefix, allocatedId);
     const branchRef = changeBranchRefForSlug(changeId);
-    const worktreePath = join(dirname(input.worktreePath), changeId);
+    const worktreePath = join(input.managedWorktreeParent, changeId);
     const finalConflicts = yield* sql<{ readonly id: number }>`
       SELECT id FROM changes
       WHERE id <> ${allocatedId} AND (branch_ref = ${branchRef} OR worktree_path = ${worktreePath})
@@ -204,7 +193,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
     row.prepareDefinition,
     "Change prepare definition",
   );
-  const encodedChecksDefinition = decodeStoredNullableString(
+  const encodedChecksDefinition = decodeStoredString(
     row.checksDefinition,
     "Change Checks definition",
   );
@@ -212,9 +201,12 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
     row.prepareFailure,
     "Change prepare failure",
   );
-  const prepare =
-    encodedPrepareDefinition === null ? null : decodePrepareDefinition(encodedPrepareDefinition);
-  if (encodedPrepareFailure !== null && prepare === null) {
+  const policy = decodeSqliteChangePolicy({
+    reviewerConfiguration: encodedReviewerConfiguration,
+    prepareDefinition: encodedPrepareDefinition,
+    checksDefinition: encodedChecksDefinition,
+  });
+  if (encodedPrepareFailure !== null && policy.prepare === null) {
     throw new Error("Stored Change preparation failure relationship is incomplete");
   }
   return {
@@ -231,33 +223,13 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-    policy: {
-      reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(encodedReviewerConfiguration),
-      prepare,
-      checks:
-        encodedChecksDefinition === null ? [] : decodeSqliteChangeChecks(encodedChecksDefinition),
-    },
+    policy,
     prepareFailure:
       encodedPrepareFailure === null
         ? null
         : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
     state: row.closeReason === null ? "open" : "closed",
   };
-};
-
-export const decodePrepareDefinition = (source: string): ChangePrepareDefinition => {
-  const value: unknown = JSON.parse(source) as unknown;
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    typeof (value as { command?: unknown }).command !== "string" ||
-    typeof (value as { timeoutSeconds?: unknown }).timeoutSeconds !== "number" ||
-    !Number.isSafeInteger((value as { timeoutSeconds: number }).timeoutSeconds) ||
-    (value as { timeoutSeconds: number }).timeoutSeconds <= 0
-  ) {
-    throw new Error("Stored Change preparation definition is invalid");
-  }
-  return value as ChangePrepareDefinition;
 };
 
 const invalidData = (operationName: string, message: string) =>

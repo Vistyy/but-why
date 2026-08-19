@@ -24,7 +24,7 @@ describe("Current Candidate selection", () => {
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
             'https://example.com/acme/repo.git', '/tmp/feature',
-            '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
+            '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
           )
         `,
         );
@@ -50,6 +50,12 @@ describe("Current Candidate selection", () => {
         if (admitted.reused || "blocked" in admitted || "active" in admitted) {
           throw new Error("Expected a new Validation Run");
         }
+        yield* validation.recordCheckResult({
+          validationRunId: admitted.validationRunId,
+          producer: "quality",
+          outcome: "passed",
+          artifactRecords: [],
+        });
         yield* validation.recordWorkspaceCleanup({
           validationRunId: admitted.validationRunId,
           cleanupWorkspace: "not_created",

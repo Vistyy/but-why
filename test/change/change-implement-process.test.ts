@@ -133,7 +133,7 @@ exit 1
                 ${internalChangeId(changeId, "BY")}, 'refs/heads/process',
                 'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
                 ${join(root, "process-worktree")},
-                '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
+                '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
               )
             `,
             );

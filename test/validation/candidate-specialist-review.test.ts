@@ -305,7 +305,7 @@ describe("Candidate Specialist Review phase", () => {
 
       const result = yield* harness.run(piReviewerAgentRuntime, {
         policies: [configuredPolicy],
-        agentEnvironment: [],
+        agentEnvironment: ["env"],
         commandCwd: workspace,
         resourceRoot: workspace,
         reviewerExecutor: createPiReviewerProcessExecutor(),
@@ -399,6 +399,12 @@ describe("Candidate Specialist Review phase", () => {
                   });
                   if (started.reused || "blocked" in started)
                     throw new Error("Expected a new unblocked Specialist Validation Run");
+                  yield* persistence.execution.recordCheckResult({
+                    validationRunId: started.validationRunId,
+                    producer: "quality",
+                    outcome: "passed",
+                    artifactRecords: [],
+                  });
                   const result = yield* runSpecialistReviewPhase({
                     validationRunId: started.validationRunId,
                     changeId: captured.changeId,
@@ -452,6 +458,7 @@ describe("Candidate Specialist Review phase", () => {
         expect(
           yield* Effect.suspend(() => validation.listPhaseResults(durable.validationRunId)),
         ).toEqual([
+          { producer: "quality", outcome: "passed" },
           { producer: "standards", outcome: "failed" },
           { producer: "broken-first", outcome: "failed" },
           { producer: "broken-second", outcome: "failed" },

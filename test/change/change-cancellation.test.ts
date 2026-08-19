@@ -734,7 +734,7 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord & CancellationC
   policy: {
     reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
     prepare: null,
-    checks: [],
+    checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
   },
   prepareFailure: null,
   implementationDecisions: [],

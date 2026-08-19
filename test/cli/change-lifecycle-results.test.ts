@@ -20,7 +20,7 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
   policy: {
     reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
     prepare: { command: "prepare repository", timeoutSeconds: 17 },
-    checks: [],
+    checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
   },
   prepareFailure,
   state: "open",

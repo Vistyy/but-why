@@ -3,7 +3,7 @@ import { RepoConfigValidationFailed, type SubmitRejectionError } from "./submitR
 
 export type SubmitRepoConfig = {
   readonly prepare?: SubmitPrepareConfig;
-  readonly checks: readonly SubmitCheckConfig[];
+  readonly checks: readonly [SubmitCheckConfig, ...SubmitCheckConfig[]];
 };
 
 export type SubmitPrepareConfig = RepoPrepareConfig & {
@@ -56,7 +56,7 @@ export const submitRepoConfig = (
               timeoutSeconds: prepare.timeoutSeconds ?? defaultValidationCommandTimeoutSeconds,
             },
           }),
-      checks,
+      checks: checks as [SubmitCheckConfig, ...SubmitCheckConfig[]],
     },
   };
 };
