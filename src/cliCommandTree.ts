@@ -779,7 +779,7 @@ export const runCommandTree = (
       if (ValidationError.isValidationError(commandResult.left)) {
         const missingOperation = missingDependencyOperation(
           args,
-          generatedText(commandResult.left.error),
+          ValidationError.isInvalidValue(commandResult.left),
         );
         if (missingOperation !== undefined) {
           return dependencyOptionRequiredError(missingOperation);
