@@ -25,6 +25,7 @@ import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type {
   CandidateValidationAuthority,
   CandidateValidationOutcome,
+  CandidateValidationToolingFailure,
 } from "./candidateValidationRunStore.js";
 import { runCandidateValidationGate } from "./runCandidateValidationGate.js";
 
@@ -48,6 +49,7 @@ type ValidateCandidateResult =
       readonly ok: false;
       readonly code: "active_validation_run";
       readonly validationRunId: number;
+      readonly toolingFailures?: readonly CandidateValidationToolingFailure[];
     }
   | { readonly ok: false; readonly code: "blocked" }
   | {
@@ -227,6 +229,9 @@ const makeCandidateValidation = (dependencies: {
           ok: false,
           code: "active_validation_run",
           validationRunId: started.validationRunId,
+          toolingFailures: yield* dependencies.persistence.listToolingFailures(
+            started.validationRunId,
+          ),
         } as const;
       }
       yield* dependencies.persistence.complete({

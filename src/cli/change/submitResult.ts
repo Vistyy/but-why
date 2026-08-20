@@ -68,7 +68,13 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
     return runtimeError({
       code: result.code,
       message: `Validation Run ${result.validationRunId} remains active for this Change.`,
-      details: { changeId: result.changeId, validationRunId: result.validationRunId },
+      details: {
+        changeId: result.changeId,
+        validationRunId: result.validationRunId,
+        ...(result.toolingFailures === undefined
+          ? {}
+          : { toolingFailures: result.toolingFailures }),
+      },
       help: [
         `After stopping every process from the run, execute \`by validation-run abandon ${result.validationRunId} --reason <reason>\`.`,
       ],

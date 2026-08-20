@@ -79,6 +79,7 @@ export type ChangeSubmitResult =
       readonly code: "submission_in_progress" | "active_validation_run";
       readonly changeId: string;
       readonly validationRunId: number | null;
+      readonly toolingFailures?: readonly CandidateValidationToolingFailure[];
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" }
   | {
@@ -431,6 +432,9 @@ const validateAndPublish = (
         code: "active_validation_run",
         changeId: change.id,
         validationRunId: validationResult.validationRunId,
+        ...(validationResult.toolingFailures === undefined
+          ? {}
+          : { toolingFailures: validationResult.toolingFailures }),
       } as const;
     }
     if (validationResult.outcome !== "passed") {
