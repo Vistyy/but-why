@@ -410,6 +410,76 @@ it.effect("does not resume a continuation marked unusable despite its transcript
   }),
 );
 
+it.effect("returns the terminal retry result with ordered Invocation evidence", () =>
+  Effect.gen(function* () {
+    const root = yield* initializedRepository();
+    yield* withPersistence(root, (persistence) =>
+      Effect.gen(function* () {
+        const prompts: string[] = [];
+        const transcript = join(root, "retry.jsonl");
+        const result = yield* executeAgentSession({
+          configuration,
+          agentPersistence: persistence,
+          linkInvocation: noOpLink,
+          reviewerRuntime: {
+            review: (reviewInput) => {
+              prompts.push(reviewInput.prompt);
+              const attempt = prompts.length;
+              return Effect.succeed({
+                ok: false as const,
+                failure: {
+                  kind: "output_contract" as const,
+                  operationName: "decode_reviewer_output",
+                  message: `failure-${attempt}`,
+                  correctionPrompt: `correct-${attempt}`,
+                  sessionReference: "retry-session",
+                },
+                sessionUsability: "unknown" as const,
+                attempts: 1,
+                stdout: "invalid output",
+                sessionReference: "retry-session",
+                sessionFilePath: transcript,
+              });
+            },
+          },
+          reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
+          decodeOutput: (output) => Effect.succeed(output),
+          systemPrompt: "Act as the test Reviewer.",
+          prompt: "Review.",
+          continuationPrompt: "Continue.",
+          commandCwd: root,
+          resourceRoot: root,
+          profile: {
+            agentProfile: "review",
+            scope: "global",
+            profile: { agentRuntime: "pi", runtimeConfig: { model: configuration.model } },
+          },
+          reviewer: "test",
+          sessionStorageRoot: root,
+        });
+
+        expect(result.result).toMatchObject({
+          ok: false,
+          failure: { kind: "output_contract", message: "failure-3" },
+        });
+        expect(prompts).toEqual(["Review.", "correct-1", "correct-2"]);
+        expect(result.evidence.invocations).toHaveLength(3);
+        expect(result.evidence.invocations.map((invocation) => invocation.id)).toEqual([1, 2, 3]);
+        expect(result.evidence.invocations.map((invocation) => invocation.settlementKind)).toEqual([
+          "returned",
+          "returned",
+          "returned",
+        ]);
+        expect(result.evidence.invocations[0]?.continuationId).toBe(
+          result.evidence.invocations[2]?.continuationId,
+        );
+        const history = yield* persistence.readInvocationHistory(result.evidence.agentSessionId);
+        expect(history.map((invocation) => invocation.id)).toEqual([1, 2, 3]);
+      }),
+    );
+  }),
+);
+
 it.effect("discovers an initial transcript after interruption and keeps it resumable", () =>
   Effect.gen(function* () {
     const root = yield* initializedRepository();
@@ -469,6 +539,77 @@ it.effect("discovers an initial transcript after interruption and keeps it resum
           linkInvocation: noOpLink,
         });
         expect(resumed).toMatchObject({ ok: true, dispatch: { resumed: true } });
+      }),
+    );
+  }),
+);
+
+it.effect("continues an interrupted invocation when transcript discovery fails", () =>
+  Effect.gen(function* () {
+    const root = yield* initializedRepository();
+    yield* withPersistence(root, (persistence) =>
+      Effect.gen(function* () {
+        const result = yield* executeAgentSession({
+          configuration,
+          agentPersistence: persistence,
+          linkInvocation: noOpLink,
+          reviewerRuntime: {
+            review: (reviewInput) => {
+              const header = `${JSON.stringify({
+                type: "session",
+                id: reviewInput.sessionId,
+                cwd: root,
+              })}\n`;
+              writeFileSync(join(root, "interrupted-first.jsonl"), header);
+              writeFileSync(join(root, "interrupted-second.jsonl"), header);
+              return Effect.interrupt;
+            },
+          },
+          reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
+          decodeOutput: (output) => Effect.succeed(output),
+          systemPrompt: "Act as the test Reviewer.",
+          prompt: "Review.",
+          continuationPrompt: "Continue.",
+          commandCwd: root,
+          resourceRoot: root,
+          profile: {
+            agentProfile: "review",
+            scope: "global",
+            profile: { agentRuntime: "pi", runtimeConfig: { model: configuration.model } },
+          },
+          reviewer: "test",
+          sessionStorageRoot: root,
+        });
+
+        expect(result.result).toMatchObject({
+          ok: false,
+          failure: {
+            kind: "process_execution",
+            operationName: "agent_invocation_interrupted",
+          },
+          sessionUsability: "unknown",
+        });
+        expect(result.result).not.toHaveProperty("sessionFilePath");
+        expect(result.evidence.invocations).toMatchObject([
+          {
+            settlementKind: "return_unknown",
+            continuation: {
+              transcriptPath: null,
+              unusableReason: expect.any(String),
+            },
+          },
+        ]);
+        expect(
+          yield* persistence.readInvocationHistory(result.evidence.agentSessionId),
+        ).toMatchObject([
+          {
+            settlementKind: "return_unknown",
+            continuation: {
+              transcriptPath: null,
+              unusableReason: expect.any(String),
+            },
+          },
+        ]);
       }),
     );
   }),

@@ -1,6 +1,6 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-import { Cause, Clock, Effect, Option } from "effect";
+import { Cause, Clock, Data, Effect, Option } from "effect";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
@@ -17,6 +17,10 @@ import type {
   AgentSessionPersistence,
   AgentSessionSqlLink,
 } from "./agentSession.js";
+
+class TranscriptDiscoveryFailed extends Data.TaggedError("TranscriptDiscoveryFailed")<{
+  readonly cause: unknown;
+}> {}
 
 export type AgentExecutionEvidence = {
   readonly agentSessionId: number;
@@ -75,11 +79,11 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
     let resumeSession: string | undefined;
     let resumeSessionFilePath: string | undefined;
     const invocationEvidence: AgentInvocationRecord[] = [];
-    let lastResult: ReviewerAgentResult<Output> | undefined;
     let sessionId = input.agentSessionId;
     let continuationId = 0;
+    let invocationNumber = 1;
 
-    for (let invocationNumber = 1; invocationNumber <= 3; invocationNumber += 1) {
+    while (true) {
       const dispatch = yield* input.agentPersistence.beginInvocation({
         ...(sessionId === undefined ? {} : { agentSessionId: sessionId }),
         configuration: input.configuration,
@@ -135,7 +139,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
                       input.sessionStorageRoot,
                       dispatch.dispatch.piSessionId,
                     ),
-                  catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+                  catch: (cause) => new TranscriptDiscoveryFailed({ cause }),
                 }),
               ),
             )
@@ -171,7 +175,6 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         input.afterInvocation === undefined
           ? result
           : yield* input.afterInvocation({ result, invocationNumber });
-      lastResult = settledResult;
       const settlement = settlementFor(
         settledResult,
         input.sessionStorageRoot,
@@ -228,7 +231,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       );
       invocationEvidence.push(invocationEvidenceRecord);
 
-      if (settledResult.ok) {
+      if (settledResult.ok || !shouldRetry) {
         return {
           result: settledResult,
           evidence: {
@@ -238,19 +241,9 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
           },
         };
       }
-      if (!shouldRetry) break;
       prompt = settledResult.failure.correctionPrompt ?? settledResult.failure.message;
+      invocationNumber += 1;
     }
-
-    if (lastResult === undefined) throw new Error("Agent Invocation produced no result");
-    return {
-      result: lastResult,
-      evidence: {
-        agentSessionId: sessionId ?? 0,
-        continuationId,
-        invocations: invocationEvidence,
-      },
-    };
   });
 
 const settlementFor = <Output>(
