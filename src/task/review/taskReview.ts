@@ -45,7 +45,17 @@ const taskReviewToolingFailureSchema = Schema.Struct({
   operation: nonBlankStringSchema,
   message: nonBlankStringSchema,
   blockingInvocationId: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
-});
+}).pipe(
+  Schema.filter(
+    (failure) =>
+      (failure.operation === "dispatch_agent_invocation") ===
+      (failure.blockingInvocationId !== undefined),
+    {
+      message: () =>
+        "A dispatch Tooling Failure requires a blocking Invocation ID, which no other operation may provide",
+    },
+  ),
+);
 
 const decodeToolingFailure = Schema.decodeUnknownSync(taskReviewToolingFailureSchema, {
   onExcessProperty: "error",
