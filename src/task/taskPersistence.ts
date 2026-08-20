@@ -11,8 +11,6 @@ import type {
   EditTaskDependenciesResult,
   ListTasksInput,
   ListTasksResult,
-  RenameTaskInput,
-  RenameTaskResult,
   ReviseTaskInput,
   ReviseTaskResult,
   StoredTaskRecord,
@@ -35,9 +33,6 @@ export type TaskPersistence = {
   readonly editTaskDependencies: (
     input: EditTaskDependenciesInput,
   ) => Effect.Effect<EditTaskDependenciesResult, RepositoryStorageError>;
-  readonly renameTask: (
-    input: RenameTaskInput,
-  ) => Effect.Effect<RenameTaskResult, RepositoryStorageError>;
   readonly listTasks: (
     input: ListTasksInput,
   ) => Effect.Effect<ListTasksResult, RepositoryStorageError>;

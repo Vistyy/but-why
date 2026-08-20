@@ -21,8 +21,6 @@ import type {
   EditTaskDependenciesResult,
   ListTasksInput,
   ListTasksResult,
-  RenameTaskInput,
-  RenameTaskResult,
   ReviseTaskInput,
   ReviseTaskResult,
 } from "./taskStore.js";
@@ -36,9 +34,6 @@ export type TaskUseCases = {
   readonly editTaskDependencies: (
     input: EditTaskDependenciesInput,
   ) => Effect.Effect<RepoEditTaskDependenciesResult, RepositoryStorageError>;
-  readonly renameTask: (
-    input: RenameTaskInput,
-  ) => Effect.Effect<RenameTaskResult, RepositoryStorageError>;
   readonly listTasks: (
     input: ListTasksInput,
   ) => Effect.Effect<ListTasksResult, RepositoryStorageError>;
@@ -96,7 +91,6 @@ export const openTaskUseCases = (
   resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
   createTask: tasks.createTask,
   editTaskDependencies: (input) => tasks.editTaskDependencies(input),
-  renameTask: (input) => tasks.renameTask(input),
   listTasks: tasks.listTasks,
   listActionableTasks: tasks.listActionableTasks,
   getTaskById: tasks.getTaskById,

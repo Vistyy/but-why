@@ -16,7 +16,7 @@ import type {
 } from "../../task/taskStore.js";
 import { openSqliteTaskChangeTaskPersistence } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
 
-type TaskChangeTaskUseCases = {
+export type TaskChangeTaskUseCases = {
   readonly idPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly editTaskDependencies: (
@@ -29,8 +29,6 @@ type TaskChangeTaskUseCases = {
     input: ReviseTaskInput,
   ) => Effect.Effect<ReviseTaskResult, RepositoryStorageError>;
 };
-
-export type { TaskChangeTaskUseCases };
 
 export type LoadTaskChangeTaskUseCasesResult<A> =
   | { readonly ok: true; readonly value: A }

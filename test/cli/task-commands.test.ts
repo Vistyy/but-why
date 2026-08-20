@@ -20,7 +20,9 @@ import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
 import type { TaskReviewInspectionUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
+import type { RenameTaskInput, RenameTaskResult } from "../../src/task/taskStore.js";
 import type { ApplyTaskContextDraftResult, TaskUseCases } from "../../src/task/taskUseCases.js";
+import type { TaskChangeTaskUseCases } from "../../src/taskChange/composition/loadTaskChangeTaskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -93,6 +95,23 @@ const environment = (
   taskUseCases,
   taskReviewInspectionUseCases,
 });
+
+const renameEnvironment = (
+  renameTask: (input: RenameTaskInput) => RenameTaskResult,
+  now = firstNow,
+): TaskCommandEnvironment => {
+  const coordinated: TaskChangeTaskUseCases = {
+    idPrefix: "BY",
+    resolveTaskId: (taskId) => ({ ok: true, taskId }),
+    editTaskDependencies: () => Effect.die("Unexpected Task dependency edit call"),
+    renameTask: (input) => Effect.succeed(renameTask(input)),
+    reviseTask: () => Effect.die("Unexpected Task revision call"),
+  };
+  return {
+    ...environment(fakeTaskUseCases(), now),
+    taskChangeTaskUseCases: coordinated,
+  };
+};
 
 describe("Task command Adapters", () => {
   it("renders only valid Task Review recovery actions", () => {
@@ -479,15 +498,10 @@ describe("Task command Adapters", () => {
     Effect.gen(function* () {
       const renamed = taskRecord({ title: "Renamed task" });
       let input: unknown;
-      const commandEnvironment = environment(
-        fakeTaskUseCases({
-          renameTask: (value) => {
-            input = value;
-            return { ok: true, noOp: false, task: renamed };
-          },
-        }),
-        secondNow,
-      );
+      const commandEnvironment = renameEnvironment((value) => {
+        input = value;
+        return { ok: true, noOp: false, task: renamed };
+      }, secondNow);
 
       const result = yield* runRenameCommand(
         { taskId: "BY-1", title: "  Renamed task  " },
@@ -495,11 +509,11 @@ describe("Task command Adapters", () => {
       );
       const noOp = yield* runRenameCommand(
         { taskId: "BY-1", title: "same" },
-        environment(
-          fakeTaskUseCases({
-            renameTask: () => ({ ok: true, noOp: true, task: taskRecord({ title: "same" }) }),
-          }),
-        ),
+        renameEnvironment(() => ({
+          ok: true,
+          noOp: true,
+          task: taskRecord({ title: "same" }),
+        })),
       );
       const invalid = yield* runRenameCommand(
         { taskId: "BY-1", title: "line\nbreak" },
@@ -550,7 +564,7 @@ describe("Task command Adapters", () => {
       for (const testCase of cases) {
         const result = yield* runRenameCommand(
           { taskId: "BY-1", title: "New title" },
-          environment(fakeTaskUseCases({ renameTask: () => testCase.result })),
+          renameEnvironment(() => testCase.result),
         );
         expect(result).toMatchObject({ exitCode: 1, stdout: { error: { code: testCase.code } } });
       }

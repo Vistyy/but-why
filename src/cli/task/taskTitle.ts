@@ -1,19 +1,9 @@
 import type { CliResult } from "../../cliResults.js";
 import { usageError } from "../../cliResults.js";
-
-export type TaskTitleInputResult =
-  | { readonly ok: true; readonly title: string }
-  | { readonly ok: false; readonly code: "empty_title" | "invalid_task_title" };
-
-export const normalizeTaskTitle = (title: string): TaskTitleInputResult => {
-  const normalized = title.trim();
-  if (normalized.length === 0) return { ok: false, code: "empty_title" };
-  if (/[\r\n]/u.test(normalized)) return { ok: false, code: "invalid_task_title" };
-  return { ok: true, title: normalized };
-};
+import type { TaskTitleValidationResult } from "../../task/taskTitle.js";
 
 export const taskTitleInputError = (
-  error: Extract<TaskTitleInputResult, { readonly ok: false }>,
+  error: Extract<TaskTitleValidationResult, { readonly ok: false }>,
 ): CliResult =>
   usageError(
     error.code === "empty_title"

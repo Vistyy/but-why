@@ -4,13 +4,14 @@ import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type { RenameTaskResult } from "../../../task/taskStore.js";
+import { normalizeTaskTitle } from "../../../task/taskTitle.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
-  withTaskChangeTasks,
+  withTaskRename,
 } from "../taskCliSupport.js";
-import { normalizeTaskTitle, taskTitleInputError } from "../taskTitle.js";
+import { taskTitleInputError } from "../taskTitle.js";
 
 export type TaskRenameCommand = {
   readonly taskId: string;
@@ -25,7 +26,7 @@ export const runRenameCommand = (
   if (!title.ok) return Effect.succeed(taskTitleInputError(title));
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTaskChangeTasks(environment, (tasks) => {
+  return withTaskRename(environment, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.map(tasks.renameTask({ taskId: taskId.taskId, title: title.title }), (result) =>
@@ -46,6 +47,9 @@ const renameResult = (taskId: PublicTaskId, result: RenameTaskResult): CliResult
     });
   }
   if (result.code === "task_not_found") return taskNotFound(taskId);
+  if (result.code === "empty_title" || result.code === "invalid_task_title") {
+    return taskTitleInputError(result);
+  }
   if (result.code === "task_change_linked") {
     return runtimeError({
       code: result.code,
@@ -62,6 +66,7 @@ const renameResult = (taskId: PublicTaskId, result: RenameTaskResult): CliResult
       help: [`Run \`by task revise ${taskId}\` before changing its title.`],
     });
   }
+  if (result.code !== "invalid_task_state") return taskTitleInputError(result);
   return runtimeError({
     code: result.code,
     message: `Cannot rename Task ${taskId} from state ${result.state}.`,

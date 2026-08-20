@@ -26,6 +26,7 @@ import type {
   ReviseTaskInput,
   ReviseTaskResult,
 } from "../../../task/taskStore.js";
+import { normalizeTaskTitle } from "../../../task/taskTitle.js";
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
 import type { TaskChangeLinkPort } from "../../taskChangePorts.js";
 
@@ -83,11 +84,13 @@ export const openSqliteTaskChangeTaskPersistence = () =>
       renameTask: (input) =>
         repository.transactionImmediate("rename Task", (sql) =>
           Effect.gen(function* () {
+            const title = normalizeTaskTitle(input.title);
+            if (!title.ok) return title;
             const current = yield* getTaskById(sql, input.taskId, repository.idPrefix);
             if (current === undefined) {
               return { ok: false as const, code: "task_not_found" as const };
             }
-            if (current.title === input.title) {
+            if (current.title === title.title) {
               return { ok: true as const, noOp: true, task: current };
             }
             const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix);
@@ -98,7 +101,7 @@ export const openSqliteTaskChangeTaskPersistence = () =>
                 changeId: link.changeId,
               };
             }
-            return yield* renameTask(sql, input, repository.idPrefix);
+            return yield* renameTask(sql, { ...input, title: title.title }, repository.idPrefix);
           }),
         ),
       reviseTask: (input) =>

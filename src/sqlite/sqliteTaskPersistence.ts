@@ -25,6 +25,7 @@ import type {
   StoredTaskRecord,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
+import { normalizeTaskTitle } from "../task/taskTitle.js";
 import {
   type DecodedStoredTaskRecordRow,
   type DecodedTaskSummaryRow,
@@ -48,8 +49,6 @@ export const openSqliteTaskPersistence = (): Effect.Effect<TaskPersistence, neve
         repository.transactionImmediate("edit Task dependencies", (sql) =>
           editTaskDependencies(sql, input, idPrefix),
         ),
-      renameTask: (input) =>
-        repository.transactionImmediate("rename Task", (sql) => renameTask(sql, input, idPrefix)),
       listTasks: (input) =>
         repository.transaction("list Tasks", (sql) => listTasks(sql, idPrefix, input)),
       listActionableTasks: () =>
@@ -348,16 +347,18 @@ export const renameTask = (
   idPrefix: string,
 ): Effect.Effect<RenameTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
+    const title = normalizeTaskTitle(input.title);
+    if (!title.ok) return title;
     const current = yield* getTaskById(sql, input.taskId, idPrefix);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.title === input.title) return { ok: true as const, noOp: true, task: current };
+    if (current.title === title.title) return { ok: true as const, noOp: true, task: current };
     if (current.state !== "new") {
       return current.state === "todo"
         ? { ok: false as const, code: "task_revision_required" as const, state: current.state }
         : { ok: false as const, code: "invalid_task_state" as const, state: current.state };
     }
     yield* sql`
-      UPDATE tasks SET title = ${input.title}
+      UPDATE tasks SET title = ${title.title}
       WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
     const updated = yield* getTaskById(sql, input.taskId, idPrefix);
