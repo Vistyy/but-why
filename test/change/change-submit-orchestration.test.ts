@@ -1086,7 +1086,7 @@ describe("Change Submit orchestration", () => {
             publish: () => {
               throw new Error("Duplicate publication");
             },
-            associateRepositoryBranchUpstream: () => {
+            associatePublishedChange: () => {
               associationAttempts += 1;
               return associationAttempts === 1 ? { ok: false } : { ok: true };
             },
@@ -1411,7 +1411,7 @@ describe("Change Submit orchestration", () => {
 
 type PublicationFixture = {
   readonly publish: (input: PublishCandidateInput) => PublishCandidateResult;
-  readonly associateRepositoryBranchUpstream?: () => { readonly ok: true } | { readonly ok: false };
+  readonly associatePublishedChange?: () => { readonly ok: true } | { readonly ok: false };
 };
 
 type PullRequestObservation =
@@ -1505,8 +1505,8 @@ const dependencies = (input: {
       return {
         publish: (publicationInput: PublishCandidateInput) =>
           Effect.sync(() => publication.publish(publicationInput)),
-        associateRepositoryBranchUpstream: () =>
-          publication.associateRepositoryBranchUpstream?.() ?? { ok: true as const },
+        associatePublishedChange: () =>
+          Effect.sync(() => publication.associatePublishedChange?.() ?? { ok: true as const }),
       };
     },
     readBranchHead: () =>

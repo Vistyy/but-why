@@ -45,23 +45,15 @@ export type CandidatePublicationGit = {
   ) => { readonly ok: true } | { readonly ok: false };
 };
 
-export type RepositoryBranchUpstreamAssociationInput = {
-  readonly branchRef: string;
-  readonly remoteName: string;
-  readonly remoteBranchName: string;
-};
-
-export type RepositoryBranchUpstreamAssociationResult =
-  | { readonly ok: true }
-  | { readonly ok: false };
+export type PublishedChangeAssociationResult = { readonly ok: true } | { readonly ok: false };
 
 export type CandidatePublication = {
   readonly publish: (
     input: PublishCandidateInput,
   ) => Effect.Effect<PublishCandidateResult, RepositoryStorageError>;
-  readonly associateRepositoryBranchUpstream: (
-    input: RepositoryBranchUpstreamAssociationInput,
-  ) => RepositoryBranchUpstreamAssociationResult;
+  readonly associatePublishedChange: (
+    changeId: string,
+  ) => Effect.Effect<PublishedChangeAssociationResult, RepositoryStorageError>;
 };
 
 export type PublishCandidateInput = {
@@ -122,12 +114,7 @@ const publishNew = (
 
 export const openCandidatePublication = (dependencies: Dependencies): CandidatePublication => ({
   publish: (input) => publish(dependencies, input),
-  associateRepositoryBranchUpstream: (input) =>
-    dependencies.git.associateRepositoryBranchUpstream(
-      input.branchRef,
-      input.remoteName,
-      input.remoteBranchName,
-    ),
+  associatePublishedChange: (changeId) => associatePublishedChange(dependencies, changeId),
 });
 
 const publish = (dependencies: Dependencies, input: PublishCandidateInput): PublicationEffect =>
@@ -176,11 +163,8 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
               bodyFor(change),
             );
     if (!result.ok) return result;
-    return associateRepositoryBranchUpstream(dependencies, {
-      branchRef: change.branchRef,
-      remoteName: input.target.remoteName,
-      remoteBranchName: headBranch,
-    }).ok
+    const association = yield* associatePublishedChange(dependencies, input.changeId);
+    return association.ok
       ? result
       : { ok: false, code: "repository_branch_upstream_association_failed" };
   });
@@ -937,10 +921,36 @@ const request = (
   branchRef,
   expectedHeadSha,
 });
+type RepositoryBranchUpstreamAssociationInput = {
+  readonly branchRef: string;
+  readonly remoteName: string;
+  readonly remoteBranchName: string;
+};
+
+const associatePublishedChange = (
+  dependencies: Dependencies,
+  changeId: string,
+): Effect.Effect<PublishedChangeAssociationResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const change = yield* dependencies.changePersistence.getChangeById(changeId);
+    if (
+      change === undefined ||
+      change.state === "closed" ||
+      change.publication === null ||
+      change.publication.pullRequest === null
+    )
+      return { ok: false };
+    return associateRepositoryBranchUpstream(dependencies, {
+      branchRef: change.branchRef,
+      remoteName: change.publication.target.remoteName,
+      remoteBranchName: change.publication.headBranch,
+    });
+  });
+
 const associateRepositoryBranchUpstream = (
   dependencies: Dependencies,
   input: RepositoryBranchUpstreamAssociationInput,
-): RepositoryBranchUpstreamAssociationResult =>
+): PublishedChangeAssociationResult =>
   dependencies.git.associateRepositoryBranchUpstream(
     input.branchRef,
     input.remoteName,

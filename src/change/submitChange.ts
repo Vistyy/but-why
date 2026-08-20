@@ -377,13 +377,9 @@ const completedPublicationEvidence = (
     ) {
       return { ok: false } as const;
     }
-    const association = dependencies
+    const association = yield* dependencies
       .publicationFor(change.worktreePath)
-      .associateRepositoryBranchUpstream({
-        branchRef: change.branchRef,
-        remoteName: change.publication.target.remoteName,
-        remoteBranchName: change.publication.headBranch,
-      });
+      .associatePublishedChange(change.id);
     if (!association.ok) {
       return {
         ok: false,
