@@ -4,6 +4,7 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe, vi } from "vitest";
+import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import {
   type ReviewerAgentRuntime,
@@ -274,6 +275,79 @@ describe("Candidate validation", () => {
             }),
           ],
         });
+      }),
+    10_000,
+  );
+
+  it.scoped(
+    "does not link the blocking Agent Invocation during Change Validation dispatch",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
+        if (!captured.ok) throw new Error(captured.code);
+        yield* installAcceptanceContext(mainCheckout, captured.changeId);
+        const first = yield* withTestRepository(
+          mainCheckout,
+          Effect.gen(function* () {
+            const agents = yield* openSqliteAgentSessionPersistence();
+            const started = yield* agents.beginInvocation({
+              configuration: { harness: "pi" as const, model: "test-model" },
+              createdAt: "2026-08-14T12:00:00.000Z",
+              linkInvocation: () => Effect.void,
+            });
+            if (!started.ok) throw new Error(`Agent Invocation setup failed: ${started.code}`);
+            const repository = yield* RepositorySql;
+            yield* repository.operation(
+              "assign acceptance Agent Session fixture",
+              (sql) => sql`
+                INSERT INTO change_agent_sessions (change_id, producer, agent_session_id)
+                VALUES (${internalChangeId(captured.changeId, repository.idPrefix)}, 'acceptance', ${started.dispatch.agentSessionId})
+              `,
+            );
+            return started.dispatch.invocation.id;
+          }),
+        );
+        const validation = candidateValidationForTest({
+          localRepositoryRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+        });
+
+        const result = yield* validateAcceptanceContextCandidate(validation, {
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+        });
+
+        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        if (result.ok || "code" in result) return;
+        expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual([
+          expect.objectContaining({
+            operationName: "dispatch_agent_invocation",
+            blockingInvocationId: first,
+          }),
+        ]);
+        const evidence = yield* withTestRepository(
+          mainCheckout,
+          Effect.flatMap(RepositorySql, (repository) =>
+            repository.operation(
+              "inspect failed Validation Invocation ownership",
+              (sql) => sql<{
+                readonly linkedCount: number;
+                readonly settledAt: string | null;
+              }>`
+                SELECT
+                  (SELECT COUNT(*) FROM validation_phase_agent_invocations
+                   WHERE validation_run_id = ${result.validationRunId}) AS linkedCount,
+                  invocation.settled_at AS settledAt
+                FROM agent_invocations AS invocation
+                WHERE invocation.id = ${first}
+              `,
+            ),
+          ),
+        );
+        expect(evidence).toEqual([{ linkedCount: 0, settledAt: null }]);
       }),
     10_000,
   );
