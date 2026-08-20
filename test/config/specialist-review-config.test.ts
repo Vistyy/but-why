@@ -59,6 +59,60 @@ describe("Specialist Review configuration", () => {
     });
   });
 
+  it("preserves case when resolving uppercase Specialist and Agent Profile names", () => {
+    const root = configRoot();
+    writeFileSync(join(root.repo, "CodeReview.md"), "Code review instructions\n");
+    writeFileSync(join(root.global, "CodeReview.md"), "Global code review instructions\n");
+
+    const result = resolve(
+      root,
+      {
+        idPrefix: "BY",
+        review: { specialists: ["CodeReview"] },
+        reviewers: {
+          CodeReview: {
+            instructionsFile: "CodeReview.md",
+            agentProfile: { scope: "repo", name: "taskReviewer" },
+          },
+        },
+        agentProfiles: { taskReviewer: piProfile("repo-model") },
+      },
+      {},
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      policies: [
+        {
+          id: "CodeReview",
+          profile: { agentProfile: "taskReviewer", scope: "repo" },
+        },
+      ],
+    });
+
+    const globalResult = resolve(
+      root,
+      { idPrefix: "BY" },
+      {
+        review: { specialists: ["CodeReview"] },
+        reviewers: { CodeReview: { instructionsFile: "CodeReview.md" } },
+        defaultAgentProfile: { scope: "global", name: "taskReviewer" },
+        agentProfiles: { taskReviewer: piProfile("global-model") },
+      },
+    );
+
+    expect(globalResult).toMatchObject({
+      ok: true,
+      policies: [
+        {
+          id: "CodeReview",
+          instructions: "Global code review instructions\n",
+          profile: { agentProfile: "taskReviewer", scope: "global" },
+        },
+      ],
+    });
+  });
+
   it("uses the Global active list and default profile when Repo Config omits the list", () => {
     const root = configRoot();
     writeFileSync(join(root.global, "standards.md"), "Standards instructions\n");

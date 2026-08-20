@@ -7,7 +7,7 @@ export const nonBlankStringSchema = Schema.String.pipe(
   }),
 );
 
-export const configNameSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z0-9._-]*$/u));
+export const configNameSchema = Schema.String.pipe(Schema.pattern(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u));
 
 export const isPackageAgentResource = (source: string): boolean =>
   /^(?:npm|git|github|https?|ssh):/u.test(source);

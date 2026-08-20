@@ -61,6 +61,47 @@ describe("configuration contracts", () => {
     expect(right(decodeGlobalConfig(config))).toEqual(config);
   });
 
+  it("decodes case-sensitive uppercase names in Global and Repo Config", () => {
+    const globalConfig = {
+      defaultAgentProfile: { scope: "global", name: "taskReviewer" },
+      review: { specialists: ["CodeReview"] },
+      reviewers: {
+        CodeReview: {
+          instructionsFile: "reviewers/CodeReview.md",
+          agentProfile: { scope: "global", name: "taskReviewer" },
+        },
+      },
+      agentProfiles: {
+        taskReviewer: {
+          agentRuntime: "pi" as const,
+          runtimeConfig: { model: "reviewer-model" },
+        },
+      },
+    };
+    const repoConfig = {
+      idPrefix: "BY",
+      review: {
+        task: { agentProfile: { scope: "repo", name: "taskReviewer" } },
+        specialists: ["CodeReview"],
+      },
+      reviewers: {
+        CodeReview: {
+          instructionsFile: ".but-why/reviewers/CodeReview.md",
+          agentProfile: { scope: "repo", name: "taskReviewer" },
+        },
+      },
+      agentProfiles: {
+        taskReviewer: {
+          agentRuntime: "pi" as const,
+          runtimeConfig: { model: "reviewer-model" },
+        },
+      },
+    };
+
+    expect(right(decodeGlobalConfig(globalConfig))).toEqual(globalConfig);
+    expect(right(decodeRepoConfig(repoConfig))).toEqual(repoConfig);
+  });
+
   it("decodes the Global Interactive Session Agent Profile selection", () => {
     const config = {
       interactiveSession: { agentProfile: { scope: "global", name: "implementation" } },
@@ -301,6 +342,23 @@ describe("configuration contracts", () => {
 });
 
 describe("repository configuration rejection matrix", () => {
+  it.each([
+    ["space in a config name", "task Reviewer"],
+    ["unsafe punctuation in a config name", "taskReviewer!"],
+    ["non-ASCII config name", "tâskReviewer"],
+    ["invalid config name start", "_taskReviewer"],
+  ])("rejects %s", (_name, configName) => {
+    const error = left(
+      decodeRepoConfig({
+        idPrefix: "BY",
+        review: { specialists: [configName] },
+      }),
+    );
+
+    expect(error._tag).toBe("RepoConfigValidationFailed");
+    expect(error.diagnostics.length).toBeGreaterThan(0);
+  });
+
   it.each([
     ["missing idPrefix", {}],
     ["non-string idPrefix", { idPrefix: 123 }],
