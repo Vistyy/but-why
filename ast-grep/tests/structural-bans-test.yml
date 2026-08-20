@@ -142,19 +142,38 @@ invalid:
 id: nested-unknown-assertions-preserve-evidence
 valid:
   - value as Target
+  - JSON.parse(raw).foo as unknown as Target
+  - Reflect.get(value, "foo") as unknown as Target
+  - vi.mock("module", () => value as unknown as Target)
+invalid:
+  - value as unknown as Target
   - invalidPolicy as unknown as ChangePolicy
+  - "const api = { sendUserMessage() {} } as unknown as ExtensionAPI"
+  - "const context = { sessionManager: {}, isIdle() {} } as unknown as ExtensionContext"
+  - value as unknown as ExtensionAPI
+  - "(value as unknown) as Target"
+---
+id: nested-unknown-assertions-review-fixture
+valid:
+  - invalidPolicy as unknown as ChangePolicy
+invalid:
+  - value as unknown as Target
+---
+id: nested-unknown-assertions-extension-fixture
+valid:
   - "const api = { sendUserMessage() {} } as unknown as ExtensionAPI"
   - "const context = { sessionManager: {}, isIdle() {} } as unknown as ExtensionContext"
 invalid:
   - value as unknown as Target
-  - value as unknown as ExtensionAPI
-  - "(value as unknown) as Target"
 ---
 id: never-assertions-represent-real-union
 valid:
   - value as unknown
   - value as never[]
   - assertNever(value)
+  - JSON.parse(raw).foo as never
+  - Reflect.get(value, "foo") as never
+  - vi.mock("module", () => value as never)
 invalid:
   - value as never
   - "(value) as never"
@@ -163,6 +182,9 @@ id: effect-values-use-complete-contract
 valid:
   - value as EffectResult
   - value satisfies Effect.Effect<string>
+  - JSON.parse(raw).foo as Effect.Effect<string>
+  - Reflect.get(value, "foo") as Effect.Effect<string>
+  - vi.mock("module", () => value as Effect.Effect<string>)
 invalid:
   - value as Effect.Effect<string>
   - value as Effect.Effect<string, Error, Services>
@@ -174,9 +196,14 @@ valid:
   - "return value"
   - "value => value"
   - "value => other satisfies Result"
+  - "return JSON.parse(raw).foo satisfies Result"
+  - "return Reflect.get(value, \"foo\") satisfies Result"
+  - "vi.mock(\"module\", (value) => value satisfies Result)"
 invalid:
   - "return value satisfies Result"
+  - "return await value satisfies Result"
   - "return (value satisfies Result)"
+  - "return (await value) satisfies Result"
   - "value => value satisfies Result"
   - "(value) => value satisfies Result"
   - "(value: string) => (value satisfies Result)"

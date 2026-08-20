@@ -267,6 +267,43 @@ files:
 ignores:
   - src/sqlite/**/*.ts
   - '**/adapters/sqlite/**/*.ts'
+  - test/change/change-reviewer-configuration.test.ts
+  - test/agent/continue-change-extension.test.ts
+rule:
+  all:
+    - any:
+        - pattern: $VALUE as unknown as $TYPE
+        - pattern: ($VALUE as unknown) as $TYPE
+    - not:
+        pattern: JSON.parse($$$ARGS) as unknown as $TYPE
+    - not:
+        pattern: (JSON.parse($$$ARGS) as unknown) as $TYPE
+    - not:
+        pattern: JSON.parse($$$ARGS).$PROPERTY as unknown as $TYPE
+    - not:
+        pattern: JSON.parse($$$ARGS)[$PROPERTY] as unknown as $TYPE
+    - not:
+        pattern: Reflect.get($$$ARGS) as unknown as $TYPE
+    - not:
+        pattern: Reflect.apply($$$ARGS) as unknown as $TYPE
+    - not:
+        inside:
+          any:
+            - pattern: vi.mock($$$ARGS)
+            - pattern: vi.doMock($$$ARGS)
+            - pattern: vi.unstable_mockModule($$$ARGS)
+            - pattern: jest.mock($$$ARGS)
+            - pattern: jest.doMock($$$ARGS)
+            - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end
+---
+# The reviewer fixture keeps one invalid-policy conversion to exercise persistence rejection.
+id: nested-unknown-assertions-review-fixture
+language: TypeScript
+severity: error
+message: Do not chain `as unknown as` because nested assertions erase type evidence; preserve evidence with inference, a typed Adapter, or one justified assertion.
+files:
+  - test/change/change-reviewer-configuration.test.ts
 rule:
   all:
     - any:
@@ -278,6 +315,19 @@ rule:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
     - not:
         pattern: (JSON.parse($$$ARGS) as unknown) as $TYPE
+---
+# The continue-change extension test keeps its two typed host fixtures.
+id: nested-unknown-assertions-extension-fixture
+language: TypeScript
+severity: error
+message: Do not chain `as unknown as` because nested assertions erase type evidence; preserve evidence with inference, a typed Adapter, or one justified assertion.
+files:
+  - test/agent/continue-change-extension.test.ts
+rule:
+  all:
+    - any:
+        - pattern: $VALUE as unknown as $TYPE
+        - pattern: ($VALUE as unknown) as $TYPE
     - not:
         inside:
           all:
@@ -296,6 +346,28 @@ rule:
                 pattern: $VALUE as unknown as ExtensionContext
             - has:
                 regex: sessionManager
+    - not:
+        pattern: JSON.parse($$$ARGS) as unknown as $TYPE
+    - not:
+        pattern: (JSON.parse($$$ARGS) as unknown) as $TYPE
+    - not:
+        pattern: JSON.parse($$$ARGS).$PROPERTY as unknown as $TYPE
+    - not:
+        pattern: JSON.parse($$$ARGS)[$PROPERTY] as unknown as $TYPE
+    - not:
+        pattern: Reflect.get($$$ARGS) as unknown as $TYPE
+    - not:
+        pattern: Reflect.apply($$$ARGS) as unknown as $TYPE
+    - not:
+        inside:
+          any:
+            - pattern: vi.mock($$$ARGS)
+            - pattern: vi.doMock($$$ARGS)
+            - pattern: vi.unstable_mockModule($$$ARGS)
+            - pattern: jest.mock($$$ARGS)
+            - pattern: jest.doMock($$$ARGS)
+            - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end
 ---
 # `never` assertions hide an unrepresented runtime case instead of proving it impossible.
 id: never-assertions-represent-real-union
@@ -317,6 +389,24 @@ rule:
         pattern: JSON.parse($$$ARGS) as never
     - not:
         pattern: (JSON.parse($$$ARGS)) as never
+    - not:
+        pattern: JSON.parse($$$ARGS).$PROPERTY as never
+    - not:
+        pattern: JSON.parse($$$ARGS)[$PROPERTY] as never
+    - not:
+        pattern: Reflect.get($$$ARGS) as never
+    - not:
+        pattern: Reflect.apply($$$ARGS) as never
+    - not:
+        inside:
+          any:
+            - pattern: vi.mock($$$ARGS)
+            - pattern: vi.doMock($$$ARGS)
+            - pattern: vi.unstable_mockModule($$$ARGS)
+            - pattern: jest.mock($$$ARGS)
+            - pattern: jest.doMock($$$ARGS)
+            - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end
 ---
 # A complete Effect assertion hides the contract that the Effect value already owns.
 id: effect-values-use-complete-contract
@@ -340,6 +430,24 @@ rule:
         pattern: JSON.parse($$$ARGS) as Effect.Effect<$$$TYPE>
     - not:
         pattern: <Effect.Effect<$$$TYPE>>JSON.parse($$$ARGS)
+    - not:
+        pattern: JSON.parse($$$ARGS).$PROPERTY as Effect.Effect<$$$TYPE>
+    - not:
+        pattern: JSON.parse($$$ARGS)[$PROPERTY] as Effect.Effect<$$$TYPE>
+    - not:
+        pattern: Reflect.get($$$ARGS) as Effect.Effect<$$$TYPE>
+    - not:
+        pattern: Reflect.apply($$$ARGS) as Effect.Effect<$$$TYPE>
+    - not:
+        inside:
+          any:
+            - pattern: vi.mock($$$ARGS)
+            - pattern: vi.doMock($$$ARGS)
+            - pattern: vi.unstable_mockModule($$$ARGS)
+            - pattern: jest.mock($$$ARGS)
+            - pattern: jest.doMock($$$ARGS)
+            - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end
 ---
 # `satisfies` should constrain a construction or an explicit owner contract, not a returned or pass-through value.
 id: return-or-pass-through-satisfies-uses-owner-contract
@@ -358,7 +466,9 @@ rule:
   all:
     - any:
         - pattern: return $VALUE satisfies $TYPE
+        - pattern: return await $VALUE satisfies $TYPE
         - pattern: return ($VALUE satisfies $TYPE)
+        - pattern: return (await $VALUE) satisfies $TYPE
         - pattern: $VALUE => $VALUE satisfies $TYPE
         - pattern: $VALUE => ($VALUE satisfies $TYPE)
         - pattern: ($VALUE) => $VALUE satisfies $TYPE
@@ -375,3 +485,41 @@ rule:
         pattern: return (JSON.parse($$$ARGS) satisfies $TYPE)
     - not:
         pattern: JSON.parse($$$ARGS) satisfies $TYPE
+    - not:
+        has:
+          pattern: JSON.parse($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: Reflect.get($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: Reflect.apply($$$ARGS)
+          stopBy: end
+    - not:
+        pattern: return await JSON.parse($$$ARGS) satisfies $TYPE
+    - not:
+        pattern: return (await JSON.parse($$$ARGS)) satisfies $TYPE
+    - not:
+        pattern: return JSON.parse($$$ARGS).$PROPERTY satisfies $TYPE
+    - not:
+        pattern: return JSON.parse($$$ARGS)[$PROPERTY] satisfies $TYPE
+    - not:
+        pattern: JSON.parse($$$ARGS).$PROPERTY satisfies $TYPE
+    - not:
+        pattern: JSON.parse($$$ARGS)[$PROPERTY] satisfies $TYPE
+    - not:
+        pattern: Reflect.get($$$ARGS) satisfies $TYPE
+    - not:
+        pattern: Reflect.apply($$$ARGS) satisfies $TYPE
+    - not:
+        inside:
+          any:
+            - pattern: vi.mock($$$ARGS)
+            - pattern: vi.doMock($$$ARGS)
+            - pattern: vi.unstable_mockModule($$$ARGS)
+            - pattern: jest.mock($$$ARGS)
+            - pattern: jest.doMock($$$ARGS)
+            - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end

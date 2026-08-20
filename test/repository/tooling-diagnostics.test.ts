@@ -165,6 +165,10 @@ describe("repository-authored tooling diagnostics", () => {
     ],
     [
       "return-or-pass-through-satisfies-uses-owner-contract",
+      "const create = async () => { return await source satisfies TrustedType; };",
+    ],
+    [
+      "return-or-pass-through-satisfies-uses-owner-contract",
       "const create = (value: string) => value satisfies TrustedType;",
     ],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
