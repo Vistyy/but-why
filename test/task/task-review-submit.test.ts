@@ -211,7 +211,7 @@ it.effect("restores Task Review state before an output-correction retry", () =>
 
 it.effect("observes final Task Review restoration and restoration failure", () =>
   Effect.gen(function* () {
-    const runScenario = (forceRestorationFailure: boolean) =>
+    const runScenario = (scenario: "passed" | "restoration_failure" | "interrupted") =>
       Effect.gen(function* () {
         const root = createGitRepo();
         runTestProcess("git", ["config", "user.name", "But Why Test"], { cwd: root });
@@ -261,6 +261,7 @@ it.effect("observes final Task Review restoration and restoration failure", () =
         };
         let restoredStatus = "not-observed";
         let restoredUntracked = true;
+        let reviewerCalls = 0;
         const persistence: TaskReviewPersistence = {
           reuseJudgment: () => Effect.succeed(undefined),
           checkAdmission: () => Effect.succeed(undefined),
@@ -336,11 +337,13 @@ it.effect("observes final Task Review restoration and restoration failure", () =
           agentPersistence: defaultAgentPersistence(),
           reviewerRuntime: {
             review: (input) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
+                reviewerCalls += 1;
                 const cwd = input.commandCwd ?? workspacePath;
                 writeFileSync(join(cwd, ".but-why/config.json"), "changed\n");
                 runTestProcess("git", ["add", ".but-why/config.json"], { cwd });
                 writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
+                if (scenario === "interrupted") return yield* Effect.interrupt;
                 return {
                   ok: true as const,
                   report: { findings: [] },
@@ -373,7 +376,7 @@ it.effect("observes final Task Review restoration and restoration failure", () =
                 }),
               ),
               Effect.flatMap(() =>
-                forceRestorationFailure
+                scenario === "restoration_failure"
                   ? Effect.fail(new DisposableWorkspaceRestorationFailed({ message: "forced" }))
                   : Effect.void,
               ),
@@ -387,18 +390,24 @@ it.effect("observes final Task Review restoration and restoration failure", () =
           inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
         });
         const result = yield* reviews.submit(taskId, "2026-08-11T12:05:00.000Z");
-        return { result, restoredStatus, restoredUntracked };
+        return { result, restoredStatus, restoredUntracked, reviewerCalls };
       });
 
-    const passed = yield* runScenario(false);
+    const passed = yield* runScenario("passed");
     expect(passed.result).toMatchObject({ ok: true, outcome: "passed" });
     expect(passed.restoredStatus).toBe("");
     expect(passed.restoredUntracked).toBe(false);
 
-    const failed = yield* runScenario(true);
+    const failed = yield* runScenario("restoration_failure");
     expect(failed.result).toMatchObject({ ok: true, outcome: "tooling_failed" });
     expect(failed.restoredStatus).toBe("");
     expect(failed.restoredUntracked).toBe(false);
+
+    const interrupted = yield* runScenario("interrupted");
+    expect(interrupted.result).toMatchObject({ ok: true, outcome: "tooling_failed" });
+    expect(interrupted.restoredStatus).toBe("");
+    expect(interrupted.restoredUntracked).toBe(false);
+    expect(interrupted.reviewerCalls).toBe(1);
   }),
 );
 
