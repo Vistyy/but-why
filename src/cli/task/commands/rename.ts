@@ -4,13 +4,13 @@ import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type { RenameTaskResult } from "../../../task/taskStore.js";
-import { normalizeTaskTitle, taskTitleInputError } from "../taskTitle.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
   withTaskChangeTasks,
 } from "../taskCliSupport.js";
+import { normalizeTaskTitle, taskTitleInputError } from "../taskTitle.js";
 
 export type TaskRenameCommand = {
   readonly taskId: string;

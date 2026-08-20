@@ -10,13 +10,13 @@ import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import { normalizeTaskTitle, taskTitleInputError } from "../taskTitle.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskMutationView,
   withTasks,
 } from "../taskCliSupport.js";
+import { normalizeTaskTitle, taskTitleInputError } from "../taskTitle.js";
 
 export type TaskCreateCommand = {
   readonly title: string;
