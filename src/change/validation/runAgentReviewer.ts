@@ -65,7 +65,7 @@ export type RunAgentReviewerInput = {
   readonly commandCwd: string;
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly resourceRoot: string;
-  readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
   readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly profile: ResolvedPiAgentProfile;
   readonly sessionStorageRoot: string;
@@ -120,9 +120,7 @@ export const runAgentReviewer = (
                 commandExecutor: input.commandExecutor,
                 commandCwd: input.commandCwd,
                 expectedCommitSha: input.expectedHeadSha,
-                ...(input.workspaceIdentity === undefined
-                  ? {}
-                  : { workspaceIdentity: input.workspaceIdentity }),
+                workspaceIdentity: input.workspaceIdentity,
               }),
             ),
           );

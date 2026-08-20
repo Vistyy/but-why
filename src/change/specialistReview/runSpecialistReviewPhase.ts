@@ -66,7 +66,7 @@ export type RunSpecialistReviewPhaseInput = {
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
   readonly resourceRoot?: string;
-  readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
   readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly sessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
@@ -258,9 +258,7 @@ const runSpecialist = (
       commandCwd: input.commandCwd,
       commandExecutor: input.commandExecutor,
       resourceRoot: input.resourceRoot ?? input.commandCwd,
-      ...(input.workspaceIdentity === undefined
-        ? {}
-        : { workspaceIdentity: input.workspaceIdentity }),
+      workspaceIdentity: input.workspaceIdentity,
       restoreWorkspace: input.restoreWorkspace,
       profile: policy.profile,
       sessionStorageRoot: input.sessionStorageRoot,

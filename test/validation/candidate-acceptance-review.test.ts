@@ -361,6 +361,11 @@ const runReviewPhases = (
         artifactMaxBytes: maxValidationArtifactBytes,
         commandCwd: ready.repo,
         resourceRoot: ready.repo,
+        workspaceIdentity: {
+          repositoryRoot: ready.repo,
+          repositoryCommonDirectory: commonDirectory(ready.repo),
+          workspaceId: `validation-run-${started.validationRunId}`,
+        },
         sessionStorageRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
         restoreWorkspace: () => Effect.void,
         agentPersistence: persistence.agentPersistence,

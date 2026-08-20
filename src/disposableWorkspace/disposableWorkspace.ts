@@ -14,7 +14,7 @@ export type DisposableWorkspaceRestorationInput = {
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly commandCwd: string;
   readonly expectedCommitSha: string;
-  readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
 };
 
 export type RestoreDisposableWorkspace = (

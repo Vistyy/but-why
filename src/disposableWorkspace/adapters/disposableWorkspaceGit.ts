@@ -87,7 +87,7 @@ export const restoreDisposableWorkspace = (input: {
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly commandCwd: string;
   readonly expectedCommitSha: string;
-  readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
 }): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
   Effect.gen(function* () {
     yield* verifyOwnedDetachedWorktree(input);
@@ -111,37 +111,35 @@ const verifyOwnedDetachedWorktree = (
     readonly commandExecutor: WorkspaceCommandExecutor;
     readonly commandCwd: string;
     readonly expectedCommitSha: string;
-    readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+    readonly workspaceIdentity: DisposableWorkspaceIdentity;
   },
   requireExpectedHead = false,
 ): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
   Effect.gen(function* () {
-    if (input.workspaceIdentity !== undefined) {
-      const product = yield* verifyProductOwnedDisposableWorktree(input.workspaceIdentity);
-      if (!product.ok) return yield* restorationFailed(product.message);
-      if (resolve(product.worktreePath) !== resolve(input.commandCwd) || !product.detached) {
-        return yield* restorationFailed(
-          "Disposable Workspace ownership or detached state could not be verified.",
-        );
-      }
-      const activeCommonDirectory = yield* runWorkspaceCommand(
-        input,
-        "git rev-parse --path-format=absolute --git-common-dir",
+    const product = yield* verifyProductOwnedDisposableWorktree(input.workspaceIdentity);
+    if (!product.ok) return yield* restorationFailed(product.message);
+    if (resolve(product.worktreePath) !== resolve(input.commandCwd) || !product.detached) {
+      return yield* restorationFailed(
+        "Disposable Workspace ownership or detached state could not be verified.",
       );
-      if (
-        activeCommonDirectory.exitCode !== 0 ||
-        resolve(activeCommonDirectory.stdout.trim()) !==
-          resolve(input.workspaceIdentity.repositoryCommonDirectory)
-      ) {
-        return yield* restorationFailed(
-          "Disposable Workspace Git Common Directory does not match its owned repository.",
-        );
-      }
-      if (requireExpectedHead && product.head !== input.expectedCommitSha) {
-        return yield* restorationFailed(
-          "Disposable Workspace registration does not match the expected commit after restoration.",
-        );
-      }
+    }
+    const activeCommonDirectory = yield* runWorkspaceCommand(
+      input,
+      "git rev-parse --path-format=absolute --git-common-dir",
+    );
+    if (
+      activeCommonDirectory.exitCode !== 0 ||
+      resolve(activeCommonDirectory.stdout.trim()) !==
+        resolve(input.workspaceIdentity.repositoryCommonDirectory)
+    ) {
+      return yield* restorationFailed(
+        "Disposable Workspace Git Common Directory does not match its owned repository.",
+      );
+    }
+    if (requireExpectedHead && product.head !== input.expectedCommitSha) {
+      return yield* restorationFailed(
+        "Disposable Workspace registration does not match the expected commit after restoration.",
+      );
     }
     const listed = yield* runWorkspaceCommand(input, "git worktree list --porcelain");
     const worktree = parseWorktreeRecords(listed.stdout).find(

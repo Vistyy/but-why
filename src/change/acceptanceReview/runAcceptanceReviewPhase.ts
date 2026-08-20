@@ -70,7 +70,7 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
   readonly resourceRoot?: string;
-  readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
   readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly sessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
@@ -218,9 +218,7 @@ export const runAcceptanceReviewPhase = (
         commandCwd: input.commandCwd,
         commandExecutor: input.commandExecutor,
         resourceRoot: input.resourceRoot ?? input.commandCwd,
-        ...(input.workspaceIdentity === undefined
-          ? {}
-          : { workspaceIdentity: input.workspaceIdentity }),
+        workspaceIdentity: input.workspaceIdentity,
         restoreWorkspace: input.restoreWorkspace,
         profile: input.policy.profile,
         sessionStorageRoot: input.sessionStorageRoot,

@@ -617,6 +617,11 @@ const acceptancePhaseFixture = (
         artifactsRoot,
         commandCwd: options.commandCwd ?? "/captured/snapshot-workspace",
         resourceRoot: options.resourceRoot ?? "/captured/snapshot-workspace",
+        workspaceIdentity: {
+          repositoryRoot: options.commandCwd ?? "/captured/snapshot-workspace",
+          repositoryCommonDirectory: "/captured/common",
+          workspaceId: "validation-run-1",
+        },
         sessionStorageRoot: options.sessionStorageRoot ?? artifactsRoot,
         restoreWorkspace: () => Effect.void,
         agentPersistence,
