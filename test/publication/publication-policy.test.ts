@@ -120,9 +120,28 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     withRealGitFixture((fixture) =>
       Effect.gen(function* () {
         const requests: unknown[] = [];
+        const branchName = "review-candidate";
+        const publicationTarget = {
+          owner: "acme",
+          repo: "widgets",
+          baseBranch: "develop",
+          remoteName: "review",
+        } as const;
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "use distinct publication branch",
+          (sql) => sql`
+          UPDATE changes
+          SET branch_ref = ${`refs/heads/${branchName}`},
+              base_ref = 'refs/remotes/review/develop',
+              base_remote_url = 'https://github.com/acme/widgets.git'
+          WHERE id = ${internalChangeId(fixture.captured.changeId, "BY")}
+        `,
+        );
+        runTestProcessOrThrow("git", ["branch", branchName, "feature"], { cwd: fixture.root });
         runTestProcessOrThrow(
           "git",
-          ["config", "branch.feature.description", "preserve this key"],
+          [`config`, `branch.${branchName}.description`, "preserve this key"],
           { cwd: fixture.root },
         );
         runTestProcessOrThrow("git", ["config", "branch.other.remote", "other"], {
@@ -131,16 +150,44 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const publication = openCandidatePublication({
           changePersistence: fixture.changes.publication,
           git: localCandidatePublicationGit({ cwd: fixture.root }),
-          github: successfulCreation(requests),
+          github: {
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(undefined),
+            createPullRequest: (request) => {
+              requests.push(request);
+              return {
+                ok: true as const,
+                pullRequest: {
+                  number: 42,
+                  url: "https://github.com/acme/widgets/pull/42",
+                  repository: { owner: request.owner, repo: request.repo },
+                  state: "open" as const,
+                  merged: false,
+                  baseBranch: request.baseBranch,
+                  headBranch: request.headBranch,
+                  headSha: request.expectedHeadSha,
+                },
+              };
+            },
+            updatePullRequest: () => {
+              throw new Error("Unexpected PR update");
+            },
+          },
         });
 
-        expect(yield* publication.publish(input(fixture))).toMatchObject({
-          ok: true,
-          created: true,
-        });
-        expect(gitConfig(fixture.root, "branch.feature.remote")).toBe("origin");
-        expect(gitConfig(fixture.root, "branch.feature.merge")).toBe("refs/heads/feature");
-        expect(gitConfig(fixture.root, "branch.feature.description")).toBe("preserve this key");
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            target: publicationTarget,
+          }),
+        ).toMatchObject({ ok: true, created: true });
+        expect(gitConfig(fixture.root, `branch.${branchName}.remote`)).toBe("review");
+        expect(gitConfig(fixture.root, `branch.${branchName}.merge`)).toBe(
+          `refs/heads/${branchName}`,
+        );
+        expect(gitConfig(fixture.root, `branch.${branchName}.description`)).toBe(
+          "preserve this key",
+        );
         expect(gitConfig(fixture.root, "branch.other.remote")).toBe("other");
       }),
     ),
