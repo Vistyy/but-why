@@ -87,11 +87,11 @@ const prepareTask = (
     }
     const existing = yield* readExistingByTaskId(sql, taskId, idPrefix);
     if (existing !== undefined) return { ok: true as const, existing, task };
-    const blockedBy = yield* taskOperations.getTaskDependenciesForChangeStart(
+    const blockedBy = (yield* taskOperations.getTaskDependenciesForChangeStart(
       sql,
       publicTaskId(taskId),
       idPrefix,
-    );
+    )).filter((dependency) => dependency.state !== "done");
     return blockedBy.length === 0
       ? { ok: true as const, existing: undefined, task }
       : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
