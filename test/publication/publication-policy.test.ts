@@ -9,6 +9,7 @@ import type {
   GitHubPullRequestCreationRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
+import { localCandidatePublicationGit } from "../../src/change/publication/adapters/localCandidatePublicationGit.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
@@ -22,8 +23,12 @@ import {
   type ChangeValidationTestDependencies,
   openSqliteChangeValidationTestDependencies,
 } from "../support/changeValidationPorts.js";
-import { cloneInitializedRepositoryState } from "../support/initializedRepo.js";
+import {
+  cloneInitializedRepositoryState,
+  cloneInitializedTestRepository,
+} from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-22T10:00:00.000Z";
@@ -109,6 +114,36 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           ]);
         }),
       ),
+  );
+
+  it.scoped("publishes through the real local Git adapter and configures exact upstream keys", () =>
+    withRealGitFixture((fixture) =>
+      Effect.gen(function* () {
+        const requests: unknown[] = [];
+        runTestProcessOrThrow(
+          "git",
+          ["config", "branch.feature.description", "preserve this key"],
+          { cwd: fixture.root },
+        );
+        runTestProcessOrThrow("git", ["config", "branch.other.remote", "other"], {
+          cwd: fixture.root,
+        });
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes.publication,
+          git: localCandidatePublicationGit({ cwd: fixture.root }),
+          github: successfulCreation(requests),
+        });
+
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: true,
+          created: true,
+        });
+        expect(gitConfig(fixture.root, "branch.feature.remote")).toBe("origin");
+        expect(gitConfig(fixture.root, "branch.feature.merge")).toBe("refs/heads/feature");
+        expect(gitConfig(fixture.root, "branch.feature.description")).toBe("preserve this key");
+        expect(gitConfig(fixture.root, "branch.other.remote")).toBe("other");
+      }),
+    ),
   );
 
   it.scoped("retries upstream association from confirmed publication without republication", () =>
@@ -1564,9 +1599,18 @@ type Fixture = {
 };
 
 const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, RepositorySql>) =>
+  fixtureRepository(cloneInitializedRepositoryState, use);
+
+const withRealGitFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, RepositorySql>) =>
+  fixtureRepository(cloneInitializedTestRepository, use);
+
+const fixtureRepository = <A, E>(
+  clone: (template: string) => Effect.Effect<string>,
+  use: (fixture: Fixture) => Effect.Effect<A, E, RepositorySql>,
+) =>
   Effect.gen(function* () {
     const template = yield* PublicationTemplate;
-    const root = yield* cloneInitializedRepositoryState(candidateRepoTemplate);
+    const root = yield* clone(candidateRepoTemplate);
     return yield* withTestRepository(
       root,
       Effect.gen(function* () {
@@ -1730,3 +1774,6 @@ const publicationGitDefaults = {
   containsCommit: () => true,
   associateRepositoryBranchUpstream: () => ({ ok: true as const }),
 };
+
+const gitConfig = (cwd: string, key: string): string =>
+  runTestProcessOrThrow("git", ["config", "--get-all", key], { cwd }).trim();
