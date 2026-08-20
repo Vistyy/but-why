@@ -121,3 +121,11 @@ valid:
 invalid:
   - repositorySqlLayer(config)
   - import { repositorySqlLayer } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+---
+id: linked-task-mutations-use-coordination
+valid:
+  - environment.taskChangeTaskUseCases.editTaskDependencies
+  - environment.taskChangeTaskUseCases.reviseTask
+invalid:
+  - environment.taskUseCases.editTaskDependencies
+  - environment.taskUseCases.reviseTask
