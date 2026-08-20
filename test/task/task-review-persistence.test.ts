@@ -16,8 +16,9 @@ import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskRev
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
+import { settleTaskReviewEvidence } from "../../src/task/review/taskReviewEvidenceSettlement.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
-import { publicTaskId } from "../../src/task/taskId.js";
+import { internalTaskId, publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { withTemporaryRepositoryState, withTestRepository } from "../support/repository.js";
@@ -67,6 +68,14 @@ it.effect("persists dispatch identity through Task Review inspection and CLI out
           blockingInvocationId: 29,
         };
         yield* reviews.recordActiveFailure(admitted.review.id, failure, now);
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "change Task Review proposal during dispatch failure",
+          (sql) => sql`
+            UPDATE tasks SET title = 'Changed after admission'
+            WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
+          `,
+        );
         const completed = yield* reviews.complete({
           reviewId: admitted.review.id,
           findings: [],
@@ -105,6 +114,101 @@ it.effect("persists dispatch identity through Task Review inspection and CLI out
       },
     });
   }),
+);
+
+it.scoped("preserves dispatch evidence when Task Review admission changes", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const taskId = publicTaskId("BY-1");
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      const admitted = yield* reviews.admit({
+        taskId,
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
+      yield* reviews.recordCleanup(admitted.review.id, "removed", now);
+      const failure = {
+        operation: "dispatch_agent_invocation" as const,
+        message: "Agent Invocation dispatch was blocked.",
+        blockingInvocationId: 29,
+      };
+      yield* reviews.recordActiveFailure(admitted.review.id, failure, now);
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "change Task Review proposal during dispatch failure",
+        (sql) => sql`
+          UPDATE tasks SET title = 'Changed after admission'
+          WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
+        `,
+      );
+      const completed = yield* reviews.complete({
+        reviewId: admitted.review.id,
+        findings: [],
+        toolingFailure: failure,
+        now,
+      });
+      expect(completed).toMatchObject({
+        ok: true,
+        outcome: "tooling_failed",
+        review: { toolingFailure: failure },
+      });
+    }),
+  ),
+);
+
+it.scoped("preserves dispatch evidence when Task Review cleanup fails", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const taskId = publicTaskId("BY-1");
+      const tasks = yield* openSqliteTaskPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      const admitted = yield* reviews.admit({
+        taskId,
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
+      yield* reviews.recordCleanup(admitted.review.id, "removed", now);
+      const failure = {
+        operation: "dispatch_agent_invocation" as const,
+        message: "Agent Invocation dispatch was blocked.",
+        blockingInvocationId: 29,
+      };
+      yield* reviews.recordActiveFailure(admitted.review.id, failure, now);
+      const settlement = yield* settleTaskReviewEvidence(
+        {
+          repositoryRoot: "/repository",
+          repositoryCommonDirectory: "/common",
+          persistence: reviews,
+          verifyReviewBase: () => Effect.succeed({ ok: true as const }),
+          cleanupWorkspace: () =>
+            Effect.succeed({ workspace: "failed" as const, errorMessage: "Cleanup failed." }),
+        },
+        admitted.review,
+        later,
+      );
+      expect(settlement).toMatchObject({
+        ok: false,
+        review: {
+          workspaceCleanup: "failed",
+          cleanupBlockingReason: "Cleanup failed.",
+          toolingFailure: failure,
+        },
+      });
+      expect(yield* reviews.getById(admitted.review.id)).toMatchObject({
+        state: "running",
+        toolingFailure: failure,
+      });
+    }),
+  ),
 );
 
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>

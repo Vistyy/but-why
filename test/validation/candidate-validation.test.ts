@@ -16,9 +16,10 @@ import {
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { internalChangeId } from "../../src/change/changeId.js";
-import type { CreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
+import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
+import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -295,42 +296,29 @@ describe("Candidate validation", () => {
           settleInvocation: () => Effect.die("Dispatch failure must not settle an Invocation"),
           readInvocationHistory: () => Effect.succeed([]),
         };
-        const cleanupFailureWorkspace: CreateSnapshotWorkspace = (workspaceInput) =>
+        const cleanupFailureRunner = ((workspaceInput) =>
           Effect.gen(function* () {
-            if (workspaceInput.runInWorkspace === undefined) {
-              return yield* Effect.die("Expected Validation Run workspace execution");
-            }
-            const execution = yield* Effect.either(
-              workspaceInput.runInWorkspace({
-                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
-                worktreePath: workspaceInput.repositoryRoot,
-              }),
-            );
-            const cleanupResult = { workspace: "failed" as const, errorMessage: "Cleanup failed." };
-            yield* workspaceInput.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void;
-            if (
-              execution._tag === "Left" &&
-              execution.left instanceof InfrastructureToolingFailed
-            ) {
-              return {
-                ok: false as const,
-                toolingFailure: execution.left,
-                cleanupResult,
-              };
-            }
-            if (execution._tag === "Right" && execution.right.outcome === "tooling_failed") {
-              return {
-                ok: false as const,
-                toolingFailure: new InfrastructureToolingFailed({
-                  operationName: "dispatch_agent_invocation",
-                  message: "Agent Invocation 73 dispatch was blocked.",
-                  blockingInvocationId: 73,
+            if (workspaceInput.runInWorkspace !== undefined) {
+              yield* Effect.either(
+                workspaceInput.runInWorkspace({
+                  commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                  worktreePath: workspaceInput.repositoryRoot,
                 }),
-                cleanupResult,
-              };
+              );
             }
-            return yield* Effect.die("Expected the dispatch conflict to fail Validation Run");
-          });
+            yield* workspaceInput.recordWorkspaceCleanup?.({
+              workspace: "failed",
+              errorMessage: "Cleanup failed.",
+            }) ?? Effect.void;
+            return yield* Effect.fail(
+              new InfrastructureToolingFailed({
+                operationName: "dispatch_agent_invocation",
+                message: "Agent Invocation 73 dispatch was blocked.",
+                blockingInvocationId: 73,
+              }) as Error,
+            );
+          })) as RunDisposableExactCommitWorkspace;
+        const cleanupFailureWorkspace = makeCreateSnapshotWorkspace(cleanupFailureRunner);
         const validation = candidateValidationForTest({
           localRepositoryRoot: mainCheckout,
           artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),

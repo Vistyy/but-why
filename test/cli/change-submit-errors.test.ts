@@ -19,6 +19,38 @@ describe("Change Submit Change Policy errors", () => {
     });
   });
 
+  it("preserves dispatch identity in active Validation Run recovery output", () => {
+    const result = submitResult(
+      {
+        ok: false,
+        code: "active_validation_run",
+        changeId: "change-1",
+        validationRunId: 7,
+        toolingFailures: [
+          {
+            sequence: 1,
+            validationRunId: 7,
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "dispatch_agent_invocation",
+            errorMessage: "Agent Invocation 73 dispatch was blocked.",
+            blockingInvocationId: 73,
+          },
+        ],
+      },
+      "change-1",
+    );
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "active_validation_run",
+          validationRunId: 7,
+          toolingFailures: [{ blockingInvocationId: 73 }],
+        },
+      },
+    });
+  });
+
   it("serializes remote mismatch commits and normalized failure evidence", () => {
     const result = submitResult(
       {
