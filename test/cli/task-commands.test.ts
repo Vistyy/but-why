@@ -5,7 +5,6 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { runCancelCommand } from "../../src/cli/task/commands/cancel.js";
 import { runContextCommand } from "../../src/cli/task/commands/context.js";
 import { runContextApplyCommand } from "../../src/cli/task/commands/contextApply.js";
 import { runContextDraftCommand } from "../../src/cli/task/commands/contextDraft.js";
@@ -187,24 +186,24 @@ describe("Task command Adapters", () => {
           cancelTask: () => Effect.succeed(failure.result),
           cancelChange: () => Effect.die("Unexpected Change Cancel call"),
         };
-        const result = yield* runCancelCommand(
-          { taskId: "BY-1", reason: "Stop" },
-          { ...environment(fakeTaskUseCases()), cancellationUseCases },
+        const result = yield* runByInProcessEffect(
+          createTestWorkspace(),
+          ["task", "cancel", "BY-1", "--reason", "Stop"],
+          firstNow,
+          { cancellationUseCases },
         );
 
-        expect(result).toEqual({
-          exitCode: 1,
-          stdout: {
-            error: {
-              taskId: "BY-1",
-              code: failure.result.code,
-              message: failure.message,
-              ...("validationRunId" in failure.result
-                ? { validationRunId: failure.result.validationRunId }
-                : {}),
-            },
-            help: failure.help,
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: {
+            taskId: "BY-1",
+            code: failure.result.code,
+            message: failure.message,
+            ...("validationRunId" in failure.result
+              ? { validationRunId: failure.result.validationRunId }
+              : {}),
           },
+          help: failure.help,
         });
       }
     }),
