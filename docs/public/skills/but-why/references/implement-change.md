@@ -33,7 +33,6 @@ This step is complete when the Change, accepted intent, and Managed Worktree are
 
 Follow the repository instructions in the Managed Worktree.
 Use explicit verification constraints in accepted Acceptance Context when present.
-Before you add a Shared Repository State Migration Artifact, run `<but-why> snapshot`.
 Before selecting or adding verification evidence, read [Task verification](task-verification.md) completely.
 Select proportionate evidence after the implementation shape is known.
 When multiple approaches remain compliant with accepted intent, select one.

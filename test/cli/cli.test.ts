@@ -17,7 +17,6 @@ const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 const expectedCommandPaths = [
   "init",
-  "snapshot",
   "task create",
   "task dependencies add",
   "task dependencies remove",

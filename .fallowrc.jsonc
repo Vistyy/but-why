@@ -83,10 +83,6 @@
         "patterns": ["src/taskChange/**"]
       },
       {
-        "name": "repository-runtime-composition",
-        "patterns": ["src/repositorySnapshot/composition/**"]
-      },
-      {
         "name": "cli",
         "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**", "src/main.ts"]
       },
@@ -100,7 +96,7 @@
       },
       {
         "name": "repository-runtime",
-        "patterns": ["src/repositoryRuntime/**", "src/repositorySnapshot/**"]
+        "patterns": ["src/repositoryRuntime/**"]
       },
       {
         "name": "shared",
@@ -165,10 +161,6 @@
         ]
       },
       {
-        "from": "repository-runtime-composition",
-        "allow": ["adapters", "repository-runtime", "shared"]
-      },
-      {
         "from": "cli",
         "allow": [
           "agent",
@@ -177,7 +169,6 @@
           "change",
           "change-composition",
           "repository-runtime",
-          "repository-runtime-composition",
           "shared",
           "task",
           "task-composition"
@@ -208,7 +199,6 @@
           "change-composition",
           "cli",
           "repository-runtime",
-          "repository-runtime-composition",
           "reviewer-prompts",
           "shared",
           "task",

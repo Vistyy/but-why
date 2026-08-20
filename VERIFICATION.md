@@ -19,7 +19,7 @@
 
 - Each retained check must protect supported behavior or detect an important failure.
   Where checks overlap, retain only distinct protection and use the cheapest reliable supported seam.
-- Focused evidence for SQLite atomicity, the supported `0001_baseline` and forward migrations, Shared Repository State Snapshot behavior, and persisted Shared Repository State behavior must use real SQLite.
+- Focused evidence for SQLite atomicity, the supported `0001_baseline` and forward migrations, and persisted Shared Repository State behavior must use real SQLite.
 - Focused evidence for Git identity and work-preservation behavior must use real Git.
 - Use a real process only when package, executable, stdin, process-tree, or agent-runtime behavior is at issue.
   Captured Adapters are sufficient for GitHub classification and retry behavior.

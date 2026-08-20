@@ -56,7 +56,6 @@ const expectedLazyCommandModules = [
   "./cli/validationRun/abandon.js",
   "./cli/validationRun/artifact.js",
   "./cli/initCli.js",
-  "./cli/snapshot.js",
   "./cli/task/dashboard.js",
 ] as const;
 
