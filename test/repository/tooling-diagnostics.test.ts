@@ -150,6 +150,23 @@ describe("repository-authored tooling diagnostics", () => {
       'const result = runTestProcess("npm", ["install"], { cwd });',
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
+    [
+      "nested-unknown-assertions-preserve-evidence",
+      "const value = source as unknown as TrustedType;",
+    ],
+    ["never-assertions-represent-real-union", "const value = source as never;"],
+    [
+      "effect-values-use-complete-contract",
+      "const value = source as Effect.Effect<string, Error>;",
+    ],
+    [
+      "return-or-pass-through-satisfies-uses-owner-contract",
+      "const create = () => { return source satisfies TrustedType; };",
+    ],
+    [
+      "return-or-pass-through-satisfies-uses-owner-contract",
+      "const create = (value: string) => value satisfies TrustedType;",
+    ],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
@@ -194,6 +211,50 @@ describe("repository-authored tooling diagnostics", () => {
 
     expect(result.status).not.toBe(0);
     expectActionablePolicyDiagnostic(result.output);
+  });
+
+  test("type-evidence rules exclude SQLite persistence paths", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-exclusions-"));
+    temporaryPaths.push(fixtureRoot);
+    const source = [
+      "const nested = source as unknown as Target;",
+      "const impossible = source as never;",
+      "const effect = source as Effect.Effect<string>;",
+      "const returned = () => { return source satisfies Target; };",
+      "const passThrough = (value: string) => value satisfies Target;",
+      "",
+    ].join("\\n");
+    for (const directory of ["src/sqlite", "src/repositoryRuntime/adapters/sqlite"]) {
+      mkdirSync(join(fixtureRoot, directory), { recursive: true });
+      writeFileSync(join(fixtureRoot, directory, "diagnostic-fixture.ts"), source);
+    }
+    mkdirSync(join(fixtureRoot, "ast-grep/rules"), { recursive: true });
+    copyFileSync(astGrepRulePath, join(fixtureRoot, "ast-grep/rules/structural-bans.yml"));
+    copyFileSync(astGrepConfigPath, join(fixtureRoot, "sgconfig.yml"));
+
+    const result = run(
+      "pnpm",
+      [
+        "--dir",
+        repositoryRoot,
+        "exec",
+        "ast-grep",
+        "scan",
+        "--config",
+        join(fixtureRoot, "sgconfig.yml"),
+        "--filter",
+        "^(nested-unknown-assertions-preserve-evidence|never-assertions-represent-real-union|effect-values-use-complete-contract|return-or-pass-through-satisfies-uses-owner-contract)$",
+        "--report-style",
+        "short",
+        "--color",
+        "never",
+        join(fixtureRoot, "src"),
+      ],
+      fixtureRoot,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.output).toBe("");
   });
 
   test("Biome rejects fixed-literal computed access in production source", () => {

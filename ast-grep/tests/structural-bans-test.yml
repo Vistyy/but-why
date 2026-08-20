@@ -138,3 +138,46 @@ valid:
 invalid:
   - environment.taskUseCases.editTaskDependencies
   - environment.taskUseCases.reviseTask
+---
+id: nested-unknown-assertions-preserve-evidence
+valid:
+  - value as Target
+  - invalidPolicy as unknown as ChangePolicy
+  - "const api = { sendUserMessage() {} } as unknown as ExtensionAPI"
+  - "const context = { sessionManager: {}, isIdle() {} } as unknown as ExtensionContext"
+invalid:
+  - value as unknown as Target
+  - value as unknown as ExtensionAPI
+  - "(value as unknown) as Target"
+---
+id: never-assertions-represent-real-union
+valid:
+  - value as unknown
+  - value as never[]
+  - assertNever(value)
+invalid:
+  - value as never
+  - "(value) as never"
+---
+id: effect-values-use-complete-contract
+valid:
+  - value as EffectResult
+  - value satisfies Effect.Effect<string>
+invalid:
+  - value as Effect.Effect<string>
+  - value as Effect.Effect<string, Error, Services>
+  - "<Effect.Effect<string>>value"
+---
+id: return-or-pass-through-satisfies-uses-owner-contract
+valid:
+  - const result = value satisfies Result
+  - "return value"
+  - "value => value"
+  - "value => other satisfies Result"
+invalid:
+  - "return value satisfies Result"
+  - "return (value satisfies Result)"
+  - "value => value satisfies Result"
+  - "(value) => value satisfies Result"
+  - "(value: string) => (value satisfies Result)"
+  - "(value): Result => value satisfies Result"

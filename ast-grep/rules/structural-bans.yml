@@ -253,3 +253,125 @@ rule:
   any:
     - pattern: environment.taskUseCases.editTaskDependencies
     - pattern: environment.taskUseCases.reviseTask
+---
+# Nested assertions erase the evidence needed to understand the unsupported conversion.
+id: nested-unknown-assertions-preserve-evidence
+language: TypeScript
+severity: error
+message: Do not chain `as unknown as` because nested assertions erase type evidence; preserve evidence with inference, a typed Adapter, or one justified assertion.
+files:
+  - src/**/*.ts
+  - test/**/*.ts
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+ignores:
+  - src/sqlite/**/*.ts
+  - '**/adapters/sqlite/**/*.ts'
+rule:
+  all:
+    - any:
+        - pattern: $VALUE as unknown as $TYPE
+        - pattern: ($VALUE as unknown) as $TYPE
+    - not:
+        regex: '^invalidPolicy as unknown as ChangePolicy$'
+    - not:
+        pattern: JSON.parse($$$ARGS) as unknown as $TYPE
+    - not:
+        pattern: (JSON.parse($$$ARGS) as unknown) as $TYPE
+    - not:
+        inside:
+          all:
+            - kind: variable_declarator
+            - regex: '^api'
+            - has:
+                pattern: $VALUE as unknown as ExtensionAPI
+            - has:
+                regex: sendUserMessage
+    - not:
+        inside:
+          all:
+            - kind: variable_declarator
+            - regex: '^context'
+            - has:
+                pattern: $VALUE as unknown as ExtensionContext
+            - has:
+                regex: sessionManager
+---
+# `never` assertions hide an unrepresented runtime case instead of proving it impossible.
+id: never-assertions-represent-real-union
+language: TypeScript
+severity: error
+message: Do not use `as never` because it hides an unrepresented runtime case; represent the real union or prove impossibility through exhaustive control flow.
+files:
+  - src/**/*.ts
+  - test/**/*.ts
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+ignores:
+  - src/sqlite/**/*.ts
+  - '**/adapters/sqlite/**/*.ts'
+rule:
+  all:
+    - pattern: $VALUE as never
+    - not:
+        pattern: JSON.parse($$$ARGS) as never
+    - not:
+        pattern: (JSON.parse($$$ARGS)) as never
+---
+# A complete Effect assertion hides the contract that the Effect value already owns.
+id: effect-values-use-complete-contract
+language: TypeScript
+severity: error
+message: Do not assert a complete value to `Effect.Effect<...>` because it hides the value's contract; export or use the complete Effect contract instead of asserting the whole value.
+files:
+  - src/**/*.ts
+  - test/**/*.ts
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+ignores:
+  - src/sqlite/**/*.ts
+  - '**/adapters/sqlite/**/*.ts'
+rule:
+  all:
+    - any:
+        - pattern: $VALUE as Effect.Effect<$$$TYPE>
+        - pattern: <Effect.Effect<$$$TYPE>>$VALUE
+    - not:
+        pattern: JSON.parse($$$ARGS) as Effect.Effect<$$$TYPE>
+    - not:
+        pattern: <Effect.Effect<$$$TYPE>>JSON.parse($$$ARGS)
+---
+# `satisfies` should constrain a construction or an explicit owner contract, not a returned or pass-through value.
+id: return-or-pass-through-satisfies-uses-owner-contract
+language: TypeScript
+severity: error
+message: Do not put `satisfies` directly on a returned or pass-through value because it hides the construction's evidence; put it on a construction before returning it or use an explicit owner contract.
+files:
+  - src/**/*.ts
+  - test/**/*.ts
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+ignores:
+  - src/sqlite/**/*.ts
+  - '**/adapters/sqlite/**/*.ts'
+rule:
+  all:
+    - any:
+        - pattern: return $VALUE satisfies $TYPE
+        - pattern: return ($VALUE satisfies $TYPE)
+        - pattern: $VALUE => $VALUE satisfies $TYPE
+        - pattern: $VALUE => ($VALUE satisfies $TYPE)
+        - pattern: ($VALUE) => $VALUE satisfies $TYPE
+        - pattern: ($VALUE) => ($VALUE satisfies $TYPE)
+        - pattern: "($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
+        - pattern: "($VALUE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "($VALUE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+    - not:
+        pattern: return JSON.parse($$$ARGS) satisfies $TYPE
+    - not:
+        pattern: return (JSON.parse($$$ARGS) satisfies $TYPE)
+    - not:
+        pattern: JSON.parse($$$ARGS) satisfies $TYPE
