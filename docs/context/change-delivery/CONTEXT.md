@@ -314,7 +314,7 @@ Its identity and deterministic path derive from the Validation Run ID, and its e
 Reviewers may temporarily modify a Snapshot Workspace to test bounded hypotheses, but the exact commit remains the review subject rather than becoming a fix.
 After every Agent Invocation, But Why restores the expected commit as detached HEAD, restores the index and tracked files, removes non-ignored untracked files, and verifies the owned worktree identity and clean standard Git working tree.
 Restoration occurs before an output-correction retry or another reviewer uses the Snapshot Workspace.
-Ignored files remain outside this restoration boundary.
+Ignored files remain outside this restoration boundary and may affect later Invocations or reviewers in the same workspace.
 Failure to terminate the reviewer, restore the Snapshot Workspace, or verify its clean identity is a Validation Tooling Failure and prevents further reviewer execution.
 Recovery may reuse only the same Validation Run's matching clean Snapshot Workspace.
 Cleanup verifies the exact product root, derived path, Local Repository worktree registration, detached state, and expected commit.
