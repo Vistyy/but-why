@@ -19,11 +19,9 @@ export const dependencyOptionRequiredError = (operation: DependencyOperation): C
 
 export const missingDependencyOperation = (
   args: readonly string[],
-  validationMessage: string,
+  isInvalidValue: boolean,
 ): DependencyOperation | undefined => {
-  if (validationMessage !== "Expected at least 1 value(s) for option: '--depends-on'") {
-    return undefined;
-  }
+  if (!isInvalidValue) return undefined;
   const positional = validGlobalOptionSyntax(args);
   if (positional === undefined || positional.length !== 4) return undefined;
   const [command, group, operation] = positional;

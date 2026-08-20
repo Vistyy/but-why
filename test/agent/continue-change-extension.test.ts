@@ -681,6 +681,23 @@ describe("packaged Change Implement continuation extension", () => {
     }
   });
 
+  it("delivers an existing Resolution after startup inspection recovers", async () => {
+    const harness = createHarness();
+    harness.setInspectionFails(true);
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+    harness.setInspectionFails(false);
+    harness.setBlockerHistory({
+      blockers: [{ id: "blocker-1" }],
+      resolutions: [{ blockerId: 1, content: "Continue safely." }],
+      active: null,
+    });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
+  });
+
   it("automatically resumes after an external blocker Resolution and explains it before old Findings", async () => {
     const harness = createHarness();
     harness.setSnapshot(
