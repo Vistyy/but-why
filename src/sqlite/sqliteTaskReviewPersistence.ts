@@ -464,7 +464,13 @@ const completeReview = (
         new RepositoryPersistedDataInvalid({ operationName: "complete Task Review", cause }),
     });
     const admission = yield* inspectCurrentAdmission(sql, current, idPrefix);
-    const failure = admission.ok ? validatedToolingFailure : admission.failure;
+    const preservesBlockingDispatchFailure =
+      validatedToolingFailure?.operation === "dispatch_agent_invocation" &&
+      validatedToolingFailure.blockingInvocationId !== undefined;
+    const failure =
+      admission.ok || preservesBlockingDispatchFailure
+        ? validatedToolingFailure
+        : admission.failure;
     const outcome =
       failure !== undefined
         ? "tooling_failed"
