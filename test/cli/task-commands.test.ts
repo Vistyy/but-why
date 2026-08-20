@@ -21,7 +21,7 @@ import type { TaskReviewInspectionUseCases } from "../../src/task/review/taskRev
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
 import type { ApplyTaskContextDraftResult, TaskUseCases } from "../../src/task/taskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
-import { fakeTaskUseCases } from "../support/taskUseCases.js";
+import { fakeTaskChangeTaskUseCases, fakeTaskUseCases } from "../support/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -85,11 +85,13 @@ const environment = (
   taskUseCases: TaskUseCases,
   now = firstNow,
   taskReviewInspectionUseCases: TaskReviewInspectionUseCases = taskReviewInspection(),
+  taskChangeTaskUseCases: TaskCommandEnvironment["taskChangeTaskUseCases"] = undefined,
 ): TaskCommandEnvironment => ({
   cwd: createTestWorkspace(),
   now: () => new Date(now),
   stdin: { fd: -1, isTerminal: true },
   taskUseCases,
+  ...(taskChangeTaskUseCases === undefined ? {} : { taskChangeTaskUseCases }),
   taskReviewInspectionUseCases,
 });
 
@@ -436,17 +438,23 @@ describe("Task command Adapters", () => {
       const successResult = yield* runReviseCommand(
         { taskId: "BY-1" },
         environment(
-          fakeTaskUseCases({ reviseTask: () => ({ ok: true, changed: true, task: revised }) }),
+          fakeTaskUseCases(),
           secondNow,
+          taskReviewInspection(),
+          fakeTaskChangeTaskUseCases({
+            reviseTask: () => ({ ok: true, changed: true, task: revised }),
+          }),
         ),
       );
       const linkedResult = yield* runReviseCommand(
         { taskId: "BY-1" },
         environment(
-          fakeTaskUseCases({
+          fakeTaskUseCases(),
+          secondNow,
+          taskReviewInspection(),
+          fakeTaskChangeTaskUseCases({
             reviseTask: () => ({ ok: false, code: "task_change_linked", changeId: "change-1" }),
           }),
-          secondNow,
         ),
       );
 

@@ -77,16 +77,7 @@ export const withTaskChangeTasks = (
   environment: TaskCommandEnvironment,
   use: (tasks: TaskChangeTaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => {
-  const injected =
-    environment.taskChangeTaskUseCases ??
-    (environment.taskUseCases === undefined
-      ? undefined
-      : {
-          idPrefix: environment.taskUseCases.idPrefix,
-          resolveTaskId: environment.taskUseCases.resolveTaskId,
-          editTaskDependencies: environment.taskUseCases.editTaskDependencies,
-          reviseTask: environment.taskUseCases.reviseTask,
-        });
+  const injected = environment.taskChangeTaskUseCases;
   const program =
     injected === undefined
       ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), use).pipe(

@@ -6,8 +6,9 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
+import type { TaskChangeTaskUseCases } from "../../src/taskChange/composition/loadTaskChangeTaskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
-import { fakeTaskUseCases } from "../support/taskUseCases.js";
+import { fakeTaskChangeTaskUseCases, fakeTaskUseCases } from "../support/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -23,6 +24,13 @@ const expectJsonError = (
 
 const dependencyErrorTaskUseCases = (overrides: Partial<TaskUseCases>): TaskUseCases => ({
   ...fakeTaskUseCases(),
+  ...overrides,
+});
+
+const dependencyErrorTaskChangeTaskUseCases = (
+  overrides: Partial<TaskChangeTaskUseCases>,
+): TaskChangeTaskUseCases => ({
+  ...fakeTaskChangeTaskUseCases(),
   ...overrides,
 });
 
@@ -76,7 +84,7 @@ describe("Task dependency CLI", () => {
         ["task", "dependencies", "replace", "BY-3", "--depends-on", "BY-1", "--depends-on", "BY-2"],
         now,
         {
-          taskUseCases: fakeTaskUseCases({
+          taskChangeTaskUseCases: fakeTaskChangeTaskUseCases({
             editTaskDependencies: (input) => {
               replacementDependencies = input.prerequisiteTaskIds;
               return {
@@ -311,7 +319,7 @@ describe("Task dependency CLI", () => {
             ],
             now,
             {
-              taskUseCases: dependencyErrorTaskUseCases({
+              taskChangeTaskUseCases: dependencyErrorTaskChangeTaskUseCases({
                 editTaskDependencies: () =>
                   Effect.succeed({
                     ok: false,
@@ -334,7 +342,7 @@ describe("Task dependency CLI", () => {
           ["task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
           now,
           {
-            taskUseCases: dependencyErrorTaskUseCases({
+            taskChangeTaskUseCases: dependencyErrorTaskChangeTaskUseCases({
               editTaskDependencies: () => Effect.succeed({ ok: false, code: "task_not_found" }),
             }),
           },
@@ -357,7 +365,7 @@ describe("Task dependency CLI", () => {
         ["task", "dependencies", "add", "BY-1", "--depends-on", "BY-2"],
         now,
         {
-          taskUseCases: dependencyErrorTaskUseCases({
+          taskChangeTaskUseCases: dependencyErrorTaskChangeTaskUseCases({
             editTaskDependencies: () =>
               Effect.succeed({ ok: false, code: "dependencies_locked", state: "todo" }),
           }),

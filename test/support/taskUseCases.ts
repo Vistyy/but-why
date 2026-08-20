@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { TaskSummary } from "../../src/task/task.js";
 import type { CreateTaskInput } from "../../src/task/taskStore.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
+import type { TaskChangeTaskUseCases } from "../../src/taskChange/composition/loadTaskChangeTaskUseCases.js";
 
 type SyncMethod<F> = F extends (...args: infer A) => Effect.Effect<infer S, unknown, unknown>
   ? (...args: A) => S
@@ -19,6 +20,33 @@ type SyncTaskUseCases = Omit<
 
 const unexpected = (method: string): never => {
   throw new Error(`Unexpected TaskUseCases.${method} call`);
+};
+
+export const fakeTaskChangeTaskUseCases = (
+  overrides: Partial<{
+    readonly idPrefix: string;
+    readonly resolveTaskId: TaskChangeTaskUseCases["resolveTaskId"];
+    readonly editTaskDependencies: SyncMethod<TaskChangeTaskUseCases["editTaskDependencies"]>;
+    readonly reviseTask: SyncMethod<TaskChangeTaskUseCases["reviseTask"]>;
+  }> = {},
+): TaskChangeTaskUseCases => {
+  const sync = {
+    idPrefix: "BY",
+    resolveTaskId: (taskId: Parameters<TaskChangeTaskUseCases["resolveTaskId"]>[0]) => ({
+      ok: true as const,
+      taskId,
+    }),
+    editTaskDependencies: () => unexpected("editTaskDependencies"),
+    reviseTask: () => unexpected("reviseTask"),
+    ...overrides,
+  };
+
+  return {
+    idPrefix: sync.idPrefix,
+    resolveTaskId: sync.resolveTaskId,
+    editTaskDependencies: (...args) => Effect.succeed(sync.editTaskDependencies(...args)),
+    reviseTask: (...args) => Effect.succeed(sync.reviseTask(...args)),
+  };
 };
 
 export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): TaskUseCases => {
