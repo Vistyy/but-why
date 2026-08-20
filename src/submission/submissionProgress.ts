@@ -87,7 +87,7 @@ export const runAfterSubmitProgressStarted = <A, E, R>(input: {
     }
     if (result._tag === "Failure") return yield* Effect.failCause(result.cause);
     return result.value;
-  }) as Effect.Effect<A, E, R>;
+  }) satisfies Effect.Effect<A, E, R>;
 
 export const runWithSubmitProgress = <A, E, R>(input: {
   readonly progress: SubmitProgress | undefined;
