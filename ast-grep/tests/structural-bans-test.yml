@@ -212,4 +212,6 @@ invalid:
   - "async (value) => value satisfies Result"
   - "(value: string) => (value satisfies Result)"
   - "async (value: string): Promise<Result> => value satisfies Result"
+  - "<T>(value: T) => value satisfies Result"
+  - "async <T>(value: T) => value satisfies Result"
   - "(value): Result => value satisfies Result"

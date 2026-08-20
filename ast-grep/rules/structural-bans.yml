@@ -550,6 +550,14 @@ rule:
         - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
         - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
         - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "<$$$TYPEPARAMS>($VALUE) => $VALUE satisfies $TYPE"
+        - pattern: "<$$$TYPEPARAMS>($VALUE) => ($VALUE satisfies $TYPE)"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE) => $VALUE satisfies $TYPE"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE) => ($VALUE satisfies $TYPE)"
+        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
     - not:
         pattern: return JSON.parse($$$ARGS) satisfies $TYPE
     - not:
