@@ -288,6 +288,7 @@ it.effect("returns a reused judgment before every repository and reviewer collab
         calls.workspace += 1;
         return Effect.die("must not create workspace");
       },
+      restoreWorkspace: () => Effect.void,
       cleanupWorkspace: () => Effect.die("must not clean workspace"),
       inspectWorkspace: () => Effect.die("must not inspect workspace"),
     });
@@ -408,6 +409,7 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
                   worktreePath: "/tmp/review-1",
                 })
                 .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
+        restoreWorkspace: () => Effect.void,
         cleanupWorkspace: () => Effect.succeed({ workspace: "removed" as const }),
         inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
       });

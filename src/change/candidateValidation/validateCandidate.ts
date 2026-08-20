@@ -5,6 +5,7 @@ import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { RestoreDisposableWorkspace } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { ChangeAgentSessionPort } from "../changePorts.js";
@@ -14,6 +15,7 @@ import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorksp
 import { runCheckPhase } from "../validation/runCheckPhase.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import type { ActiveSnapshotWorkspace } from "../validation/snapshotWorkspace.js";
+import { snapshotWorkspaceId } from "../validation/snapshotWorkspacePath.js";
 import {
   SnapshotWorkspaceSetupFailed,
   type ValidationToolingFailure,
@@ -59,6 +61,7 @@ type CandidateValidationPathsValue = {
   readonly localRepositoryCommonDirectory: string;
   readonly artifactsRoot: string;
   readonly agentSessionsRoot: string;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
     changeId: string,
@@ -142,6 +145,7 @@ const makeCandidateValidation = (dependencies: {
   readonly reviewerExecution: CandidateReviewerExecutionValue;
   readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
   readonly agentSessionsRoot: string;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
   readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
@@ -270,11 +274,14 @@ const makeCandidateValidation = (dependencies: {
 
 const runCandidatePhases = (
   dependencies: {
+    readonly localRepositoryRoot: string;
+    readonly localRepositoryCommonDirectory: string;
     readonly artifactsRoot: string;
     readonly fileSystem: FileSystem.FileSystem;
     readonly persistence: CandidateValidationExecutionPort;
     readonly reviewerExecution: CandidateReviewerExecutionValue;
     readonly agentSessionsRoot: string;
+    readonly restoreWorkspace: RestoreDisposableWorkspace;
     readonly agentPersistence: AgentSessionPersistence;
     readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
     readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
@@ -367,6 +374,12 @@ const runCandidatePhases = (
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
                 resourceRoot,
+                workspaceIdentity: {
+                  repositoryRoot: dependencies.localRepositoryRoot,
+                  repositoryCommonDirectory: dependencies.localRepositoryCommonDirectory,
+                  workspaceId: snapshotWorkspaceId(validationRunId),
+                },
+                restoreWorkspace: dependencies.restoreWorkspace,
                 allowedUntrackedFiles: [],
                 listArtifacts: dependencies.persistence.listArtifacts,
                 listPreviousCandidateReviewerFindings:
@@ -391,6 +404,12 @@ const runCandidatePhases = (
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,
           resourceRoot,
+          workspaceIdentity: {
+            repositoryRoot: dependencies.localRepositoryRoot,
+            repositoryCommonDirectory: dependencies.localRepositoryCommonDirectory,
+            workspaceId: snapshotWorkspaceId(validationRunId),
+          },
+          restoreWorkspace: dependencies.restoreWorkspace,
           allowedUntrackedFiles: [],
           listArtifacts: dependencies.persistence.listArtifacts,
           listPreviousCandidateReviewerFindings:

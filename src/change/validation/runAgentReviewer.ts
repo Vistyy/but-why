@@ -17,7 +17,10 @@ import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import { ReviewerOutputContractFailed } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { restoreDisposableWorkspace } from "../../disposableWorkspace/disposableWorkspace.js";
+import type {
+  DisposableWorkspaceIdentity,
+  RestoreDisposableWorkspace,
+} from "../../disposableWorkspace/disposableWorkspace.js";
 import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   reviewerEvidenceFromAgentSession,
@@ -62,6 +65,8 @@ export type RunAgentReviewerInput = {
   readonly commandCwd: string;
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly resourceRoot: string;
+  readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly profile: ResolvedPiAgentProfile;
   readonly sessionStorageRoot: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
@@ -111,10 +116,13 @@ export const runAgentReviewer = (
         Effect.gen(function* () {
           const restored = yield* Effect.either(
             Effect.uninterruptible(
-              restoreDisposableWorkspace({
+              input.restoreWorkspace({
                 commandExecutor: input.commandExecutor,
                 commandCwd: input.commandCwd,
                 expectedCommitSha: input.expectedHeadSha,
+                ...(input.workspaceIdentity === undefined
+                  ? {}
+                  : { workspaceIdentity: input.workspaceIdentity }),
               }),
             ),
           );

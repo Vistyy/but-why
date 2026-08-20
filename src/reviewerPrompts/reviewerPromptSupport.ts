@@ -26,6 +26,7 @@ export const reviewerExecutionInstructions = [
   "You may use bash and operating-system temporary space for generated scripts, fixtures, and other disposable evidence.",
   "The exact commit remains the review subject even when you temporarily modify this disposable workspace to test a bounded hypothesis.",
   "After every Agent Invocation, But Why restores the detached workspace to the exact commit, tracked files, index, and clean standard Git working tree before any output-correction retry or another reviewer uses it.",
+  "This disposable workspace provides no security isolation; do not treat it as a boundary for credentials, processes, filesystem access, or external systems.",
   "Do not modify shared Git metadata, other worktrees, or external systems, and do not follow main-checkout synchronization instructions inside this workspace because they do not apply here.",
 ].join("\n");
 

@@ -331,7 +331,7 @@ const runReviewPhases = (
         if (command === "git symbolic-ref --quiet HEAD") {
           return Effect.succeed({ exitCode: 1, stdout: "", stderr: "" });
         }
-        if (command.startsWith("git reset --hard") || command === "git clean -fd -- .") {
+        if (command.startsWith("git reset --hard") || command.startsWith("git clean -f")) {
           return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
         }
         return Effect.succeed({
@@ -362,6 +362,7 @@ const runReviewPhases = (
         commandCwd: ready.repo,
         resourceRoot: ready.repo,
         sessionStorageRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
+        restoreWorkspace: () => Effect.void,
         agentPersistence: persistence.agentPersistence,
         getAgentSession: persistence.agentSessions.getAgentSession,
         linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,

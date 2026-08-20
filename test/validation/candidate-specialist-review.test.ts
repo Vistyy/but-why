@@ -187,6 +187,7 @@ const phaseHarness = (): PhaseHarness => {
         commandCwd: artifactsRoot,
         resourceRoot: artifactsRoot,
         sessionStorageRoot: join(artifactsRoot, "sessions"),
+        restoreWorkspace: () => Effect.void,
         agentPersistence: defaultAgentPersistence(),
         getAgentSession: () => Effect.succeed(undefined),
         linkAgentInvocation: () => () => Effect.void,
@@ -465,7 +466,7 @@ describe("Candidate Specialist Review phase", () => {
                       }
                       if (
                         command.startsWith("git reset --hard") ||
-                        command === "git clean -fd -- ."
+                        command.startsWith("git clean -f")
                       ) {
                         return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
                       }
@@ -480,6 +481,7 @@ describe("Candidate Specialist Review phase", () => {
                     commandCwd: repo,
                     resourceRoot: repo,
                     sessionStorageRoot: artifactsRoot,
+                    restoreWorkspace: () => Effect.void,
                     agentPersistence: persistence.agentPersistence,
                     getAgentSession: persistence.agentSessions.getAgentSession,
                     linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
@@ -727,6 +729,7 @@ describe("Candidate Specialist Review phase", () => {
             commandCwd: repo,
             resourceRoot: repo,
             sessionStorageRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+            restoreWorkspace: () => Effect.void,
             agentPersistence: defaultAgentPersistence(),
             getAgentSession: () => Effect.succeed(undefined),
             linkAgentInvocation: () => () => Effect.void,
@@ -748,11 +751,9 @@ describe("Candidate Specialist Review phase", () => {
         expect(results).toMatchObject([
           {
             outcome: "failed",
-            findings: [],
-            artifactRecords: [],
             toolingFailure: {
-              errorKind: "infrastructure_tooling_failed",
-              operationName: "verify_specialist_review_candidate",
+              errorKind: "reviewer_output_contract_failed",
+              operationName: "decode_reviewer_output",
             },
           },
         ]);

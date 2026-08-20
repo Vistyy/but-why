@@ -14,6 +14,7 @@ import {
   CandidateValidationWorkspace,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
+import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import {
   type RepositorySqlConfig,
@@ -50,6 +51,7 @@ export const candidateValidationForTest = (input: {
         localRepositoryCommonDirectory: input.repository.commonDirectory,
         artifactsRoot: input.artifactsRoot,
         agentSessionsRoot: input.artifactsRoot,
+        restoreWorkspace: restoreDisposableWorkspace,
         agentPersistence,
         getAgentSession: agentSessions.getAgentSession,
         linkAgentInvocation: agentSessions.linkAgentInvocation,

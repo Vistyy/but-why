@@ -18,6 +18,10 @@ import {
 } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type {
+  DisposableWorkspaceIdentity,
+  RestoreDisposableWorkspace,
+} from "../../disposableWorkspace/disposableWorkspace.js";
 import {
   buildAcceptanceContinuationPrompt,
   buildAcceptanceReviewerPrompt,
@@ -66,6 +70,8 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
   readonly resourceRoot?: string;
+  readonly workspaceIdentity?: DisposableWorkspaceIdentity;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly sessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
@@ -212,6 +218,10 @@ export const runAcceptanceReviewPhase = (
         commandCwd: input.commandCwd,
         commandExecutor: input.commandExecutor,
         resourceRoot: input.resourceRoot ?? input.commandCwd,
+        ...(input.workspaceIdentity === undefined
+          ? {}
+          : { workspaceIdentity: input.workspaceIdentity }),
+        restoreWorkspace: input.restoreWorkspace,
         profile: input.policy.profile,
         sessionStorageRoot: input.sessionStorageRoot,
         ...(input.agentEnvironment === undefined

@@ -19,7 +19,7 @@ import {
   type DisposableWorktreeInspection,
   type ExactDisposableWorkspaceCleanupInput,
   type ExactDisposableWorkspaceCleanupResult,
-  restoreDisposableWorkspace,
+  type RestoreDisposableWorkspace,
   verifyDisposableWorkspaceIntegrity,
 } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
@@ -169,6 +169,7 @@ export const openTaskReviewUseCases = (input: {
     recorded: TaskReviewBase,
   ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
   readonly runWorkspace: RunDisposableExactCommitWorkspace;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly cleanupWorkspace: (
     repositoryRoot: string,
     repositoryCommonDirectory: string,
@@ -349,10 +350,15 @@ const submitTaskReview = (
                   Effect.gen(function* () {
                     const restored = yield* Effect.either(
                       Effect.uninterruptible(
-                        restoreDisposableWorkspace({
+                        input.restoreWorkspace({
                           commandExecutor: active.commandExecutor,
                           commandCwd: active.worktreePath,
                           expectedCommitSha: base.base.commit,
+                          workspaceIdentity: {
+                            repositoryRoot: input.repositoryRoot,
+                            repositoryCommonDirectory: input.repositoryCommonDirectory,
+                            workspaceId: taskReviewWorkspaceId(reviewId),
+                          },
                         }),
                       ),
                     );

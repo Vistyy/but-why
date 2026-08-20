@@ -502,11 +502,9 @@ describe("Acceptance Review phase", () => {
       expect(fixture.results).toMatchObject([
         {
           outcome: "failed",
-          findings: [],
-          artifactRecords: [],
           toolingFailure: {
-            errorKind: "infrastructure_tooling_failed",
-            operationName: "verify_acceptance_review_candidate",
+            errorKind: "reviewer_output_contract_failed",
+            operationName: "decode_reviewer_output",
           },
         },
       ]);
@@ -570,7 +568,7 @@ const acceptancePhaseFixture = (
     if (command === "git symbolic-ref --quiet HEAD") {
       return Effect.succeed({ exitCode: 1, stdout: "", stderr: "" });
     }
-    if (command.startsWith("git reset --hard") || command === "git clean -fd -- .") {
+    if (command.startsWith("git reset --hard") || command.startsWith("git clean -f")) {
       return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
     }
     return Effect.succeed({
@@ -620,6 +618,7 @@ const acceptancePhaseFixture = (
         commandCwd: options.commandCwd ?? "/captured/snapshot-workspace",
         resourceRoot: options.resourceRoot ?? "/captured/snapshot-workspace",
         sessionStorageRoot: options.sessionStorageRoot ?? artifactsRoot,
+        restoreWorkspace: () => Effect.void,
         agentPersistence,
         getAgentSession,
         linkAgentInvocation,
