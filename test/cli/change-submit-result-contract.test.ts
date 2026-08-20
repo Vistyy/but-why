@@ -296,6 +296,15 @@ const cases = {
     result: { ok: false, code: "publication_tooling_failed" },
     expected: publicationFailure("publication_tooling_failed"),
   },
+  repository_branch_upstream_association_failed: {
+    result: { ok: false, code: "repository_branch_upstream_association_failed" },
+    expected: errorResult(
+      "repository_branch_upstream_association_failed",
+      "Candidate Publication was confirmed, but standard Git upstream association failed.",
+      ["Inspect the local Repository Branch config, then retry Change Submit."],
+      { changeId },
+    ),
+  },
   owned_pull_request_unavailable: {
     result: {
       ok: false,

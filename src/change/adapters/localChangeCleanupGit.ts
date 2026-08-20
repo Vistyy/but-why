@@ -5,6 +5,7 @@ import { basename, dirname } from "node:path";
 import type { RemoteChangeBranch } from "../change.js";
 import { branchNameForRef, changeBranchNameForRef } from "../changeBranch.js";
 import type { ChangeCleanupRemote, RemoteBranchDeletionResult } from "../changeCleanupRemote.js";
+import { removeRepositoryBranchUpstream } from "./localRepositoryBranchUpstream.js";
 
 export type { ChangeCleanupRemote } from "../changeCleanupRemote.js";
 
@@ -18,6 +19,7 @@ export type ChangeCleanupResult =
         | "worktree_removal_failed"
         | "worktree_path_unsafe"
         | "worktree_container_removal_failed"
+        | "repository_branch_upstream_removal_failed"
         | "branch_ref_invalid"
         | "branch_reachability_unavailable"
         | "branch_not_reachable_from_another_ref"
@@ -58,6 +60,7 @@ export const cleanupChangeResources = (
     inspectDirtyWorktree,
     removeManagedWorktree,
     removeWorktreeContainers,
+    cleanupRepositoryBranchUpstream,
     cleanupLocalBranch,
     cleanupRemoteChangeBranch,
   ];
@@ -131,6 +134,29 @@ const removeWorktreeContainers: CleanupStage = (input) => {
   return removeEmptySiblingContainers(input.worktreePath)
     ? undefined
     : { state: "pending", blockingReason: "worktree_container_removal_failed" };
+};
+
+const cleanupRepositoryBranchUpstream: CleanupStage = (input) => {
+  const branch = input.remoteChangeBranch;
+  if (branch === null) return undefined;
+  const branchName = branchNameForRef(input.branchRef);
+  if (branchName === undefined) {
+    return { state: "pending", blockingReason: "branch_ref_invalid" };
+  }
+  if (branchName !== branch.branchName) {
+    return { state: "pending", blockingReason: "remote_branch_ownership_mismatch" };
+  }
+  return removeRepositoryBranchUpstream(
+    (args, cwd) => git(cwd, args),
+    input.repositoryCommonDirectory,
+    {
+      branchRef: input.branchRef,
+      remoteName: branch.remoteName,
+      remoteBranchName: branch.branchName,
+    },
+  )
+    ? undefined
+    : { state: "pending", blockingReason: "repository_branch_upstream_removal_failed" };
 };
 
 const cleanupLocalBranch: CleanupStage = (input) => {

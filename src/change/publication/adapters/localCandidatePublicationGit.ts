@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 
+import { associateRepositoryBranchUpstream } from "../../adapters/localRepositoryBranchUpstream.js";
 import type { CandidatePublicationGit, CommitSubjectResult } from "../candidatePublication.js";
 
 export type PublicationGitCommandResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false };
+  | { readonly ok: false; readonly status?: number | null };
 
 export type PublicationGitCommandRunner = (
   args: readonly string[],
@@ -22,6 +23,14 @@ export const localCandidatePublicationGit = (input: {
       containsCommit(runGit, input.cwd, headSha, ancestorSha),
     readFirstNonMergeCommitSubject: (startingCommit, headSha) =>
       readFirstNonMergeCommitSubject(runGit, input.cwd, startingCommit, headSha),
+    associateRepositoryBranchUpstream: (branchRef, remoteName, remoteBranchName) =>
+      associateRepositoryBranchUpstream(runGit, input.cwd, {
+        branchRef,
+        remoteName,
+        remoteBranchName,
+      })
+        ? { ok: true }
+        : { ok: false },
   };
 };
 

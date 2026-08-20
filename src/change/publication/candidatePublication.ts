@@ -38,12 +38,22 @@ export type CandidatePublicationGit = {
     headSha: string,
   ) => CommitSubjectResult;
   readonly containsCommit: (headSha: string, ancestorSha: string) => boolean;
+  readonly associateRepositoryBranchUpstream: (
+    branchRef: string,
+    remoteName: string,
+    remoteBranchName: string,
+  ) => { readonly ok: true } | { readonly ok: false };
 };
+
+export type PublishedChangeAssociationResult = { readonly ok: true } | { readonly ok: false };
 
 export type CandidatePublication = {
   readonly publish: (
     input: PublishCandidateInput,
   ) => Effect.Effect<PublishCandidateResult, RepositoryStorageError>;
+  readonly associatePublishedChange: (
+    changeId: string,
+  ) => Effect.Effect<PublishedChangeAssociationResult, RepositoryStorageError>;
 };
 
 export type PublishCandidateInput = {
@@ -72,7 +82,8 @@ export type PublishCandidateResult =
         | "publication_lookup_ambiguous"
         | "publication_remote_mismatch"
         | "publication_state_conflict"
-        | "publication_tooling_failed";
+        | "publication_tooling_failed"
+        | "repository_branch_upstream_association_failed";
       readonly evidence?: PublicationFailureEvidence;
       readonly recoveryEvidence?: PublicationFailureEvidence;
       readonly expectedRemoteHeadSha?: string;
@@ -88,8 +99,22 @@ type Dependencies = {
 type PublicationEffect = Effect.Effect<PublishCandidateResult, RepositoryStorageError>;
 type Metadata = { readonly title: string; readonly body: string };
 
+const publishNew = (
+  dependencies: Dependencies,
+  input: PublishCandidateInput,
+  change: CandidatePublicationChange,
+  headBranch: string,
+  changeBaseSha: string,
+  headSha: string,
+): PublicationEffect => {
+  const metadata = metadataFor(change, changeBaseSha, headSha, dependencies.git);
+  if ("ok" in metadata) return Effect.succeed(metadata);
+  return create(dependencies, input, change, headBranch, headSha, metadata);
+};
+
 export const openCandidatePublication = (dependencies: Dependencies): CandidatePublication => ({
   publish: (input) => publish(dependencies, input),
+  associatePublishedChange: (changeId) => associatePublishedChange(dependencies, changeId),
 });
 
 const publish = (dependencies: Dependencies, input: PublishCandidateInput): PublicationEffect =>
@@ -111,39 +136,37 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     const headBranch = branchNameForRef(change.branchRef);
     if (headBranch === undefined) return { ok: false, code: "branch_binding_invalid" };
     const publication = change.publication;
-    if (publication === null) {
-      const metadata = metadataFor(
-        change,
-        evidence.changeBaseSha,
-        evidence.headSha,
-        dependencies.git,
-      );
-      if ("ok" in metadata) return metadata;
-      return yield* create(
-        dependencies,
-        publicationInput,
-        change,
-        headBranch,
-        evidence.headSha,
-        metadata,
-      );
-    }
-    if (publication.pullRequest === null)
-      return yield* recover(
-        dependencies,
-        publicationInput,
-        { ...change, publication: { ...publication, pullRequest: null } },
-        headBranch,
-        evidence.headSha,
-      );
-    return yield* updateOrReuse(
-      dependencies,
-      publicationInput,
-      { ...change, publication: { ...publication, pullRequest: publication.pullRequest } },
-      headBranch,
-      evidence.headSha,
-      bodyFor(change),
-    );
+    const result =
+      publication === null
+        ? yield* publishNew(
+            dependencies,
+            publicationInput,
+            change,
+            headBranch,
+            evidence.changeBaseSha,
+            evidence.headSha,
+          )
+        : publication.pullRequest === null
+          ? yield* recover(
+              dependencies,
+              publicationInput,
+              { ...change, publication: { ...publication, pullRequest: null } },
+              headBranch,
+              evidence.headSha,
+            )
+          : yield* updateOrReuse(
+              dependencies,
+              publicationInput,
+              { ...change, publication: { ...publication, pullRequest: publication.pullRequest } },
+              headBranch,
+              evidence.headSha,
+              bodyFor(change),
+            );
+    if (!result.ok) return result;
+    const association = yield* associatePublishedChange(dependencies, input.changeId);
+    return association.ok
+      ? result
+      : { ok: false, code: "repository_branch_upstream_association_failed" };
   });
 
 const create = (
@@ -898,6 +921,42 @@ const request = (
   branchRef,
   expectedHeadSha,
 });
+type RepositoryBranchUpstreamAssociationInput = {
+  readonly branchRef: string;
+  readonly remoteName: string;
+  readonly remoteBranchName: string;
+};
+
+const associatePublishedChange = (
+  dependencies: Dependencies,
+  changeId: string,
+): Effect.Effect<PublishedChangeAssociationResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const change = yield* dependencies.changePersistence.getChangeById(changeId);
+    if (
+      change === undefined ||
+      change.state === "closed" ||
+      change.publication === null ||
+      change.publication.pullRequest === null
+    )
+      return { ok: false };
+    return associateRepositoryBranchUpstream(dependencies, {
+      branchRef: change.branchRef,
+      remoteName: change.publication.target.remoteName,
+      remoteBranchName: change.publication.headBranch,
+    });
+  });
+
+const associateRepositoryBranchUpstream = (
+  dependencies: Dependencies,
+  input: RepositoryBranchUpstreamAssociationInput,
+): PublishedChangeAssociationResult =>
+  dependencies.git.associateRepositoryBranchUpstream(
+    input.branchRef,
+    input.remoteName,
+    input.remoteBranchName,
+  );
+
 const hasExpectedHead = (
   git: CandidatePublicationGit,
   branchRef: string,

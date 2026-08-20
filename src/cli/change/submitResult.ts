@@ -215,6 +215,14 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
       ],
     });
   }
+  if (result.code === "repository_branch_upstream_association_failed") {
+    return runtimeError({
+      code: result.code,
+      message: "Candidate Publication was confirmed, but standard Git upstream association failed.",
+      details: { changeId },
+      help: ["Inspect the local Repository Branch config, then retry Change Submit."],
+    });
+  }
   if (
     result.code === "publication_creation_unconfirmed" ||
     result.code === "publication_lookup_ambiguous" ||
