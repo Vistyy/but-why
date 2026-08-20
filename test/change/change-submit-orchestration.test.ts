@@ -1059,6 +1059,70 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("retries failed upstream association from completed publication evidence", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      let associationAttempts = 0;
+      const change = readyChange({
+        publication: {
+          candidateId: 1,
+          validationRunId: 1,
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          refreshResult: {
+            ok: false,
+            code: "publication_remote_unreachable",
+            remoteName: "origin",
+          },
+          publication: {
+            publish: () => {
+              throw new Error("Duplicate publication");
+            },
+            associateRepositoryBranchUpstream: () => {
+              associationAttempts += 1;
+              return associationAttempts === 1 ? { ok: false } : { ok: true };
+            },
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Duplicate validation"),
+        validateAcceptanceContextCandidate: () => Effect.die("Duplicate validation"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
+      });
+
+      const first = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      const second = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(first).toEqual({
+        ok: false,
+        code: "repository_branch_upstream_association_failed",
+      });
+      expect(second).toMatchObject({ ok: true, status: "published", created: false });
+      expect(associationAttempts).toBe(2);
+      expect(events).toEqual([
+        "observe_pull_request",
+        "read_publication_evidence",
+        "observe_pull_request",
+        "read_publication_evidence",
+      ]);
+    }),
+  );
+
   it.effect("does not reuse publication when only the Repository Branch head matches", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -1347,6 +1411,7 @@ describe("Change Submit orchestration", () => {
 
 type PublicationFixture = {
   readonly publish: (input: PublishCandidateInput) => PublishCandidateResult;
+  readonly associateRepositoryBranchUpstream?: () => { readonly ok: true } | { readonly ok: false };
 };
 
 type PullRequestObservation =
@@ -1440,6 +1505,8 @@ const dependencies = (input: {
       return {
         publish: (publicationInput: PublishCandidateInput) =>
           Effect.sync(() => publication.publish(publicationInput)),
+        associateRepositoryBranchUpstream: () =>
+          publication.associateRepositoryBranchUpstream?.() ?? { ok: true as const },
       };
     },
     readBranchHead: () =>

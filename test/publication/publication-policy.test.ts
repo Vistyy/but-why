@@ -111,6 +111,46 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       ),
   );
 
+  it.scoped("retries upstream association from confirmed publication without republication", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const requests: unknown[] = [];
+        let associationAttempts = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes.publication,
+          git: {
+            ...publicationGitDefaults,
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+            associateRepositoryBranchUpstream: () => {
+              associationAttempts += 1;
+              return associationAttempts === 1 ? { ok: false as const } : { ok: true as const };
+            },
+          },
+          github: {
+            ...successfulCreation(requests),
+            getPullRequest: () => pullRequestRead(pullRequest(fixture.captured.headSha)),
+          },
+        });
+
+        expect(yield* publication.publish(input(fixture))).toEqual({
+          ok: false,
+          code: "repository_branch_upstream_association_failed",
+        });
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          { publication: { pullRequest: { number: 42 } } },
+        );
+
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: true,
+          created: false,
+        });
+        expect(associationAttempts).toBe(2);
+        expect(requests).toHaveLength(1);
+      }),
+    ),
+  );
+
   it.scoped("reads back a malformed pull request creation response without recording it", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
@@ -1686,4 +1726,7 @@ const successfulCreation = (requests: unknown[]) => ({
     throw new Error("Unexpected PR update");
   },
 });
-const publicationGitDefaults = { containsCommit: () => true };
+const publicationGitDefaults = {
+  containsCommit: () => true,
+  associateRepositoryBranchUpstream: () => ({ ok: true as const }),
+};

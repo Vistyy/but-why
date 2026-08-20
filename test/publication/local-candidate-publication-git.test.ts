@@ -37,6 +37,36 @@ describe("local Candidate publication Git", () => {
     });
   });
 
+  it("associates the local Repository Branch with the confirmed Remote Change Branch", () => {
+    const root = createGitRepo();
+    git(root, "config", "user.email", "test@example.com");
+    git(root, "config", "user.name", "Test User");
+    git(root, "checkout", "-b", "feature");
+    writeFileSync(join(root, "base.txt"), "base\n");
+    git(root, "add", "base.txt");
+    git(root, "commit", "-m", "base");
+    git(root, "config", "branch.feature.description", "preserve this key");
+    git(root, "config", "branch.other.remote", "other");
+
+    const publicationGit = localCandidatePublicationGit({ cwd: root });
+
+    expect(
+      publicationGit.associateRepositoryBranchUpstream(
+        "refs/heads/feature",
+        "origin",
+        "but-why/feature",
+      ),
+    ).toEqual({ ok: true });
+    expect(git(root, "config", "--get-all", "branch.feature.remote")).toBe("origin");
+    expect(git(root, "config", "--get-all", "branch.feature.merge")).toBe(
+      "refs/heads/but-why/feature",
+    );
+    expect(git(root, "config", "--get-all", "branch.feature.description")).toBe(
+      "preserve this key",
+    );
+    expect(git(root, "config", "--get-all", "branch.other.remote")).toBe("other");
+  });
+
   it("accepts and rejects publication facts from actual Git ancestry and branch heads", () => {
     const root = createGitRepo();
     git(root, "config", "user.email", "test@example.com");

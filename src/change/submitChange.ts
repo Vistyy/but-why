@@ -211,6 +211,7 @@ const submitChange = (
       decision.ownedPullRequestOpen,
     );
     if (completedPublication.ok) return completedPublication.result;
+    if (completedPublication.result !== undefined) return completedPublication.result;
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -352,12 +353,13 @@ const completedPublicationEvidence = (
   change: OpenChangeWithWorktree,
   ownedPullRequestOpen: boolean,
 ): Effect.Effect<
-  { readonly ok: true; readonly result: ChangeSubmitResult } | { readonly ok: false },
+  | { readonly ok: true; readonly result: ChangeSubmitResult }
+  | { readonly ok: false; readonly result?: ChangeSubmitResult },
   RepositoryStorageError
 > =>
   Effect.gen(function* () {
     if (change.publication === null || change.publication.pullRequest === null)
-      return { ok: false };
+      return { ok: false } as const;
     if (!ownedPullRequestOpen) return { ok: false };
     const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
     if (!branchHead.ok) return { ok: false };
@@ -373,7 +375,23 @@ const completedPublicationEvidence = (
       evidence.validationRunId !== change.publication.validationRunId ||
       evidence.headSha !== branchHead.headSha
     ) {
-      return { ok: false };
+      return { ok: false } as const;
+    }
+    const association = dependencies
+      .publicationFor(change.worktreePath)
+      .associateRepositoryBranchUpstream({
+        branchRef: change.branchRef,
+        remoteName: change.publication.target.remoteName,
+        remoteBranchName: change.publication.headBranch,
+      });
+    if (!association.ok) {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          code: "repository_branch_upstream_association_failed",
+        },
+      } as const;
     }
     return {
       ok: true,

@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { cleanupChangeResources } from "../../src/change/adapters/localChangeCleanupGit.js";
-import { runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change cleanup Git adapter", () => {
@@ -340,6 +340,51 @@ process.exit(result.status ?? 1);
     ).toEqual({ state: "complete" });
     expect(existsSync(worktreePath)).toBe(false);
     expect(git(repository, "branch", "--list", "feature")).toBe("");
+  });
+
+  it("removes only the Change-owned upstream keys during terminal cleanup", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    git(repository, "branch", "but-why/feature", "main");
+    git(repository, "config", "branch.but-why/feature.remote", "origin");
+    git(repository, "config", "branch.but-why/feature.merge", "refs/heads/but-why/feature");
+    git(repository, "config", "branch.but-why/feature.description", "preserve this key");
+    git(repository, "config", "branch.other.remote", "other");
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: commonDirectory,
+          worktreePath: null,
+          branchRef: "refs/heads/but-why/feature",
+          remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
+            remoteName: "origin",
+            remoteUrl: "origin-url",
+            branchName: "but-why/feature",
+            targetBranch: "main",
+            expectedHeadSha: git(repository, "rev-parse", "refs/heads/but-why/feature"),
+          },
+          discardWork: true,
+        },
+        {
+          readRemoteBranchHead: () => ({ state: "missing" }),
+          deleteRemoteBranch: () => {
+            throw new Error("An absent branch must not be deleted");
+          },
+        },
+      ),
+    ).toEqual({ state: "complete" });
+    expect(gitConfig(repository, "branch.but-why/feature.remote")).toBe("");
+    expect(gitConfig(repository, "branch.but-why/feature.merge")).toBe("");
+    expect(gitConfig(repository, "branch.but-why/feature.description")).toBe("preserve this key");
+    expect(gitConfig(repository, "branch.other.remote")).toBe("other");
   });
 
   it("deletes a symbolic local Repository Branch without dereferencing its target", () => {
@@ -1009,3 +1054,6 @@ const initializedRepository = (): string => {
 
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });
+
+const gitConfig = (cwd: string, key: string): string =>
+  runTestProcess("git", ["config", "--get-all", key], { cwd }).stdout.trim();
