@@ -204,6 +204,7 @@ invalid:
   - "return value satisfies Result"
   - "return await value satisfies Result"
   - "return (value satisfies Result)"
+  - "return (await value satisfies Result)"
   - "return (await value) satisfies Result"
   - "value => value satisfies Result"
   - "(value) => value satisfies Result"

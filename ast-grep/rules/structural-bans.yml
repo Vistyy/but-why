@@ -528,6 +528,7 @@ rule:
         - pattern: return $VALUE satisfies $TYPE
         - pattern: return await $VALUE satisfies $TYPE
         - pattern: return ($VALUE satisfies $TYPE)
+        - pattern: return (await $VALUE satisfies $TYPE)
         - pattern: return (await $VALUE) satisfies $TYPE
         - pattern: $VALUE => $VALUE satisfies $TYPE
         - pattern: $VALUE => ($VALUE satisfies $TYPE)
