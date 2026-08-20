@@ -1,15 +1,13 @@
 import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
-import { stateStoreUnavailable, success } from "../../../cliResults.js";
+import { success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
-import { loadTaskContextInspection } from "../../../taskChange/composition/loadTaskContextInspection.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskNotFound,
-  taskRepositoryInput,
   withTasks,
 } from "../taskCliSupport.js";
 
@@ -22,19 +20,7 @@ export const runContextCommand = (
   return withTasks(environment, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
-    const contextInspection =
-      environment.taskContextInspectionUseCases === undefined &&
-      environment.taskUseCases === undefined
-        ? loadTaskContextInspection(taskRepositoryInput(environment))
-        : undefined;
-    if (contextInspection !== undefined && !contextInspection.ok) {
-      return Effect.succeed(stateStoreUnavailable(tasks.idPrefix));
-    }
-    const getTaskContext =
-      environment.taskContextInspectionUseCases?.getTaskContextById ??
-      contextInspection?.operation.getTaskContextById ??
-      tasks.getTaskContextById;
-    return Effect.map(getTaskContext(taskId.taskId), (task) =>
+    return Effect.map(tasks.getTaskContextById(taskId.taskId), (task) =>
       task === undefined ? taskNotFound(taskId.taskId) : success({ task }),
     );
   });
