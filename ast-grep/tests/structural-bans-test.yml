@@ -156,15 +156,17 @@ invalid:
 id: nested-unknown-assertions-review-fixture
 valid:
   - invalidPolicy as unknown as ChangePolicy
+  - vi.mock("module", () => value as unknown as Target)
 invalid:
   - value as unknown as Target
 ---
 id: nested-unknown-assertions-extension-fixture
 valid:
-  - "const api = { sendUserMessage() {} } as unknown as ExtensionAPI"
-  - "const context = { sessionManager: {}, isIdle() {} } as unknown as ExtensionContext"
+  - "const createHarness = () => { const api = { sendUserMessage() {} } as unknown as ExtensionAPI; }"
+  - "const createHarness = () => { const context = { sessionManager: {}, isIdle() {} } as unknown as ExtensionContext; }"
 invalid:
   - value as unknown as Target
+  - "const api = { sendUserMessage() {} } as unknown as ExtensionAPI"
 ---
 id: never-assertions-represent-real-union
 valid:

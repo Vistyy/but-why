@@ -320,6 +320,16 @@ rule:
     - not:
         regex: '^invalidPolicy as unknown as ChangePolicy$'
     - not:
+        inside:
+          any:
+            - pattern: vi.mock($$$ARGS)
+            - pattern: vi.doMock($$$ARGS)
+            - pattern: vi.unstable_mockModule($$$ARGS)
+            - pattern: jest.mock($$$ARGS)
+            - pattern: jest.doMock($$$ARGS)
+            - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end
+    - not:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
     - not:
         pattern: (JSON.parse($$$ARGS) as unknown) as $TYPE
@@ -353,6 +363,9 @@ rule:
                 pattern: $VALUE as unknown as ExtensionAPI
             - has:
                 regex: sendUserMessage
+            - inside:
+                pattern: const createHarness = ($$$ARGS) => { $$$BODY }
+                stopBy: end
     - not:
         inside:
           all:
@@ -362,6 +375,9 @@ rule:
                 pattern: $VALUE as unknown as ExtensionContext
             - has:
                 regex: sessionManager
+            - inside:
+                pattern: const createHarness = ($$$ARGS) => { $$$BODY }
+                stopBy: end
     - not:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
     - not:
