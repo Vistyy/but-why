@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
+import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -21,7 +22,6 @@ import {
   type SubmissionRepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";

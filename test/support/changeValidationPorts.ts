@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import type { ChangeAgentSessionPort } from "../../src/change/changePorts.js";
 import type {
@@ -9,7 +10,6 @@ import type {
   ValidationRunAbandonmentPort,
 } from "../../src/change/validation/changeValidationPorts.js";
 import { openSqliteActiveValidationRunPort } from "../../src/sqlite/sqliteActiveValidationRunPersistence.js";
-import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../src/sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../src/sqlite/sqliteChangeValidationReadPersistence.js";

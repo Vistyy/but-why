@@ -1,5 +1,8 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { RepositoryPersistedDataInvalid } from "../../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type {
   AgentContinuationRecord,
   AgentDispatchResult,
@@ -7,11 +10,8 @@ import type {
   AgentInvocationSettlement,
   AgentSessionConfiguration,
   AgentSessionPersistence,
-} from "../agent/agentSession/agentSession.js";
-import { piSessionIdForContinuation } from "../agent/agentSession/agentSession.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+} from "../../agentSession.js";
+import { piSessionIdForContinuation } from "../../agentSession.js";
 
 const positiveIntegerMax = 9_007_199_254_740_991;
 

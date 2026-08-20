@@ -1,5 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { settleUnsettledAgentInvocations } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { assertValidationToolingFailureEvidence } from "../change/candidateValidation/candidateValidationEvidence.js";
 import type { CandidateValidationRunAbandonmentContext } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { publicChangeId } from "../change/changeId.js";
@@ -7,7 +8,6 @@ import type { ValidationRunAbandonmentPort } from "../change/validation/changeVa
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
-import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 export const openSqliteValidationRunAbandonmentPort = () =>

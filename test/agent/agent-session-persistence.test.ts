@@ -8,6 +8,10 @@ import {
   type AgentSessionPersistence,
   type AgentSessionSqlLink,
 } from "../../src/agent/agentSession/agentSession.js";
+import {
+  openSqliteAgentSessionPersistence,
+  settleUnsettledAgentInvocations,
+} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
 import {
   RepositoryPersistedDataInvalid,
@@ -15,10 +19,6 @@ import {
 } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import {
-  openSqliteAgentSessionPersistence,
-  settleUnsettledAgentInvocations,
-} from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 
 const configuration: AgentSessionConfiguration = {
