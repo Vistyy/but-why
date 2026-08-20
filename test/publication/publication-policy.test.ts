@@ -324,7 +324,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             createPullRequest: (request) => {
               createCalls += 1;
               return createCalls === 1
-                ? { ok: false as const, code: "push_failed" as const }
+                ? {
+                    ok: false as const,
+                    code: "push_failed" as const,
+                    recoveryEvidence: {
+                      operation: "remote_lookup" as const,
+                      classification: "conflict" as const,
+                      remoteBranchState: "retryable_absence" as const,
+                    },
+                  }
                 : { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };
             },
             updatePullRequest: () => {
@@ -341,6 +349,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(yield* publication.publish(input(fixture))).toEqual({
           ok: false,
           code: "publication_tooling_failed",
+          recoveryEvidence: {
+            operation: "remote_lookup",
+            classification: "conflict",
+            remoteBranchState: "retryable_absence",
+          },
         });
         expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
           {

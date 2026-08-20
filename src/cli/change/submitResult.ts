@@ -203,6 +203,33 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
   }
   if (
     result.code === "publication_tooling_failed" &&
+    result.recoveryEvidence?.remoteBranchState !== undefined
+  ) {
+    const message =
+      result.recoveryEvidence.remoteBranchState === "retryable_absence"
+        ? "The uncertain initial push was observed with an absent Remote Change Branch."
+        : result.recoveryEvidence.remoteBranchState === "retained_prior_head"
+          ? "The uncertain revised push retained the previously confirmed Remote Change Branch head."
+          : "The Remote Change Branch could not be confirmed after an uncertain push.";
+    return runtimeError({
+      code: result.code,
+      message,
+      details: {
+        changeId,
+        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+        recoveryEvidence: result.recoveryEvidence,
+        ...(result.expectedRemoteHeadSha === undefined
+          ? {}
+          : { expectedCommit: result.expectedRemoteHeadSha }),
+        ...(result.observedRemoteHeadSha === undefined
+          ? {}
+          : { observedCommit: result.observedRemoteHeadSha }),
+      },
+      help: ["Retry Change Submit after confirming the publication remote is available."],
+    });
+  }
+  if (
+    result.code === "publication_tooling_failed" &&
     result.evidence?.operation === "push_destination"
   ) {
     return runtimeError({

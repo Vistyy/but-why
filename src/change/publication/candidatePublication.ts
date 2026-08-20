@@ -235,7 +235,13 @@ const createFailure = (
     failure.code === "remote_rejected"
   )
     return confirmCreation(dependencies, input, headBranch, expectedHeadSha, failure.evidence);
-  if (failure.code === "remote_head_mismatch" || failure.code === "remote_lookup_failed")
+  if (
+    failure.code === "remote_head_mismatch" ||
+    failure.code === "remote_lookup_failed" ||
+    (failure.code === "push_failed" &&
+      failure.recoveryEvidence !== undefined &&
+      failure.recoveryEvidence.remoteBranchState !== "retryable_absence")
+  )
     return retainFailure(dependencies, pending, failure);
   const code =
     failure.code === "local_head_mismatch" ? "current_head_mismatch" : "publication_tooling_failed";
@@ -260,19 +266,10 @@ const releaseWithDetails = (
                 expectedRemoteHeadSha: pending.expectedHeadSha,
                 observedRemoteHeadSha: failure.observedRemoteHeadSha,
               }),
+          ...(failure.recoveryEvidence === undefined
+            ? {}
+            : { recoveryEvidence: failure.recoveryEvidence }),
         }
-      : mapPersistenceError(released.code),
-  );
-
-const releaseWithEvidence = (
-  dependencies: Dependencies,
-  pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
-  code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
-  failureEvidence?: PublicationFailureEvidence,
-): PublicationEffect =>
-  Effect.map(dependencies.changePersistence.releasePendingPublication(pending), (released) =>
-    released.ok
-      ? { ok: false, code, ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }) }
       : mapPersistenceError(released.code),
   );
 
@@ -399,12 +396,16 @@ const createRecoveryAttempt = (
         created.evidence,
       );
     if (!created.ok) {
-      if (created.code === "push_failed" || created.code === "local_head_mismatch")
-        return yield* releaseWithEvidence(
+      if (
+        created.code === "local_head_mismatch" ||
+        (created.code === "push_failed" &&
+          created.recoveryEvidence?.remoteBranchState === "retryable_absence")
+      )
+        return yield* releaseWithDetails(
           dependencies,
           pending,
           created.code === "push_failed" ? "publication_tooling_failed" : "current_head_mismatch",
-          created.evidence,
+          created,
         );
       return yield* retainFailure(dependencies, pending, created);
     }
@@ -458,6 +459,9 @@ const retainFailure = (
           expectedRemoteHeadSha: pending.expectedHeadSha,
           observedRemoteHeadSha: failure.observedRemoteHeadSha,
         }),
+    ...(failure.recoveryEvidence === undefined
+      ? {}
+      : { recoveryEvidence: failure.recoveryEvidence }),
   }));
 
 const selectRecoveredPullRequest = (
@@ -714,10 +718,29 @@ const updateFailure = (
       ok: false,
       code: "publication_remote_mismatch",
       ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+      ...(failure.recoveryEvidence === undefined
+        ? {}
+        : { recoveryEvidence: failure.recoveryEvidence }),
       expectedRemoteHeadSha: expectedHeadSha,
       ...(failure.observedRemoteHeadSha === undefined
         ? {}
         : { observedRemoteHeadSha: failure.observedRemoteHeadSha }),
+    });
+  }
+  if (failure.code === "push_failed") {
+    return Effect.succeed({
+      ok: false,
+      code: "publication_tooling_failed",
+      ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+      ...(failure.recoveryEvidence === undefined
+        ? {}
+        : { recoveryEvidence: failure.recoveryEvidence }),
+      ...(failure.observedRemoteHeadSha === undefined
+        ? {}
+        : {
+            expectedRemoteHeadSha: expectedHeadSha,
+            observedRemoteHeadSha: failure.observedRemoteHeadSha,
+          }),
     });
   }
   return canRecoverUpdateFailure(failure.code)
@@ -742,8 +765,7 @@ const canRecoverUpdateFailure = (
 ): boolean =>
   failure === "remote_response_lost" ||
   failure === "remote_response_unusable" ||
-  failure === "remote_rejected" ||
-  failure === "push_failed";
+  failure === "remote_rejected";
 
 const readBackUpdatedPullRequest = (
   dependencies: Dependencies,
