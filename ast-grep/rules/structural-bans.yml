@@ -318,12 +318,7 @@ rule:
         - pattern: $VALUE as unknown as $TYPE
         - pattern: ($VALUE as unknown) as $TYPE
     - not:
-        inside:
-          all:
-            - pattern: for (const invalidPolicy of invalidPolicies) { $$$BODY }
-            - has:
-                regex: 'invalidPolicy\s+as unknown as ChangePolicy'
-          stopBy: end
+        regex: '^invalidPolicyFixtureForPersistenceRejection as unknown as ChangePolicy$'
     - not:
         inside:
           any:

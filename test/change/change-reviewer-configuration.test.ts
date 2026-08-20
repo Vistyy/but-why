@@ -226,7 +226,7 @@ it.scoped("rejects invalid Change Policy before inserting a Change", () =>
         },
       ];
 
-      for (const invalidPolicy of invalidPolicies) {
+      for (const invalidPolicyFixtureForPersistenceRejection of invalidPolicies) {
         const error = yield* repository
           .transactionImmediate("create invalid Change fixture", (sql) =>
             createChange(
@@ -235,7 +235,7 @@ it.scoped("rejects invalid Change Policy before inserting a Change", () =>
                 baseRef: "refs/remotes/origin/main",
                 baseRemoteUrl: "https://example.com/acme/repo.git",
                 managedWorktreeParent: "/tmp",
-                policy: invalidPolicy as unknown as ChangePolicy,
+                policy: invalidPolicyFixtureForPersistenceRejection as unknown as ChangePolicy,
               },
               repository.idPrefix,
             ),
