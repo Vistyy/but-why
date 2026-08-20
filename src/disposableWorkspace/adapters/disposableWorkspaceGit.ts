@@ -7,6 +7,7 @@ import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js
 import {
   type DisposableWorkspaceIdentity,
   DisposableWorkspaceRestorationFailed,
+  type DisposableWorkspaceRestorationInput,
   type DisposableWorktreeInspection,
   type ExactDisposableWorkspaceCleanupInput,
   type ExactDisposableWorkspaceCleanupResult,
@@ -83,12 +84,9 @@ const verifyProductOwnedDisposableWorktree = (
     ),
   );
 
-export const restoreDisposableWorkspace = (input: {
-  readonly commandExecutor: WorkspaceCommandExecutor;
-  readonly commandCwd: string;
-  readonly expectedCommitSha: string;
-  readonly workspaceIdentity: DisposableWorkspaceIdentity;
-}): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
+export const restoreDisposableWorkspace = (
+  input: DisposableWorkspaceRestorationInput,
+): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
   Effect.gen(function* () {
     yield* verifyOwnedDetachedWorktree(input);
     yield* runRestorationCommand(
@@ -107,12 +105,7 @@ export const restoreDisposableWorkspace = (input: {
   });
 
 const verifyOwnedDetachedWorktree = (
-  input: {
-    readonly commandExecutor: WorkspaceCommandExecutor;
-    readonly commandCwd: string;
-    readonly expectedCommitSha: string;
-    readonly workspaceIdentity: DisposableWorkspaceIdentity;
-  },
+  input: DisposableWorkspaceRestorationInput,
   requireExpectedHead = false,
 ): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
   Effect.gen(function* () {
