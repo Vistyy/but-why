@@ -15,9 +15,9 @@ import {
   type CandidateValidationService,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type { CreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
-import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { runByInProcessEffect } from "../support/by-cli.js";

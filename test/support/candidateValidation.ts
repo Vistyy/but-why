@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect";
 import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -15,8 +15,8 @@ import {
   CandidateValidationWorkspace,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import {
-  makeCreateSnapshotWorkspace,
   type CreateSnapshotWorkspace,
+  makeCreateSnapshotWorkspace,
 } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";

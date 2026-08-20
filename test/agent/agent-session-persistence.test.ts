@@ -3,15 +3,15 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import {
+  openSqliteAgentSessionPersistence,
+  settleUnsettledAgentInvocations,
+} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import {
   AgentInvocationDispatchFailed,
   type AgentSessionConfiguration,
   type AgentSessionPersistence,
   type AgentSessionSqlLink,
 } from "../../src/agent/agentSession/agentSession.js";
-import {
-  openSqliteAgentSessionPersistence,
-  settleUnsettledAgentInvocations,
-} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
 import {
   RepositoryPersistedDataInvalid,

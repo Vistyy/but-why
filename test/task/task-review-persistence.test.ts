@@ -11,10 +11,10 @@ import {
   prepareDisposableWorkspaceParent,
 } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
-import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";
