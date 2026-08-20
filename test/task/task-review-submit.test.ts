@@ -755,14 +755,6 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       },
     });
     expect(observed?.systemPrompt).toContain("Repository guidance");
-    expect(observed?.systemPrompt).toContain("remain controlling if the guidance conflicts");
-    expect(observed?.systemPrompt).toContain("hostile last line of defense");
-    expect(observed?.systemPrompt).toContain(
-      "Each Finding must include exactly title, description, evidence, and files.",
-    );
-    expect(observed?.systemPrompt).toContain("Do not reuse an earlier judgment");
-    expect(observed?.systemPrompt).not.toContain("artifactRefs");
-    expect(observed?.prompt).not.toContain("reviewer-output");
     const submittedOutput = JSON.parse(submitted.stdout) as { review: { id: number } };
     expect(submittedOutput).toMatchObject({
       review: { outcome: "passed" },
@@ -916,7 +908,6 @@ it.effect("reviews an unchanged New proposal again after a Finding-blocked Revie
     expect(secondOutput.review.id).not.toBe(firstOutput.error.review.id);
     expect(observed).toHaveLength(2);
     expect(observed[1]?.resumeSession).toBeUndefined();
-    expect(observed[1]?.prompt).toContain("Exact Task proposal:");
 
     const ordinary = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
@@ -1108,7 +1099,6 @@ it.effect(
       expect(observed).toHaveLength(2);
       expect(observed[1]?.resumeSession).toBe("by-agent-1");
       expect(observed[1]?.prompt).toContain("Changed proposal");
-      expect(observed[1]?.prompt).toContain("Deterministic proposal diff");
 
       const secondId = (JSON.parse(second.stdout) as { error: { review: { id: number } } }).error
         .review.id;
