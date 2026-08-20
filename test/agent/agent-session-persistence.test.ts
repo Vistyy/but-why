@@ -17,7 +17,7 @@ import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRun
 import {
   openSqliteAgentSessionPersistence,
   settleUnsettledAgentInvocations,
-} from "../../src/sqlite/sqliteAgentSessionPersistence.js";
+} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 
 const configuration: AgentSessionConfiguration = {

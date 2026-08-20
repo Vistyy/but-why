@@ -7,7 +7,7 @@ import type { ValidationRunAbandonmentPort } from "../change/validation/changeVa
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
-import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
+import { settleUnsettledAgentInvocations } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 export const openSqliteValidationRunAbandonmentPort = () =>
