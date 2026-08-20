@@ -18,17 +18,17 @@ import { taskReviewView } from "../../src/cli/task/commands/taskReviewView.js";
 import { dashboard } from "../../src/cli/task/dashboard.js";
 import type { TaskCommandEnvironment } from "../../src/cli/task/taskCliSupport.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
-import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
 import type { TaskReviewInspectionUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import type { RenameTaskInput, RenameTaskResult } from "../../src/task/taskStore.js";
 import type { ApplyTaskContextDraftResult, TaskUseCases } from "../../src/task/taskUseCases.js";
-import type { TaskChangeTaskUseCases } from "../../src/taskChange/composition/loadTaskChangeTaskUseCases.js";
 import type {
   CancellationUseCases,
   TaskCancellationResult,
 } from "../../src/taskChange/cancelTaskChange.js";
+import type { TaskChangeTaskUseCases } from "../../src/taskChange/composition/loadTaskChangeTaskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { fakeTaskChangeTaskUseCases, fakeTaskUseCases } from "../support/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
