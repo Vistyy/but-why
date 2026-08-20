@@ -211,6 +211,73 @@ it.scoped("preserves dispatch evidence when Task Review cleanup fails", () =>
   ),
 );
 
+it.scoped("does not adopt the blocking Agent Invocation during dispatch", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const agents = yield* openSqliteAgentSessionPersistence();
+      const taskId = publicTaskId("BY-1");
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      const admitted = yield* reviews.admit({
+        taskId,
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
+      yield* reviews.recordCleanup(admitted.review.id, "removed", now);
+      const configuration = { harness: "pi" as const, model: "test-model" };
+      const first = yield* agents.beginInvocation({
+        configuration,
+        createdAt: now,
+        linkInvocation: () => Effect.void,
+      });
+      if (!first.ok) throw new Error(`Agent Invocation setup failed: ${first.code}`);
+      let linkCalls = 0;
+      const link = reviews.linkAgentInvocation({
+        taskId,
+        reviewId: admitted.review.id,
+        admittedPolicy: admitted.policy,
+      });
+      const blocked = yield* agents.beginInvocation({
+        agentSessionId: first.dispatch.agentSessionId,
+        configuration,
+        createdAt: later,
+        linkInvocation: (sql, invocationId) =>
+          Effect.sync(() => {
+            linkCalls += 1;
+          }).pipe(Effect.zipRight(link(sql, invocationId))),
+      });
+      expect(blocked).toEqual({
+        ok: false,
+        code: "concurrent_unsettled_invocation",
+        invocationId: first.dispatch.invocation.id,
+      });
+      expect(linkCalls).toBe(0);
+      expect(yield* agents.readInvocationHistory(first.dispatch.agentSessionId)).toHaveLength(1);
+      const failure = {
+        operation: "dispatch_agent_invocation" as const,
+        message: "Agent Invocation dispatch was blocked.",
+        blockingInvocationId: first.dispatch.invocation.id,
+      };
+      yield* reviews.recordActiveFailure(admitted.review.id, failure, later);
+      const completed = yield* reviews.complete({
+        reviewId: admitted.review.id,
+        findings: [],
+        toolingFailure: failure,
+        now: later,
+      });
+      expect(completed).toMatchObject({
+        ok: true,
+        outcome: "tooling_failed",
+        review: { toolingFailure: failure },
+      });
+    }),
+  ),
+);
+
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
