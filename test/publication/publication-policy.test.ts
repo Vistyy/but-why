@@ -28,7 +28,7 @@ import {
   cloneInitializedTestRepository,
 } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
-import { runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-22T10:00:00.000Z";
@@ -147,6 +147,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         runTestProcessOrThrow("git", ["config", "branch.other.remote", "other"], {
           cwd: fixture.root,
         });
+        const beforeRemoteConfig = gitConfigListing(fixture.root, [
+          "config",
+          "--local",
+          "--get-regexp",
+          "^remote\\..+\\.(url|fetch)$",
+        ]);
+        const beforeGlobalConfig = gitConfigListing(fixture.root, ["config", "--global", "--list"]);
+        const beforeRefs = runTestProcessOrThrow("git", ["show-ref"], { cwd: fixture.root });
         const publication = openCandidatePublication({
           changePersistence: fixture.changes.publication,
           git: localCandidatePublicationGit({ cwd: fixture.root }),
@@ -189,6 +197,18 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           "preserve this key",
         );
         expect(gitConfig(fixture.root, "branch.other.remote")).toBe("other");
+        expect(
+          gitConfigListing(fixture.root, [
+            "config",
+            "--local",
+            "--get-regexp",
+            "^remote\\..+\\.(url|fetch)$",
+          ]),
+        ).toBe(beforeRemoteConfig);
+        expect(gitConfigListing(fixture.root, ["config", "--global", "--list"])).toBe(
+          beforeGlobalConfig,
+        );
+        expect(runTestProcessOrThrow("git", ["show-ref"], { cwd: fixture.root })).toBe(beforeRefs);
       }),
     ),
   );
@@ -1824,3 +1844,10 @@ const publicationGitDefaults = {
 
 const gitConfig = (cwd: string, key: string): string =>
   runTestProcessOrThrow("git", ["config", "--get-all", key], { cwd }).trim();
+
+const gitConfigListing = (cwd: string, args: readonly string[]): string => {
+  const result = runTestProcess("git", args, { cwd });
+  if (result.status === 1 || result.stderr.includes("unable to read config file")) return "";
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+  return result.stdout;
+};
