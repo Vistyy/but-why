@@ -296,6 +296,14 @@ rule:
             - pattern: jest.doMock($$$ARGS)
             - pattern: jest.unstable_mockModule($$$ARGS)
           stopBy: end
+    - not:
+        has:
+          pattern: JSON.parse($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: Reflect.$METHOD($$$ARGS)
+          stopBy: end
 ---
 # The reviewer fixture keeps one invalid-policy conversion to exercise persistence rejection.
 id: nested-unknown-assertions-review-fixture
@@ -315,6 +323,14 @@ rule:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
     - not:
         pattern: (JSON.parse($$$ARGS) as unknown) as $TYPE
+    - not:
+        has:
+          pattern: JSON.parse($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: Reflect.$METHOD($$$ARGS)
+          stopBy: end
 ---
 # The continue-change extension test keeps its two typed host fixtures.
 id: nested-unknown-assertions-extension-fixture
@@ -368,6 +384,14 @@ rule:
             - pattern: jest.doMock($$$ARGS)
             - pattern: jest.unstable_mockModule($$$ARGS)
           stopBy: end
+    - not:
+        has:
+          pattern: JSON.parse($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: Reflect.$METHOD($$$ARGS)
+          stopBy: end
 ---
 # `never` assertions hide an unrepresented runtime case instead of proving it impossible.
 id: never-assertions-represent-real-union
@@ -406,6 +430,14 @@ rule:
             - pattern: jest.mock($$$ARGS)
             - pattern: jest.doMock($$$ARGS)
             - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: JSON.parse($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: Reflect.$METHOD($$$ARGS)
           stopBy: end
 ---
 # A complete Effect assertion hides the contract that the Effect value already owns.
@@ -447,6 +479,14 @@ rule:
             - pattern: jest.mock($$$ARGS)
             - pattern: jest.doMock($$$ARGS)
             - pattern: jest.unstable_mockModule($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: JSON.parse($$$ARGS)
+          stopBy: end
+    - not:
+        has:
+          pattern: Reflect.$METHOD($$$ARGS)
           stopBy: end
 ---
 # `satisfies` should constrain a construction or an explicit owner contract, not a returned or pass-through value.
@@ -513,6 +553,10 @@ rule:
         pattern: Reflect.get($$$ARGS) satisfies $TYPE
     - not:
         pattern: Reflect.apply($$$ARGS) satisfies $TYPE
+    - not:
+        has:
+          pattern: Reflect.$METHOD($$$ARGS)
+          stopBy: end
     - not:
         inside:
           any:
