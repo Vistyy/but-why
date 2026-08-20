@@ -532,14 +532,24 @@ rule:
         - pattern: return (await $VALUE) satisfies $TYPE
         - pattern: $VALUE => $VALUE satisfies $TYPE
         - pattern: $VALUE => ($VALUE satisfies $TYPE)
+        - pattern: async $VALUE => $VALUE satisfies $TYPE
+        - pattern: async $VALUE => ($VALUE satisfies $TYPE)
         - pattern: ($VALUE) => $VALUE satisfies $TYPE
         - pattern: ($VALUE) => ($VALUE satisfies $TYPE)
+        - pattern: async ($VALUE) => $VALUE satisfies $TYPE
+        - pattern: async ($VALUE) => ($VALUE satisfies $TYPE)
         - pattern: "($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
         - pattern: "($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
+        - pattern: "async ($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "async ($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
         - pattern: "($VALUE): $RETURNTYPE => $VALUE satisfies $TYPE"
         - pattern: "($VALUE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "async ($VALUE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "async ($VALUE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
         - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
         - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
     - not:
         pattern: return JSON.parse($$$ARGS) satisfies $TYPE
     - not:
