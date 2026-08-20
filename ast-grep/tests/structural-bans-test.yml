@@ -155,7 +155,7 @@ invalid:
 ---
 id: nested-unknown-assertions-review-fixture
 valid:
-  - invalidPolicy as unknown as ChangePolicy
+  - "for (const invalidPolicy of invalidPolicies) { const value = invalidPolicy as unknown as ChangePolicy; }"
   - vi.mock("module", () => value as unknown as Target)
 invalid:
   - value as unknown as Target
