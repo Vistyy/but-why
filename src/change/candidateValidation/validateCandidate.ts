@@ -315,6 +315,11 @@ const runCandidatePhases = (
           };
     const acceptanceReview = changePolicy.reviewerConfiguration.acceptanceReview;
     const sessionOptions = {
+      workspaceIdentity: {
+        repositoryRoot: dependencies.localRepositoryRoot,
+        repositoryCommonDirectory: dependencies.localRepositoryCommonDirectory,
+        workspaceId: snapshotWorkspaceId(validationRunId),
+      },
       sessionStorageRoot: dependencies.agentSessionsRoot,
       agentPersistence: dependencies.agentPersistence,
       getAgentSession: dependencies.getAgentSession,
@@ -374,11 +379,6 @@ const runCandidatePhases = (
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
                 resourceRoot,
-                workspaceIdentity: {
-                  repositoryRoot: dependencies.localRepositoryRoot,
-                  repositoryCommonDirectory: dependencies.localRepositoryCommonDirectory,
-                  workspaceId: snapshotWorkspaceId(validationRunId),
-                },
                 restoreWorkspace: dependencies.restoreWorkspace,
                 allowedUntrackedFiles: [],
                 listArtifacts: dependencies.persistence.listArtifacts,
@@ -404,11 +404,6 @@ const runCandidatePhases = (
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,
           resourceRoot,
-          workspaceIdentity: {
-            repositoryRoot: dependencies.localRepositoryRoot,
-            repositoryCommonDirectory: dependencies.localRepositoryCommonDirectory,
-            workspaceId: snapshotWorkspaceId(validationRunId),
-          },
           restoreWorkspace: dependencies.restoreWorkspace,
           allowedUntrackedFiles: [],
           listArtifacts: dependencies.persistence.listArtifacts,
