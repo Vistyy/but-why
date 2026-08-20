@@ -25,40 +25,20 @@ import type { TaskTitleValidationResult } from "../../../task/taskTitle.js";
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
 import type { TaskChangeLinkPort } from "../../taskChangePorts.js";
 
-export type TaskChangeTaskOperations = {
-  readonly editTaskDependencies: (
-    sql: SqlClient.SqlClient,
-    input: EditTaskDependenciesInput,
-    idPrefix: string,
-  ) => Effect.Effect<EditTaskDependenciesResult, SqlError | RepositoryPersistedDataInvalid>;
-  readonly renameTask: (
-    sql: SqlClient.SqlClient,
-    input: RenameTaskInput,
-    idPrefix: string,
-  ) => Effect.Effect<RenameTaskResult, SqlError | RepositoryPersistedDataInvalid>;
-  readonly reviseTask: (
-    sql: SqlClient.SqlClient,
-    input: ReviseTaskInput,
-    idPrefix: string,
-  ) => Effect.Effect<ReviseTaskResult, SqlError | RepositoryPersistedDataInvalid>;
+export type TaskReadOperation = {
   readonly getTaskById: (
     sql: SqlClient.SqlClient,
     taskId: PublicTaskId,
     idPrefix: string,
   ) => Effect.Effect<StoredTaskRecord | undefined, SqlError | RepositoryPersistedDataInvalid>;
-  readonly completeTask: (
+};
+
+export type TaskChangeTaskMutationOperations = {
+  readonly editTaskDependencies: (
     sql: SqlClient.SqlClient,
-    taskId: string,
-    now: string,
+    input: EditTaskDependenciesInput,
     idPrefix: string,
-  ) => Effect.Effect<readonly unknown[], SqlError>;
-  readonly cancelTaskState: (
-    sql: SqlClient.SqlClient,
-    taskId: string,
-    reason: string,
-    now: string,
-    idPrefix: string,
-  ) => Effect.Effect<readonly unknown[], SqlError>;
+  ) => Effect.Effect<EditTaskDependenciesResult, SqlError | RepositoryPersistedDataInvalid>;
   readonly validateTaskDependencyEditTarget: (
     sql: SqlClient.SqlClient,
     taskId: PublicTaskId,
@@ -70,6 +50,12 @@ export type TaskChangeTaskOperations = {
     SqlError | RepositoryPersistedDataInvalid
   >;
   readonly normalizeTaskTitle: (title: string) => TaskTitleValidationResult;
+  readonly getTaskById: TaskReadOperation["getTaskById"];
+  readonly renameTask: (
+    sql: SqlClient.SqlClient,
+    input: RenameTaskInput,
+    idPrefix: string,
+  ) => Effect.Effect<RenameTaskResult, SqlError | RepositoryPersistedDataInvalid>;
   readonly validateTaskRevisionTarget: (
     sql: SqlClient.SqlClient,
     taskId: PublicTaskId,
@@ -80,6 +66,21 @@ export type TaskChangeTaskOperations = {
     | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState },
     SqlError | RepositoryPersistedDataInvalid
   >;
+  readonly reviseTask: (
+    sql: SqlClient.SqlClient,
+    input: ReviseTaskInput,
+    idPrefix: string,
+  ) => Effect.Effect<ReviseTaskResult, SqlError | RepositoryPersistedDataInvalid>;
+};
+
+export type TaskChangeCompletionOperations = {
+  readonly getTaskById: TaskReadOperation["getTaskById"];
+  readonly completeTask: (
+    sql: SqlClient.SqlClient,
+    taskId: string,
+    now: string,
+    idPrefix: string,
+  ) => Effect.Effect<readonly unknown[], SqlError>;
 };
 
 type TaskChangeTaskPersistence = {
@@ -109,7 +110,7 @@ export const openSqliteTaskChangeLinkPort = () =>
     }),
   );
 
-export const openSqliteTaskChangeTaskPersistence = (operations: TaskChangeTaskOperations) =>
+export const openSqliteTaskChangeTaskPersistence = (operations: TaskChangeTaskMutationOperations) =>
   Effect.map(
     RepositorySql,
     (repository): TaskChangeTaskPersistence => ({
@@ -187,7 +188,7 @@ export const completeLinkedChange = (
   sql: SqlClient.SqlClient,
   input: CompleteMergedChangeInput,
   idPrefix: string,
-  operations: Pick<TaskChangeTaskOperations, "getTaskById" | "completeTask">,
+  operations: TaskChangeCompletionOperations,
 ) =>
   Effect.gen(function* () {
     const link = yield* readTaskChangeLinkByChangeId(sql, input.changeId, idPrefix);

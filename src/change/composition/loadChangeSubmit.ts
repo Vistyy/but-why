@@ -16,7 +16,7 @@ import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githu
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { refreshRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
 import { openSqliteTaskChangeSubmissionCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
-import { taskChangeTaskOperations } from "../../taskChange/composition/loadTaskChangePersistence.js";
+import { taskChangeCompletionOperations } from "../../taskChange/composition/loadTaskChangePersistence.js";
 import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
@@ -111,7 +111,9 @@ export const loadChangeSubmit = (input: {
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteCandidateValidationExecutionPort(),
           submissionOwner: openSqliteChangeSubmissionPort(),
-          submissionCompletion: openSqliteTaskChangeSubmissionCompletion(taskChangeTaskOperations),
+          submissionCompletion: openSqliteTaskChangeSubmissionCompletion(
+            taskChangeCompletionOperations,
+          ),
           agentSessions: openSqliteChangeAgentSessionPort(),
           agentPersistence: openSqliteAgentSessionPersistence(),
           publication: openSqliteCandidatePublicationPort(),

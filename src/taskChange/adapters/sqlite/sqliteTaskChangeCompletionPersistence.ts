@@ -9,14 +9,14 @@ import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/reposi
 import { requireTerminalChange } from "../../../sqlite/sqliteTerminalChangeStorage.js";
 import {
   completeLinkedChange,
-  type TaskChangeTaskOperations,
+  type TaskChangeCompletionOperations,
 } from "./sqliteTaskChangePersistence.js";
 
 type SubmissionCompletion = ChangeSubmissionPort["completeMergedChange"];
 type ReconciliationCompletion = ChangeReconciliationPort["completeMergedChange"];
 
 export const openSqliteTaskChangeSubmissionCompletion = (
-  taskOperations: Pick<TaskChangeTaskOperations, "getTaskById" | "completeTask">,
+  taskOperations: TaskChangeCompletionOperations,
 ): Effect.Effect<SubmissionCompletion, never, RepositorySql> =>
   Effect.map(
     RepositorySql,
@@ -36,7 +36,7 @@ export const openSqliteTaskChangeSubmissionCompletion = (
   );
 
 export const openSqliteTaskChangeReconciliationCompletion = (
-  taskOperations: Pick<TaskChangeTaskOperations, "getTaskById" | "completeTask">,
+  taskOperations: TaskChangeCompletionOperations,
 ): Effect.Effect<ReconciliationCompletion, never, RepositorySql> =>
   Effect.map(
     RepositorySql,

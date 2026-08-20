@@ -1,4 +1,5 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
@@ -17,10 +18,24 @@ import type {
 } from "../../taskChangePorts.js";
 import {
   completeLinkedChange,
-  type TaskChangeTaskOperations,
+  type TaskChangeCompletionOperations,
+  type TaskReadOperation,
 } from "./sqliteTaskChangePersistence.js";
 
-export const openSqliteTaskChangeCancellationPort = (taskOperations: TaskChangeTaskOperations) =>
+export type TaskChangeCancellationOperations = TaskReadOperation & {
+  readonly cancelTaskState: (
+    sql: SqlClient.SqlClient,
+    taskId: string,
+    reason: string,
+    now: string,
+    idPrefix: string,
+  ) => Effect.Effect<readonly unknown[], SqlError>;
+};
+
+export const openSqliteTaskChangeCancellationPort = (
+  taskOperations: TaskChangeCancellationOperations,
+  completionOperations: TaskChangeCompletionOperations,
+) =>
   Effect.map(
     RepositorySql,
     (repository): TaskChangeCancellationPort => ({
@@ -44,7 +59,7 @@ export const openSqliteTaskChangeCancellationPort = (taskOperations: TaskChangeT
               sql,
               input,
               repository.idPrefix,
-              taskOperations,
+              completionOperations,
             );
             if (!result.ok) return result;
             const change = yield* requireTaskChangeCancellation(
@@ -72,7 +87,7 @@ const cancelChange = (
   sql: SqlClient.SqlClient,
   input: CancelChangeInput,
   idPrefix: string,
-  taskOperations: TaskChangeTaskOperations,
+  taskOperations: TaskChangeCancellationOperations,
 ) =>
   Effect.gen(function* () {
     const current = yield* readTaskChangeCancellation(
@@ -175,7 +190,7 @@ const readTaskForCancellation = (
   sql: SqlClient.SqlClient,
   taskId: string | null,
   idPrefix: string,
-  taskOperations: TaskChangeTaskOperations,
+  taskOperations: TaskChangeCancellationOperations,
 ) =>
   taskId === null
     ? Effect.succeed(null)

@@ -8,7 +8,7 @@ import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeRec
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { openSqliteTaskChangeReconciliationCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
-import { taskChangeTaskOperations } from "../../taskChange/composition/loadTaskChangePersistence.js";
+import { taskChangeCompletionOperations } from "../../taskChange/composition/loadTaskChangePersistence.js";
 import {
   openTaskChangeStartOperation,
   type TaskChangeStartInput,
@@ -202,8 +202,9 @@ export const withChangeReconciliation = <A, E, R>(
   return loaded.runtime.provide(
     Effect.all({
       reconciliationOwner: openSqliteChangeReconciliationPort(),
-      reconciliationCompletion:
-        openSqliteTaskChangeReconciliationCompletion(taskChangeTaskOperations),
+      reconciliationCompletion: openSqliteTaskChangeReconciliationCompletion(
+        taskChangeCompletionOperations,
+      ),
       cleanupTerminal: composeTerminalCleanup(context),
     }).pipe(
       Effect.flatMap(({ reconciliationOwner, reconciliationCompletion, cleanupTerminal }) => {
