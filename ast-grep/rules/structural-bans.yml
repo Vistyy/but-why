@@ -366,6 +366,8 @@ rule:
                 pattern: $API_VALUE as unknown as ExtensionAPI
             - has:
                 regex: sendUserMessage
+            - has:
+                regex: __butWhyTypeEvidenceFixture
     - not:
         inside:
           all:
@@ -378,6 +380,8 @@ rule:
                 pattern: $CONTEXT_VALUE as unknown as ExtensionContext
             - has:
                 regex: sessionManager
+            - has:
+                regex: __butWhyTypeEvidenceFixture
     - not:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
     - not:

@@ -162,8 +162,8 @@ invalid:
 ---
 id: nested-unknown-assertions-extension-fixture
 valid:
-  - "const createHarness = () => { const api = { sendUserMessage() {} } as unknown as ExtensionAPI; }"
-  - "const createHarness = () => { const context = { sessionManager: {}, isIdle() {} } as unknown as ExtensionContext; }"
+  - "const createHarness = () => { const api = { __butWhyTypeEvidenceFixture: \"extension-api\", sendUserMessage() {} } as unknown as ExtensionAPI; }"
+  - "const createHarness = () => { const context = { __butWhyTypeEvidenceFixture: \"extension-context\", sessionManager: {}, isIdle() {} } as unknown as ExtensionContext; }"
 invalid:
   - value as unknown as Target
 ---

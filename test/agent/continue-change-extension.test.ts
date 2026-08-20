@@ -87,6 +87,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
         data,
       });
     },
+    __butWhyTypeEvidenceFixture: "extension-api",
     sendUserMessage(message: string, options?: unknown) {
       sent.push(message);
       sendOptions.push(options);
@@ -118,6 +119,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   } as unknown as ExtensionAPI;
   continueChange(api);
   const context = {
+    __butWhyTypeEvidenceFixture: "extension-context",
     cwd,
     sessionManager: { getBranch: () => [...entries] },
     isIdle: () => idle,
