@@ -930,8 +930,7 @@ describe("GitHub pull request gateway", () => {
         body: "Body",
       }),
     ).toMatchObject({ ok: true, pullRequest: { headSha: candidateHead } });
-    expect(gitCalls.filter((args) => args[0] === "push")).toHaveLength(0);
-    expect(gitCalls.filter((args) => args[0] === "-c")).toHaveLength(1);
+    expect(gitCalls.filter((args) => args.includes("push"))).toHaveLength(1);
     expect(remoteReads).toBe(2);
   });
 
@@ -979,15 +978,17 @@ describe("GitHub pull request gateway", () => {
       observedRemoteHeadSha: previousHead,
     });
     expect(remoteReads).toBe(2);
-    expect(gitCalls.filter((args) => args[0] === "-c")).toHaveLength(1);
+    expect(gitCalls.filter((args) => args.includes("push"))).toHaveLength(1);
   });
 
   it("rejects an unexpected branch head after an uncertain push without a pull request mutation", () => {
     const candidateHead = "a".repeat(40);
     const unexpectedHead = "c".repeat(40);
+    const gitCalls: (readonly string[])[] = [];
     let remoteReads = 0;
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => {
+        gitCalls.push(args);
         if (args[0] === "rev-parse") return { ok: true, stdout: `${candidateHead}\n` };
         if (args[0] === "remote")
           return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
@@ -1026,12 +1027,15 @@ describe("GitHub pull request gateway", () => {
       observedRemoteHeadSha: unexpectedHead,
     });
     expect(remoteReads).toBe(2);
+    expect(gitCalls.filter((args) => args.includes("push"))).toHaveLength(1);
   });
 
   it("rejects an unavailable branch observation after an uncertain push without a pull request mutation", () => {
+    const gitCalls: (readonly string[])[] = [];
     let remoteReads = 0;
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => {
+        gitCalls.push(args);
         if (args[0] === "rev-parse") return { ok: true, stdout: `${"a".repeat(40)}\n` };
         if (args[0] === "remote")
           return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
@@ -1067,6 +1071,7 @@ describe("GitHub pull request gateway", () => {
       },
     });
     expect(remoteReads).toBe(2);
+    expect(gitCalls.filter((args) => args.includes("push"))).toHaveLength(1);
   });
 
   it("rejects unsafe push destinations without a push or pull request mutation", () => {
