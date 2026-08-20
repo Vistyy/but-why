@@ -9,6 +9,8 @@ import {
 } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { completeMergedChange as completeChangeOnly } from "../../../sqlite/sqliteCompleteMergedChangeStorage.js";
+import type { TaskState } from "../../../task/lifecycle.js";
+import type { PublicTaskId } from "../../../task/taskId.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import type {
   EditTaskDependenciesInput,
@@ -19,8 +21,6 @@ import type {
   ReviseTaskResult,
   StoredTaskRecord,
 } from "../../../task/taskStore.js";
-import type { TaskState } from "../../../task/lifecycle.js";
-import type { PublicTaskId } from "../../../task/taskId.js";
 import type { TaskTitleValidationResult } from "../../../task/taskTitle.js";
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
 import type { TaskChangeLinkPort } from "../../taskChangePorts.js";

@@ -9,12 +9,12 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { openSqliteTaskChangeStartPersistence } from "../adapters/sqlite/sqliteTaskChangeStartPersistence.js";
-import { taskChangeStartTaskOperations } from "./loadTaskChangePersistence.js";
 import {
   startTaskChange,
   type TaskChangeStartInput,
   type TaskChangeStartResult,
 } from "../taskChangeStart.js";
+import { taskChangeStartTaskOperations } from "./loadTaskChangePersistence.js";
 
 export type { TaskChangeStartInput, TaskChangeStartResult } from "../taskChangeStart.js";
 

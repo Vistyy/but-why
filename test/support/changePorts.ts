@@ -20,11 +20,11 @@ import {
   openSqliteTaskChangeReconciliationCompletion,
   openSqliteTaskChangeSubmissionCompletion,
 } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
-import type { TaskChangeCancellationPort } from "../../src/taskChange/taskChangePorts.js";
 import {
   taskChangeCancellationOperations,
   taskChangeCompletionOperations,
 } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
+import type { TaskChangeCancellationPort } from "../../src/taskChange/taskChangePorts.js";
 
 type ChangeDeliveryTestPort = {
   readonly getChangeById: ChangeReconciliationPort["getChangeById"];

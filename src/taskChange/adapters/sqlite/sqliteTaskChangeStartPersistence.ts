@@ -12,9 +12,9 @@ import {
   readChangeStartById,
   recordPrepareOutcome as recordChangePrepareOutcome,
 } from "../../../sqlite/sqliteChangeStartPersistence.js";
-import type { TaskContext, TaskDependencyFact } from "../../../task/task.js";
 import type { TaskState } from "../../../task/lifecycle.js";
-import { internalTaskId, publicTaskId, type PublicTaskId } from "../../../task/taskId.js";
+import type { TaskContext, TaskDependencyFact } from "../../../task/task.js";
+import { internalTaskId, type PublicTaskId, publicTaskId } from "../../../task/taskId.js";
 import type {
   TaskChangeStartCreateInput,
   TaskChangeStartCreationInput,
