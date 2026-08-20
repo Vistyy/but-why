@@ -298,13 +298,13 @@ const createFailingQualityFixture = (directory: string): void => {
     @exec ${JSON.stringify(qualityRunner)}
 
 _quality-static:
-    @printf 'static\\n' >> "$QUALITY_INVOCATIONS"; if [[ "$QUALITY_FAILURE" == "static" ]]; then echo "static failure marker" >&2; exit 7; fi
+    @printf 'static\\n' >> "$QUALITY_INVOCATIONS"; if [ "$QUALITY_FAILURE" = "static" ]; then echo "static failure marker" >&2; exit 7; fi
 
 build:
-    @printf 'build\\n' >> "$QUALITY_INVOCATIONS"; if [[ "$QUALITY_FAILURE" == "build" ]]; then echo "build failure marker" >&2; exit 7; fi
+    @printf 'build\\n' >> "$QUALITY_INVOCATIONS"; if [ "$QUALITY_FAILURE" = "build" ]; then echo "build failure marker" >&2; exit 7; fi
 
 test:
-    @printf 'test\\n' >> "$QUALITY_INVOCATIONS"; if [[ "$QUALITY_FAILURE" == "test" ]]; then echo "test failure marker" >&2; exit 7; fi
+    @printf 'test\\n' >> "$QUALITY_INVOCATIONS"; if [ "$QUALITY_FAILURE" = "test" ]; then echo "test failure marker" >&2; exit 7; fi
 `,
   );
 };
@@ -316,7 +316,7 @@ const startHeldRunner = (lockFile: string, directory: string, workload: string) 
     workload,
     "sh",
     "-c",
-    'printf ready > "$1"; while [[ ! -f "$2" ]]; do sleep 0.01; done',
+    'printf ready > "$1"; while [ ! -f "$2" ]; do sleep 0.01; done',
     "sh",
     readyFile,
     releaseFile,
