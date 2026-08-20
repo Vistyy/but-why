@@ -66,8 +66,8 @@ const renderSuccessResult = (result: SubmitSuccessResult): CliResult => {
 const renderFailureResult = (result: SubmitFailureResult, changeId: string): CliResult =>
   renderSubmissionStateFailure(result) ??
   renderChangeStateFailure(result, changeId) ??
-  renderValidationFailure(result, changeId) ??
   renderCandidateCaptureFailure(result, changeId) ??
+  renderValidationFailure(result) ??
   renderPublicationFailure(result, changeId) ??
   renderRemoteBaseFailure(result) ??
   renderReconciliationFailure(result) ??
@@ -131,25 +131,7 @@ const renderChangeStateFailure = (
   });
 };
 
-const renderValidationFailure = (
-  result: SubmitFailureResult,
-  changeId: string,
-): CliResult | undefined => {
-  if (result.code === "dirty_work") {
-    return runtimeError({
-      code: result.code,
-      message: "The Change Managed Worktree has uncommitted Git-visible state.",
-      details: {
-        changeId,
-        recovery: submitRecovery(
-          changeId,
-          "resolve_dirty_work",
-          "Commit or remove the Git-visible changes, then retry Change Submit.",
-        ),
-      },
-      help: ["Commit or remove the visible changes, then retry Change Submit."],
-    });
-  }
+const renderValidationFailure = (result: SubmitFailureResult): CliResult | undefined => {
   if (result.code === "validation_findings") {
     return runtimeError({
       code: result.code,
@@ -198,6 +180,21 @@ const renderCandidateCaptureFailure = (
   result: SubmitFailureResult,
   changeId: string,
 ): CliResult | undefined => {
+  if (result.code === "dirty_work") {
+    return runtimeError({
+      code: result.code,
+      message: "The Change Managed Worktree has uncommitted Git-visible state.",
+      details: {
+        changeId,
+        recovery: submitRecovery(
+          changeId,
+          "resolve_dirty_work",
+          "Commit or remove the Git-visible changes, then retry Change Submit.",
+        ),
+      },
+      help: ["Commit or remove the visible changes, then retry Change Submit."],
+    });
+  }
   if (result.code === "change_base_not_ancestor") {
     return runtimeError({
       code: result.code,
@@ -219,17 +216,6 @@ const renderCandidateCaptureFailure = (
       ],
     });
   }
-  if (result.code === "current_head_mismatch") {
-    return runtimeError({
-      code: result.code,
-      message: "The Managed Worktree branch no longer matches the expected Candidate.",
-      details: {
-        changeId,
-        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
-      },
-      help: ["Restore the expected Candidate head, then retry Submit."],
-    });
-  }
   return undefined;
 };
 
@@ -237,12 +223,29 @@ const renderPublicationFailure = (
   result: SubmitFailureResult,
   changeId: string,
 ): CliResult | undefined =>
+  renderCurrentHeadMismatch(result, changeId) ??
   renderPublicationRemoteMismatch(result, changeId) ??
   renderUncertainPublicationFailure(result, changeId) ??
   renderPushDestinationFailure(result, changeId) ??
   renderUpstreamAssociationFailure(result, changeId) ??
   renderPublicationConfirmationFailure(result, changeId) ??
   renderOwnedPullRequestFailure(result);
+
+const renderCurrentHeadMismatch = (
+  result: SubmitFailureResult,
+  changeId: string,
+): CliResult | undefined => {
+  if (result.code !== "current_head_mismatch") return undefined;
+  return runtimeError({
+    code: result.code,
+    message: "The Managed Worktree branch no longer matches the expected Candidate.",
+    details: {
+      changeId,
+      ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+    },
+    help: ["Restore the expected Candidate head, then retry Submit."],
+  });
+};
 
 const renderPublicationRemoteMismatch = (
   result: SubmitFailureResult,
