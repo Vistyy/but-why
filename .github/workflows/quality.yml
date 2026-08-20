@@ -1,0 +1,43 @@
+name: Quality
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+          cache: pnpm
+
+      - name: Set up Just
+        uses: extractions/setup-just@v3
+        with:
+          just-version: 1.51.0
+
+      - name: Initialize the locked environment
+        run: just init
+
+      - name: Run repository quality checks
+        run: just quality
