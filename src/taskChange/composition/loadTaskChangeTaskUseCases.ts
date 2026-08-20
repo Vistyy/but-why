@@ -9,23 +9,26 @@ import type { PublicTaskId } from "../../task/taskId.js";
 import type {
   EditTaskDependenciesInput,
   EditTaskDependenciesResult,
+  RenameTaskInput,
+  RenameTaskResult,
   ReviseTaskInput,
   ReviseTaskResult,
 } from "../../task/taskStore.js";
 import { openSqliteTaskChangeTaskPersistence } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
 
-type TaskChangeTaskUseCases = {
+export type TaskChangeTaskUseCases = {
   readonly idPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly editTaskDependencies: (
     input: EditTaskDependenciesInput,
   ) => Effect.Effect<EditTaskDependenciesResult, RepositoryStorageError>;
+  readonly renameTask: (
+    input: RenameTaskInput,
+  ) => Effect.Effect<RenameTaskResult, RepositoryStorageError>;
   readonly reviseTask: (
     input: ReviseTaskInput,
   ) => Effect.Effect<ReviseTaskResult, RepositoryStorageError>;
 };
-
-export type { TaskChangeTaskUseCases };
 
 export type LoadTaskChangeTaskUseCasesResult<A> =
   | { readonly ok: true; readonly value: A }
@@ -45,6 +48,7 @@ export const withTaskChangeTaskUseCases = <A, E, R>(
           idPrefix: context.idPrefix,
           resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
           editTaskDependencies: persistence.editTaskDependencies,
+          renameTask: persistence.renameTask,
           reviseTask: persistence.reviseTask,
         }),
       ),

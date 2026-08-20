@@ -1,6 +1,7 @@
 import type { TaskState } from "./lifecycle.js";
 import type { DependencyValidationCode, TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
+import type { TaskTitleValidationCode } from "./taskTitle.js";
 
 export type StoredTaskRecord = TaskRecord;
 
@@ -18,6 +19,23 @@ export type EditTaskDependenciesInput = {
   readonly operation: TaskDependencyOperation;
   readonly prerequisiteTaskIds: readonly PublicTaskId[];
 };
+
+export type RenameTaskInput = {
+  readonly taskId: PublicTaskId;
+  readonly title: string;
+};
+
+export type RenameTaskResult =
+  | { readonly ok: true; readonly noOp: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: false; readonly code: TaskTitleValidationCode }
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
+  | { readonly ok: false; readonly code: "task_revision_required"; readonly state: "todo" }
+  | {
+      readonly ok: false;
+      readonly code: "invalid_task_state";
+      readonly state: "done" | "cancelled";
+    };
 
 export type EditTaskDependenciesResult =
   | {

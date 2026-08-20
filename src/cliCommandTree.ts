@@ -247,6 +247,18 @@ const taskReviseCommand = withCliHandler(
       ),
     ),
 );
+const taskRenameCommand = withCliHandler(
+  leaf("rename", "Rename a New Task.", {
+    taskId: taskIdArgument,
+    title: Options.text("title"),
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/rename.js")).pipe(
+      Effect.flatMap(({ runRenameCommand }) =>
+        runRenameCommand({ taskId: values.taskId, title: values.title }, environment),
+      ),
+    ),
+);
 const taskSubmitCommand = withCliHandler(
   leaf("submit", "Submit a New Task for review.", {
     taskId: taskIdArgument,
@@ -333,6 +345,7 @@ taskCommand = group(
     taskListCommand,
     taskShowCommand,
     taskReviseCommand,
+    taskRenameCommand,
     taskSubmitCommand,
     taskReviewsCommand,
     taskReviewCommand,
