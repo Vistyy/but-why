@@ -22,6 +22,10 @@ const unexpected = (method: string): never => {
   throw new Error(`Unexpected TaskUseCases.${method} call`);
 };
 
+const unexpectedTaskChange = (method: string): never => {
+  throw new Error(`Unexpected TaskChangeTaskUseCases.${method} call`);
+};
+
 export const fakeTaskChangeTaskUseCases = (
   overrides: Partial<{
     readonly idPrefix: string;
@@ -36,8 +40,8 @@ export const fakeTaskChangeTaskUseCases = (
       ok: true as const,
       taskId,
     }),
-    editTaskDependencies: () => unexpected("editTaskDependencies"),
-    reviseTask: () => unexpected("reviseTask"),
+    editTaskDependencies: () => unexpectedTaskChange("editTaskDependencies"),
+    reviseTask: () => unexpectedTaskChange("reviseTask"),
     ...overrides,
   };
 
