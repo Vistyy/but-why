@@ -176,8 +176,12 @@ const toolingFailureValue = (input: {
   readonly errorKind: string;
   readonly operationName: string;
   readonly errorMessage: string;
+  readonly blockingInvocationId?: number;
 }) => ({
   errorKind: input.errorKind,
   operationName: input.operationName,
   errorMessage: input.errorMessage,
+  ...(input.blockingInvocationId === undefined
+    ? {}
+    : { blockingInvocationId: input.blockingInvocationId }),
 });

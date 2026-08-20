@@ -220,6 +220,7 @@ export const runAgentReviewer = (
           new InfrastructureToolingFailed({
             operationName: "dispatch_agent_invocation",
             message: agentInvocationDispatchFailureMessage(failure.invocationId),
+            blockingInvocationId: failure.invocationId,
           }),
         ),
       ),

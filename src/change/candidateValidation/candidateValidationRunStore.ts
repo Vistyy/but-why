@@ -146,6 +146,7 @@ export type CandidateValidationToolingFailure = {
   readonly errorKind: string;
   readonly operationName: string;
   readonly errorMessage: string;
+  readonly blockingInvocationId?: number;
 };
 
 export type CandidateValidationArtifact = {

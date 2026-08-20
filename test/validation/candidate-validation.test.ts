@@ -253,6 +253,7 @@ describe("Candidate validation", () => {
           expect.objectContaining({
             operationName: "dispatch_agent_invocation",
             errorMessage: expect.stringContaining("Agent Invocation 73"),
+            blockingInvocationId: 73,
           }),
         ]);
         const shown = yield* runByInProcessEffect(mainCheckout, [
@@ -266,6 +267,7 @@ describe("Candidate validation", () => {
             expect.objectContaining({
               operationName: "dispatch_agent_invocation",
               errorMessage: expect.stringContaining("Agent Invocation 73"),
+              blockingInvocationId: 73,
             }),
           ],
         });

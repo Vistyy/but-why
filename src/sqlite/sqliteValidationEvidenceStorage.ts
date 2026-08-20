@@ -268,7 +268,13 @@ const parseToolingFailure = (
   source: string,
 ): Omit<CandidateValidationToolingFailure, "sequence" | "validationRunId"> => {
   const row = objectValue(JSON.parse(source) as unknown, "Tooling Failure");
-  requireExactFields(row, ["errorKind", "operationName", "errorMessage"], "Tooling Failure");
+  requireFields(
+    row,
+    ["errorKind", "operationName", "errorMessage"],
+    ["blockingInvocationId"],
+    "Tooling Failure",
+  );
+  const blockingInvocationId = field(row, "blockingInvocationId");
   const failure = {
     errorKind: stringValue(
       field(row, "errorKind"),
@@ -276,6 +282,14 @@ const parseToolingFailure = (
     ) as CandidateValidationToolingFailure["errorKind"],
     operationName: stringValue(field(row, "operationName"), "Tooling Failure operation"),
     errorMessage: stringValue(field(row, "errorMessage"), "Tooling Failure message"),
+    ...(blockingInvocationId === undefined
+      ? {}
+      : {
+          blockingInvocationId: numberValue(
+            blockingInvocationId,
+            "Tooling Failure blocking Invocation",
+          ),
+        }),
   };
   assertValidationToolingFailureEvidence(failure);
   return failure;
@@ -383,13 +397,18 @@ const stringValue = (value: unknown, name: string): string => {
   if (typeof value !== "string") throw new Error(`${name} is not a string`);
   return value;
 };
-const requireExactFields = (
+const requireFields = (
   value: Record<string, unknown>,
-  fields: readonly string[],
+  required: readonly string[],
+  optional: readonly string[],
   name: string,
 ): void => {
+  const allowed = new Set([...required, ...optional]);
   const keys = Object.keys(value);
-  if (keys.length !== fields.length || fields.some((fieldName) => !(fieldName in value))) {
+  if (
+    required.some((fieldName) => !(fieldName in value)) ||
+    keys.some((fieldName) => !allowed.has(fieldName))
+  ) {
     throw new Error(`${name} fields are invalid`);
   }
 };

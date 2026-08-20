@@ -100,6 +100,7 @@ export const requireCoherentValidationCompletion = (
       const evidenceByPosition = new Map(
         evidenceRows.map((row) => [positionKey(row.phase as ValidationPhase, row.producer), row]),
       );
+      const blockingInvocationId = dispatchBlockingInvocationId(runToolingFailure);
       const reviewerInvocations = new Map<string, ReviewerInvocationEvidenceRow[]>();
       for (const row of reviewerInvocationRows) {
         const key = positionKey(row.phase as ValidationPhase, row.producer);
@@ -110,10 +111,15 @@ export const requireCoherentValidationCompletion = (
           row.phase === validationPhase.acceptanceReview ||
           row.phase === validationPhase.specialistReview
         ) {
-          if (!resultByPosition.has(key)) {
+          const isBlockingInvocation =
+            row.invocationId === blockingInvocationId && row.settledAt === null;
+          if (!resultByPosition.has(key) && !isBlockingInvocation) {
             throw new Error("Every linked reviewer position requires its final Phase Result");
           }
-          if (row.changeOwned !== 1 || row.settledAt === null || row.settlementKind === null) {
+          if (
+            row.changeOwned !== 1 ||
+            (!isBlockingInvocation && (row.settledAt === null || row.settlementKind === null))
+          ) {
             throw new Error(
               "Every linked reviewer Invocation must be Change-owned and settled before completion",
             );
@@ -229,6 +235,24 @@ export const requireCoherentValidationCompletion = (
       }
     });
   }).pipe(Effect.asVoid);
+
+const dispatchBlockingInvocationId = (value: string | null): number | undefined => {
+  if (value === null) return undefined;
+  const parsed = JSON.parse(value) as unknown;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+  const failure = parsed as {
+    readonly errorKind?: unknown;
+    readonly operationName?: unknown;
+    readonly blockingInvocationId?: unknown;
+  };
+  return failure.errorKind === "infrastructure_tooling_failed" &&
+    failure.operationName === "dispatch_agent_invocation" &&
+    typeof failure.blockingInvocationId === "number" &&
+    Number.isSafeInteger(failure.blockingInvocationId) &&
+    failure.blockingInvocationId > 0
+    ? failure.blockingInvocationId
+    : undefined;
+};
 
 const isPreDispatchReviewerIntegrityFailure = (
   phase: ValidationPhase,

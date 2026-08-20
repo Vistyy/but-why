@@ -644,10 +644,14 @@ const toolingFailureValue = (failure: {
   readonly errorKind: string;
   readonly operationName: string;
   readonly errorMessage: string;
+  readonly blockingInvocationId?: number;
 }) => ({
   errorKind: failure.errorKind,
   operationName: failure.operationName,
   errorMessage: failure.errorMessage,
+  ...(failure.blockingInvocationId === undefined
+    ? {}
+    : { blockingInvocationId: failure.blockingInvocationId }),
 });
 const requireValidToolingFailure = (
   failure: Parameters<typeof assertValidationToolingFailureEvidence>[0],

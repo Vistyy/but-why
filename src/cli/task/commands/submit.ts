@@ -3,6 +3,7 @@ import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import type { TaskReviewRepositorySubmitResult } from "../../../task/composition/loadTaskReviewUseCases.js";
+import type { TaskReviewToolingFailure } from "../../../task/review/taskReview.js";
 import { type TaskCommandEnvironment, withTaskReviewSubmission } from "../taskCliSupport.js";
 export type TaskSubmitCommand = {
   readonly taskId: string;
@@ -19,6 +20,17 @@ export const runTaskSubmitCommand = (
     Effect.succeed(renderResult(result, parsed.taskId)),
   );
 };
+
+const taskReviewToolingFailureView = (failure: TaskReviewToolingFailure | null) =>
+  failure === null
+    ? null
+    : {
+        operation: failure.operation,
+        message: failure.message,
+        ...(failure.blockingInvocationId === undefined
+          ? {}
+          : { blockingInvocationId: failure.blockingInvocationId }),
+      };
 
 const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string): CliResult => {
   if (!result.ok && result.code === "remote_tasks_not_supported") {
@@ -60,7 +72,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
               id: review.id,
               state: review.state,
               outcome: result.outcome,
-              toolingFailure: review.toolingFailure,
+              toolingFailure: taskReviewToolingFailureView(review.toolingFailure),
             },
             task: result.task,
           },
@@ -137,7 +149,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
               path: result.review.workspacePath,
               cleanup: result.review.workspaceCleanup,
             },
-            toolingFailure: result.review.toolingFailure,
+            toolingFailure: taskReviewToolingFailureView(result.review.toolingFailure),
           },
         },
         help: [`Run \`by task-review show ${result.review.id}\` to inspect recovery state.`],

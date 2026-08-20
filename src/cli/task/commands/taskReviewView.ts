@@ -49,6 +49,9 @@ export const taskReviewView = (
       : {
           operation: review.toolingFailure.operation,
           message: review.toolingFailure.message,
+          ...(review.toolingFailure.blockingInvocationId === undefined
+            ? {}
+            : { blockingInvocationId: review.toolingFailure.blockingInvocationId }),
         },
   recovery: {
     workspaceCleanup: review.workspaceCleanup,

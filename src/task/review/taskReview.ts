@@ -44,6 +44,7 @@ export type TaskReviewPolicySnapshot = Schema.Schema.Type<typeof taskReviewPolic
 const taskReviewToolingFailureSchema = Schema.Struct({
   operation: nonBlankStringSchema,
   message: nonBlankStringSchema,
+  blockingInvocationId: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
 });
 
 const decodeToolingFailure = Schema.decodeUnknownSync(taskReviewToolingFailureSchema, {

@@ -411,6 +411,7 @@ const submitTaskReview = (
                   message: agentInvocationDispatchFailureMessage(
                     execution.dispatchFailure.invocationId,
                   ),
+                  blockingInvocationId: execution.dispatchFailure.invocationId,
                 };
                 yield* input.persistence.recordActiveFailure(reviewId, failure, now);
                 return { ok: false, failure } as const;

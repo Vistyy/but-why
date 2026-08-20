@@ -254,6 +254,7 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
         toolingFailure: {
           operation: "dispatch_agent_invocation",
           message: expect.stringContaining("Agent Invocation 29"),
+          blockingInvocationId: 29,
         },
       },
     });
@@ -262,6 +263,7 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
       {
         operation: "dispatch_agent_invocation",
         message: expect.stringContaining("Agent Invocation 29"),
+        blockingInvocationId: 29,
       },
     ]);
   }),

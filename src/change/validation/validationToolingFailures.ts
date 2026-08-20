@@ -21,6 +21,7 @@ export class SnapshotWorkspaceSetupFailed extends Data.TaggedError("SnapshotWork
 export class InfrastructureToolingFailed extends Data.TaggedError("InfrastructureToolingFailed")<{
   readonly operationName: string;
   readonly message: string;
+  readonly blockingInvocationId?: number;
 }> {}
 
 export class GitToolingFailed extends Data.TaggedError("GitToolingFailed")<{
@@ -67,6 +68,7 @@ export type ValidationToolingFailureRecordInput = {
   readonly worktreePath?: string;
   readonly errorMessage: string;
   readonly cleanupWorkspace?: CleanupState;
+  readonly blockingInvocationId?: number;
 };
 
 export const validationToolingFailureRecord = (
@@ -88,6 +90,9 @@ export const validationToolingFailureRecord = (
         errorKind: "infrastructure_tooling_failed",
         operationName: failure.operationName,
         errorMessage: failure.message,
+        ...(failure.blockingInvocationId === undefined
+          ? {}
+          : { blockingInvocationId: failure.blockingInvocationId }),
       };
     case "GitToolingFailed":
       return {

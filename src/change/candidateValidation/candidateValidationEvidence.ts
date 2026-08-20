@@ -125,6 +125,7 @@ export const assertValidationToolingFailureEvidence = (failure: {
   readonly errorKind: string;
   readonly operationName: string;
   readonly errorMessage: string;
+  readonly blockingInvocationId?: number;
 }): void => {
   requireNonBlank(failure.errorKind, "Tooling Failure kind");
   if (!validationToolingFailureKinds.has(failure.errorKind)) {
@@ -132,6 +133,9 @@ export const assertValidationToolingFailureEvidence = (failure: {
   }
   requireNonBlank(failure.operationName, "Tooling Failure operation");
   requireNonBlank(failure.errorMessage, "Tooling Failure message");
+  if (failure.blockingInvocationId !== undefined) {
+    requireSafePositiveInteger(failure.blockingInvocationId, "Tooling Failure blocking Invocation");
+  }
 };
 
 const requireNonBlank = (value: string, name: string): void => {
