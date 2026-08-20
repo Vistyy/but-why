@@ -356,11 +356,21 @@ rule:
         - pattern: ($VALUE as unknown) as $TYPE
     - not:
         inside:
-          pattern: const api = $VALUE as unknown as ExtensionAPI
+          all:
+            - pattern: const createHarness = ($$$ARGS) => { $$$BODY }
+            - has:
+                regex: '\bapi\s*='
+            - has:
+                regex: 'as unknown as ExtensionAPI'
           stopBy: end
     - not:
         inside:
-          pattern: const context = $VALUE as unknown as ExtensionContext
+          all:
+            - pattern: const createHarness = ($$$ARGS) => { $$$BODY }
+            - has:
+                regex: '\bcontext\s*='
+            - has:
+                regex: 'as unknown as ExtensionContext'
           stopBy: end
     - not:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
