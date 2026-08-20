@@ -1069,13 +1069,16 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
 
-      const previous = persisted;
+      const previous = persisted ?? {
+        changeId: id,
+        fingerprint: observed.fingerprint,
+        unchangedRestarts: 0,
+        paused: false,
+        resolutionBlockerId: null,
+      };
       const retry = explicit
         ? { fingerprint: observed.fingerprint, unchangedRestarts: 0 }
-        : nextRetryState(
-            previous ?? { fingerprint: observed.fingerprint, unchangedRestarts: 0 },
-            observed.fingerprint,
-          );
+        : nextRetryState(previous, observed.fingerprint);
       const reconciliation = reconcileContinuationState(id, observed, previous, retry, "resume");
       saveState(reconciliation.state);
 
