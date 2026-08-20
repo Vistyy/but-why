@@ -121,3 +121,12 @@ valid:
 invalid:
   - repositorySqlLayer(config)
   - import { repositorySqlLayer } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+---
+id: task-context-command-stays-in-task-intent
+valid:
+  - import { success } from "../../../cliResults.js";
+  - import { TaskUseCases } from "../../../task/taskUseCases.js";
+invalid:
+  - import { loadTaskContextInspection } from "../../../taskChange/composition/loadTaskContextInspection.js";
+  - import { queryTaskChangeProjection } from "../../../taskChange/inspectTaskChange.js";
+  - import { inspectChange } from "../../../change/inspectChange.js";
