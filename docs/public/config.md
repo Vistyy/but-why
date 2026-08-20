@@ -79,6 +79,17 @@ But Why freezes it in Shared Repository State and derives Task IDs as `<id-prefi
 But Why detects Git facts at runtime.
 Repo Config does not define the default branch, publication remote, GitHub repository, or current head.
 
+## Configuration names
+
+Agent Profile and Specialist names use one case-sensitive identifier contract in Repo Config and Global Config.
+A name must start with an ASCII letter or digit.
+The remaining characters must be ASCII letters, digits, `.`, `_`, or `-`.
+Uppercase letters are valid, so `taskReviewer` and `taskreviewer` are distinct names.
+But Why does not normalize names or create aliases.
+This contract applies to Agent Profile definitions and references, Specialist definitions and selections, and reviewer map keys.
+Validation Check IDs keep their existing lowercase contract.
+Repository ID Prefix rules keep their existing uppercase contract.
+
 ## Repository Preparation
 
 When configured, top-level `prepare` runs in each new Managed Worktree and once before Validation Checks.
