@@ -52,6 +52,59 @@ export const runCancelCommand = (
   );
 };
 
+type TaskCancellationFailure = Exclude<TaskCancellationResult, { readonly ok: true }>;
+
+type TaskCancelErrorPresentation = {
+  readonly message: string;
+  readonly help: readonly string[];
+};
+
+const taskCancelErrorPresentation: Record<
+  TaskCancellationFailure["code"],
+  (taskId: PublicTaskId, result: TaskCancellationFailure) => TaskCancelErrorPresentation
+> = {
+  task_not_found: (taskId) => ({
+    message: `Task was not found: ${taskId}`,
+    help: ["Run `by task list --all --limit all` to see known Tasks."],
+  }),
+  change_not_found: (taskId) => ({
+    message: `Change for Task ${taskId} was not found.`,
+    help: ["Inspect the Task and its Change linkage before retrying."],
+  }),
+  task_already_done: (taskId) => ({
+    message: `Cannot cancel completed Task ${taskId}.`,
+    help: ["Only unfinished Tasks can be cancelled."],
+  }),
+  change_already_completed: (taskId) => ({
+    message: `Task ${taskId} is already complete through its Change.`,
+    help: ["Inspect the Change with `by change show <change-id>`."],
+  }),
+  github_pull_request_unavailable: () => ({
+    message: "The owned pull request could not be read, so the Task remains unfinished.",
+    help: ["Restore GitHub access, then retry Task Cancel."],
+  }),
+  owned_pull_request_mismatch: () => ({
+    message:
+      "The owned pull request does not match the recorded Change facts, so the Task remains unfinished.",
+    help: ["Inspect the Change and resolve the remote mismatch before retrying."],
+  }),
+  github_close_failed: () => ({
+    message: "The owned pull request could not be closed, so the Task remains unfinished.",
+    help: ["Resolve the GitHub issue, then retry Task Cancel."],
+  }),
+  submission_in_progress: () => ({
+    message:
+      "Another Submission or cancellation already owns this Change, so the Task remains unfinished.",
+    help: ["Wait for the other operation to finish, then retry Task Cancel."],
+  }),
+  active_validation_run: (_taskId, result) => ({
+    message: "A Validation Run remains active, so the Task remains unfinished.",
+    help: [
+      `After stopping every process from the run, execute \`by validation-run abandon ${result.validationRunId} --reason <reason>\`.`,
+    ],
+  }),
+};
+
 const cancelResult = (taskId: PublicTaskId, result: TaskCancellationResult): CliResult => {
   if (result.ok) {
     return success({
@@ -74,58 +127,23 @@ const cancelResult = (taskId: PublicTaskId, result: TaskCancellationResult): Cli
           }),
     });
   }
-  if (result.code === "task_not_found") {
-    return runtimeError({
-      code: result.code,
-      message: `Task was not found: ${taskId}`,
-      details: { taskId },
-      help: ["Run `by task list --all --limit all` to see known Tasks."],
-    });
-  }
-  const messages: Record<Exclude<TaskCancellationResult, { readonly ok: true }>["code"], string> = {
-    task_not_found: `Task was not found: ${taskId}`,
-    change_not_found: `Change for Task ${taskId} was not found.`,
-    task_already_done: `Cannot cancel completed Task ${taskId}.`,
-    change_already_completed: `Task ${taskId} is already complete through its Change.`,
-    github_pull_request_unavailable:
-      "The owned pull request could not be read, so the Task remains unfinished.",
-    owned_pull_request_mismatch:
-      "The owned pull request does not match the recorded Change facts, so the Task remains unfinished.",
-    github_close_failed:
-      "The owned pull request could not be closed, so the Task remains unfinished.",
-    submission_in_progress:
-      "Another Submission or cancellation already owns this Change, so the Task remains unfinished.",
-    active_validation_run: "A Validation Run remains active, so the Task remains unfinished.",
-  };
-  const help =
-    result.code === "submission_in_progress"
-      ? ["Wait for the other operation to finish, then retry Task Cancel."]
-      : result.code === "active_validation_run"
-        ? [
-            `After stopping every process from the run, execute \`by validation-run abandon ${result.validationRunId} --reason <reason>\`.`,
-          ]
-        : result.code === "github_close_failed"
-          ? ["Resolve the GitHub issue, then retry Task Cancel."]
-          : result.code === "github_pull_request_unavailable"
-            ? ["Restore GitHub access, then retry Task Cancel."]
-            : result.code === "owned_pull_request_mismatch"
-              ? ["Inspect the Change and resolve the remote mismatch before retrying."]
-              : result.code === "change_already_completed"
-                ? ["Inspect the Change with `by change show <change-id>`."]
-                : result.code === "change_not_found"
-                  ? ["Inspect the Task and its Change linkage before retrying."]
-                  : ["Only unfinished Tasks can be cancelled."];
+  const presentation = taskCancelErrorPresentation[result.code](taskId, result);
   return runtimeError({
     code: result.code,
-    message: messages[result.code],
-    details: {
-      taskId,
-      ...(result.validationRunId === undefined ? {} : { validationRunId: result.validationRunId }),
-      ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
-      ...(result.recoveryEvidence === undefined
-        ? {}
-        : { recoveryEvidence: result.recoveryEvidence }),
-    },
-    help,
+    message: presentation.message,
+    details:
+      result.code === "task_not_found"
+        ? { taskId }
+        : {
+            taskId,
+            ...(result.validationRunId === undefined
+              ? {}
+              : { validationRunId: result.validationRunId }),
+            ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+            ...(result.recoveryEvidence === undefined
+              ? {}
+              : { recoveryEvidence: result.recoveryEvidence }),
+          },
+    help: presentation.help,
   });
 };
