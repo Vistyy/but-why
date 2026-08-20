@@ -841,6 +841,52 @@ export default function continueChange(pi: ExtensionAPI): void {
   const resolutionBlockerId = (resolution: BlockerResolution | null): number | null =>
     resolution?.blockerId ?? null;
 
+  const reconcileContinuationState = (
+    id: string,
+    observed: Extract<InspectionResult, { readonly ok: true }>,
+    previous: PersistedContinuationState | undefined,
+    retry: RetryState,
+    mode: "initialize" | "resume",
+  ): {
+    readonly state: PersistedContinuationState;
+    readonly resolution: BlockerResolution | null;
+  } => {
+    const latest = latestResolution(observed.blockerHistory);
+    const latestBlockerId = resolutionBlockerId(latest);
+    const handledBlockerId = previous?.resolutionBlockerId ?? null;
+    const resolutionChanged =
+      latestBlockerId !== null &&
+      (mode === "initialize"
+        ? latestBlockerId !== handledBlockerId
+        : previous?.resolutionBlockerId !== undefined &&
+          latestBlockerId !== previous.resolutionBlockerId);
+    const pendingBlockerId = resolutionChanged
+      ? latestBlockerId
+      : (previous?.pendingResolutionBlockerId ?? null);
+    const state: PersistedContinuationState = {
+      changeId: id,
+      ...retry,
+      paused: false,
+      resolutionBlockerId:
+        mode === "initialize" ? handledBlockerId : (handledBlockerId ?? latestBlockerId),
+      pendingResolutionBlockerId: pendingBlockerId,
+      ...(previous?.initialSubmissionHandled === undefined
+        ? {}
+        : { initialSubmissionHandled: previous.initialSubmissionHandled }),
+    };
+    const resolution = latest !== null && pendingBlockerId === latestBlockerId ? latest : null;
+    return { state, resolution };
+  };
+
+  const markResolutionDelivered = (
+    state: PersistedContinuationState,
+    resolution: BlockerResolution,
+  ): PersistedContinuationState => ({
+    ...state,
+    resolutionBlockerId: resolution.blockerId,
+    pendingResolutionBlockerId: null,
+  });
+
   const resolutionMessage = (
     id: string,
     resolution: BlockerResolution,
@@ -895,26 +941,14 @@ export default function continueChange(pi: ExtensionAPI): void {
       showWatcher(ctx, { kind: "inspection-failed" });
       return;
     }
-    const latest = latestResolution(observed.blockerHistory);
-    const latestBlockerId = resolutionBlockerId(latest);
-    const previous = persisted;
-    const handledBlockerId = previous?.resolutionBlockerId ?? null;
-    const resolutionChanged = latestBlockerId !== null && latestBlockerId !== handledBlockerId;
-    const pendingBlockerId = resolutionChanged
-      ? latestBlockerId
-      : (previous?.pendingResolutionBlockerId ?? null);
-    const initializedState: PersistedContinuationState = {
+    const reconciliation = reconcileContinuationState(
       changeId,
-      fingerprint: observed.fingerprint,
-      unchangedRestarts: 0,
-      paused: false,
-      resolutionBlockerId: handledBlockerId,
-      pendingResolutionBlockerId: pendingBlockerId,
-      ...(previous?.initialSubmissionHandled === undefined
-        ? {}
-        : { initialSubmissionHandled: previous.initialSubmissionHandled }),
-    };
-    saveState(initializedState);
+      observed,
+      persisted,
+      { fingerprint: observed.fingerprint, unchangedRestarts: 0 },
+      "initialize",
+    );
+    saveState(reconciliation.state);
     showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
     if (observed.blockerHistory.active !== null && observed.snapshot.change.state === "open") {
       scheduleBlockedPolling(ctx);
@@ -922,19 +956,15 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     clearBlockedPolling();
     if (
-      pendingBlockerId !== null &&
-      latest !== null &&
-      latest.blockerId === pendingBlockerId &&
+      reconciliation.resolution !== null &&
       observed.snapshot.change.state === "open" &&
       ctx.isIdle()
     ) {
-      saveState({
-        ...initializedState,
-        resolutionBlockerId: latest.blockerId,
-        pendingResolutionBlockerId: null,
-      });
+      saveState(markResolutionDelivered(reconciliation.state, reconciliation.resolution));
       showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
-      pi.sendUserMessage(resolutionMessage(changeId, latest, observed.snapshot.findingCount > 0));
+      pi.sendUserMessage(
+        resolutionMessage(changeId, reconciliation.resolution, observed.snapshot.findingCount > 0),
+      );
     }
   };
 
@@ -1039,34 +1069,15 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
 
-      const previous = persisted ?? {
-        changeId: id,
-        fingerprint: observed.fingerprint,
-        unchangedRestarts: 0,
-        paused: false,
-        resolutionBlockerId: null,
-      };
-      const currentResolution = latestResolution(observed.blockerHistory);
-      const currentResolutionBlockerId = resolutionBlockerId(currentResolution);
-      const resolutionChanged =
-        previous.resolutionBlockerId !== undefined &&
-        currentResolutionBlockerId !== null &&
-        currentResolutionBlockerId !== previous.resolutionBlockerId;
-      const pendingResolution =
-        currentResolutionBlockerId !== null &&
-        previous.pendingResolutionBlockerId === currentResolutionBlockerId;
+      const previous = persisted;
       const retry = explicit
         ? { fingerprint: observed.fingerprint, unchangedRestarts: 0 }
-        : nextRetryState(previous, observed.fingerprint);
-      saveState({
-        ...previous,
-        ...retry,
-        paused: false,
-        resolutionBlockerId: previous.resolutionBlockerId ?? currentResolutionBlockerId,
-        pendingResolutionBlockerId: resolutionChanged
-          ? currentResolutionBlockerId
-          : (previous.pendingResolutionBlockerId ?? null),
-      });
+        : nextRetryState(
+            previous ?? { fingerprint: observed.fingerprint, unchangedRestarts: 0 },
+            observed.fingerprint,
+          );
+      const reconciliation = reconcileContinuationState(id, observed, previous, retry, "resume");
+      saveState(reconciliation.state);
 
       if (observed.blockerHistory.active !== null && observed.snapshot.change.state === "open") {
         showWatcher(ctx, { kind: "blocked" });
@@ -1074,18 +1085,12 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
       clearBlockedPolling();
-      if ((resolutionChanged || pendingResolution) && currentResolution !== null) {
+      if (reconciliation.resolution !== null) {
         if (observed.snapshot.change.state === "open") {
-          saveState({
-            ...previous,
-            ...retry,
-            paused: false,
-            resolutionBlockerId: currentResolutionBlockerId,
-            pendingResolutionBlockerId: null,
-          });
+          saveState(markResolutionDelivered(reconciliation.state, reconciliation.resolution));
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
           pi.sendUserMessage(
-            resolutionMessage(id, currentResolution, observed.snapshot.findingCount > 0),
+            resolutionMessage(id, reconciliation.resolution, observed.snapshot.findingCount > 0),
           );
         } else {
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
