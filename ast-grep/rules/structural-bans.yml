@@ -230,6 +230,18 @@ rule:
         - kind: import_statement
         - regex: '[\s\S]*repositorySqlLayer[\s\S]*from\s+["`][^"`]+["`][\s\S]*'
 ---
+# Task Intent owns current Task Context; the Task Context command must not depend on Change or Task/Change coordination inspection.
+id: task-context-command-stays-in-task-intent
+language: TypeScript
+severity: error
+message: Do not import Change or Task/Change coordination modules from the Task Context command because Task Intent owns current Task Context; use Task Use Cases directly.
+files:
+  - src/cli/task/commands/context.ts
+rule:
+  all:
+    - kind: import_statement
+    - regex: '[\s\S]*from\s+["`][^"`]*(?:/change/|/taskChange/)[^"`]*["`][\s\S]*'
+---
 # Task dependency edits and revision must not obtain coordination operations from the generic Task use-case set.
 id: linked-task-mutations-use-coordination
 language: TypeScript
