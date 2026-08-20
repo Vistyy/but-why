@@ -1,5 +1,5 @@
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -19,7 +19,10 @@ import {
   runSpecialistReviewPhase as runSpecialistReviewPhaseWithFileSystem,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
+import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
+import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
+import { DisposableWorkspaceRestorationFailed } from "../../src/disposableWorkspace/disposableWorkspace.js";
 import { repoRoot } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
@@ -688,20 +691,71 @@ describe("Candidate Specialist Review phase", () => {
     }),
   );
 
+  it.scoped("stops retrying when workspace restoration fails", () =>
+    Effect.gen(function* () {
+      const harness = phaseHarness();
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+        Effect.succeed({
+          ok: false as const,
+          failure: new ReviewerExecutionFailed({
+            kind: "output_contract",
+            operationName: "decode_reviewer_output",
+            message: "Structured output correction is required.",
+            sessionReference: "session-1",
+          }),
+          sessionUsability: "unknown" as const,
+          attempts: 1,
+          stdout: "invalid output",
+          sessionReference: "session-1",
+        }),
+      );
+      const result = yield* harness.run(
+        { review },
+        {
+          restoreWorkspace: () =>
+            Effect.fail(
+              new DisposableWorkspaceRestorationFailed({
+                message: "Restoration failed.",
+              }),
+            ),
+        },
+      );
+
+      expect(result).toEqual({ outcome: "tooling_failed" });
+      expect(review).toHaveBeenCalledOnce();
+      expect(harness.results).toMatchObject([
+        {
+          outcome: "failed",
+          toolingFailure: {
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "verify_specialist_review_candidate",
+          },
+        },
+      ]);
+    }),
+  );
+
   it.scoped(
-    "rejects real Candidate mutation before recording a Specialist result",
+    "restores real Candidate mutations before an output-correction retry",
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
         const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+        const workspaceId = "validation-run-426614174001";
+        const repositoryCommonDirectory = commonDirectory(repo);
+        const worktreePath = expectedSnapshotWorkspacePath(repositoryCommonDirectory, 426614174001);
+        mkdirSync(dirname(worktreePath), { recursive: true });
+        git(repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
+        const expectedConfig = git(worktreePath, "show", "HEAD:.but-why/config.json");
+        const statuses: string[] = [];
         const results: Parameters<
           NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
         >[0][] = [];
         const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
           Effect.sync(() => {
             const result = runTestProcess("bash", ["-lc", command], {
-              cwd: options?.cwd ?? repo,
+              cwd: options?.cwd ?? worktreePath,
             });
             return {
               exitCode: result.status ?? 1,
@@ -709,52 +763,63 @@ describe("Candidate Specialist Review phase", () => {
               stderr: result.stderr,
             };
           });
-        const integrityFailure = yield* Effect.suspend(() =>
+        let invocations = 0;
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
+          Effect.sync(() => {
+            invocations += 1;
+            const cwd = input.commandCwd;
+            if (cwd === undefined) throw new Error("Reviewer command directory was not supplied.");
+            statuses.push(git(cwd, "status", "--porcelain=v1"));
+            if (invocations < 3) {
+              writeFileSync(join(cwd, ".but-why/config.json"), "mutated\n");
+              git(cwd, "add", ".but-why/config.json");
+              writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
+              return {
+                ok: false as const,
+                failure: new ReviewerExecutionFailed({
+                  kind: "output_contract",
+                  operationName: "decode_reviewer_output",
+                  message: "Structured output correction is required.",
+                  sessionReference: "session-1",
+                }),
+                sessionUsability: "unknown" as const,
+                attempts: 1,
+                stdout: "invalid output",
+                sessionReference: "session-1",
+              };
+            }
+            return success();
+          }),
+        );
+        const result = yield* Effect.suspend(() =>
           runSpecialistReviewPhase({
             validationRunId: 426614174001,
             changeId: captured.changeId,
             candidate: captured,
             policies: [policy("standards")],
-            runtime: {
-              review: () =>
-                Effect.sync(() => {
-                  writeFileSync(join(repo, "unexpected-mutation.txt"), "mutation");
-                  return {
-                    ok: false as const,
-                    failure: new ReviewerExecutionFailed({
-                      kind: "output_contract",
-                      operationName: "decode_reviewer_output",
-                      message: "Structured output correction is required.",
-                      sessionReference: "session-1",
-                    }),
-                    sessionUsability: "unknown" as const,
-                    attempts: 1,
-                    stdout: "invalid output",
-                  };
-                }),
-            },
+            runtime: { review },
             commandExecutor,
             reviewerExecutor: unusedReviewerExecutor,
-            artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-            commandCwd: repo,
-            resourceRoot: repo,
+            artifactsRoot: createTestWorkspace(),
+            commandCwd: worktreePath,
+            resourceRoot: worktreePath,
             workspaceIdentity: {
               repositoryRoot: repo,
-              repositoryCommonDirectory: commonDirectory(repo),
-              workspaceId: "validation-run-426614174001",
+              repositoryCommonDirectory,
+              workspaceId,
             },
-            sessionStorageRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-            restoreWorkspace: () => Effect.void,
+            sessionStorageRoot: createTestWorkspace(),
+            restoreWorkspace: restoreDisposableWorkspace,
             agentPersistence: defaultAgentPersistence(),
             getAgentSession: () => Effect.succeed(undefined),
             linkAgentInvocation: () => () => Effect.void,
-            settleAgentInvocationResult: (result) => {
-              results.push(result);
+            settleAgentInvocationResult: (settled) => {
+              results.push(settled);
               return () => Effect.void;
             },
-            recordSpecialistResult: (result) =>
+            recordSpecialistResult: (specialistResult) =>
               Effect.sync(() => {
-                results.push({ ...result, phase: "specialist_review" });
+                results.push({ ...specialistResult, phase: "specialist_review" });
               }),
             allowedUntrackedFiles: [],
             listArtifacts: () => Effect.succeed([]),
@@ -762,17 +827,14 @@ describe("Candidate Specialist Review phase", () => {
           }),
         );
 
-        expect(integrityFailure).toEqual({ outcome: "tooling_failed" });
-        expect(results).toMatchObject([
-          {
-            outcome: "failed",
-            toolingFailure: {
-              errorKind: "reviewer_output_contract_failed",
-              operationName: "decode_reviewer_output",
-            },
-          },
-        ]);
-        expect(git(repo, "rev-parse", "HEAD")).toBe(captured.headSha);
+        expect(result).toEqual({ outcome: "passed" });
+        expect(review).toHaveBeenCalledTimes(3);
+        expect(statuses).toEqual(["", "", ""]);
+        expect(git(worktreePath, "show", "HEAD:.but-why/config.json")).toBe(expectedConfig);
+        expect(git(worktreePath, "status", "--porcelain=v1")).toBe("");
+        expect(existsSync(join(worktreePath, "reviewer-untracked"))).toBe(false);
+        expect(results).toMatchObject([{ outcome: "passed" }]);
+        git(repo, "worktree", "remove", "--force", "--", worktreePath);
       }),
     15_000,
   );
