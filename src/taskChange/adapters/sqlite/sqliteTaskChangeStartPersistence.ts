@@ -1,50 +1,64 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   createChange,
   insertLinkedChange,
   readChangeStartById,
   recordPrepareOutcome as recordChangePrepareOutcome,
 } from "../../../sqlite/sqliteChangeStartPersistence.js";
-import {
-  decodeTaskContextRow,
-  decodeTaskDependencyFacts,
-  decodeTaskState,
-  type StoredTaskContextRow,
-  type StoredTaskDependencyFactRow,
-} from "../../../sqlite/sqliteTaskReadModel.js";
-import { internalTaskId, publicTaskId } from "../../../task/taskId.js";
+import type { TaskContext, TaskDependencyFact } from "../../../task/task.js";
+import type { TaskState } from "../../../task/lifecycle.js";
+import { internalTaskId, publicTaskId, type PublicTaskId } from "../../../task/taskId.js";
 import type {
   TaskChangeStartCreateInput,
   TaskChangeStartCreationInput,
   TaskChangeStartPersistence,
 } from "../../taskChangeStart.js";
 
-export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
-  TaskChangeStartPersistence,
-  never,
-  RepositorySql
-> =>
+export type TaskChangeStartTaskOperations = {
+  readonly getTaskForChangeStart: (
+    sql: SqlClient.SqlClient,
+    taskId: PublicTaskId,
+    idPrefix: string,
+  ) => Effect.Effect<
+    (TaskContext & { readonly state: TaskState }) | undefined,
+    SqlError | RepositoryPersistedDataInvalid
+  >;
+  readonly getTaskDependenciesForChangeStart: (
+    sql: SqlClient.SqlClient,
+    taskId: PublicTaskId,
+    idPrefix: string,
+  ) => Effect.Effect<readonly TaskDependencyFact[], SqlError | RepositoryPersistedDataInvalid>;
+};
+
+export const openSqliteTaskChangeStartPersistence = (
+  taskOperations: TaskChangeStartTaskOperations,
+): Effect.Effect<TaskChangeStartPersistence, never, RepositorySql> =>
   Effect.map(RepositorySql, (repository) => ({
     create: (input: TaskChangeStartCreateInput) =>
       repository.transactionImmediate("create Change Start", (sql) =>
         input.taskId === undefined
           ? createChange(sql, input, repository.idPrefix)
-          : createLinked(sql, { ...input, taskId: input.taskId }, repository.idPrefix),
+          : createLinked(
+              sql,
+              { ...input, taskId: input.taskId },
+              repository.idPrefix,
+              taskOperations,
+            ),
       ),
     prepareTask: (taskId) =>
       repository.transaction("prepare Change Start linked to a Task", (sql) =>
-        prepareTask(sql, taskId, repository.idPrefix),
+        prepareTask(sql, taskId, repository.idPrefix, taskOperations),
       ),
     createLinked: (input) =>
       repository.transactionImmediate("create linked Change Start", (sql) =>
-        createLinked(sql, input, repository.idPrefix),
+        createLinked(sql, input, repository.idPrefix, taskOperations),
       ),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) =>
@@ -59,25 +73,25 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
       ),
   }));
 
-const prepareTask = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
+const prepareTask = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  idPrefix: string,
+  taskOperations: TaskChangeStartTaskOperations,
+) =>
   Effect.gen(function* () {
-    const task = yield* readTaskContext(sql, taskId, idPrefix);
+    const task = yield* taskOperations.getTaskForChangeStart(sql, publicTaskId(taskId), idPrefix);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
     const existing = yield* readExistingByTaskId(sql, taskId, idPrefix);
     if (existing !== undefined) return { ok: true as const, existing, task };
-    const dependencyRows = yield* sql<StoredTaskDependencyFactRow>`
-      SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
-      FROM task_dependencies
-      LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-      WHERE task_dependencies.dependent_task_id = ${internalTaskId(taskId, idPrefix)}
-      ORDER BY tasks.id ASC
-    `;
-    const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
-      decodeTaskDependencyFacts(dependencyRows, publicTaskId(taskId), idPrefix),
-    )).filter((dependency) => dependency.state !== "done");
+    const blockedBy = yield* taskOperations.getTaskDependenciesForChangeStart(
+      sql,
+      publicTaskId(taskId),
+      idPrefix,
+    );
     return blockedBy.length === 0
       ? { ok: true as const, existing: undefined, task }
       : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
@@ -87,9 +101,10 @@ const createLinked = (
   sql: SqlClient.SqlClient,
   input: TaskChangeStartCreationInput,
   idPrefix: string,
+  taskOperations: TaskChangeStartTaskOperations,
 ) =>
   Effect.gen(function* () {
-    const prepared = yield* prepareTask(sql, input.taskId, idPrefix);
+    const prepared = yield* prepareTask(sql, input.taskId, idPrefix, taskOperations);
     if (!prepared.ok) return prepared;
     if (prepared.existing !== undefined) {
       return { ok: false as const, code: "change_start_conflict" as const };
@@ -156,19 +171,6 @@ const readLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string, idPrefix
     `,
     (rows) => Effect.succeed(rows[0]),
   );
-
-const readTaskContext = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredTaskContextRow & { readonly state: unknown }>`
-      SELECT id, title, description, state FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}
-    `;
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    return yield* decodePersisted("prepare Change Start linked to a Task", () => ({
-      ...decodeTaskContextRow(row, idPrefix),
-      state: decodeTaskState(row.state),
-    }));
-  });
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

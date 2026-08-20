@@ -10,7 +10,7 @@ import {
   repositorySqlLayer,
 } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
+import { openSqliteTaskReviewPersistence } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { internalTaskId, type PublicTaskId } from "../../src/task/taskId.js";
 
 const taskReviewPolicyFixture = {

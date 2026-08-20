@@ -9,10 +9,11 @@ import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
+import { taskChangeStartTaskOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 import {
@@ -62,7 +63,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence();
+          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
           const created = yield* starts.create({
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
@@ -157,7 +158,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence();
+          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
           const created = yield* starts.create({
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
@@ -265,7 +266,7 @@ describe("by change reconcile", () => {
         const taskId = publicTaskId(createdTask.task.id);
         yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
-        const starts = yield* openSqliteChangeStartPersistence();
+        const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
         const prepared = yield* starts.prepareTask(taskId);
         if (!prepared.ok) throw new Error(prepared.code);
         const created = yield* starts.create({
@@ -400,7 +401,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence();
+          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
           const created = yield* starts.create({
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
@@ -501,7 +502,7 @@ describe("by change reconcile", () => {
           const taskId = publicTaskId(createdTask.task.id);
           yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
-          const starts = yield* openSqliteChangeStartPersistence();
+          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
           const prepared = yield* starts.prepareTask(taskId);
           if (!prepared.ok) throw new Error(prepared.code);
           const created = yield* starts.create({
@@ -618,7 +619,7 @@ describe("by change reconcile", () => {
           const taskId = publicTaskId(createdTask.task.id);
           yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
-          const starts = yield* openSqliteChangeStartPersistence();
+          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
           const prepared = yield* starts.prepareTask(taskId);
           if (!prepared.ok) throw new Error(prepared.code);
           const created = yield* starts.create({

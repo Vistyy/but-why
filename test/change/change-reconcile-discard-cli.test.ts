@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
+import { taskChangeStartTaskOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
@@ -40,7 +41,7 @@ describe("by change reconcile --discard-work", () => {
         yield* withTestRepository(
           root,
           Effect.gen(function* () {
-            const starts = yield* openSqliteChangeStartPersistence();
+            const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
             const changes = yield* openSqliteChangeTestDependencies();
             const created = yield* starts.create({
               baseRef: "refs/heads/main",
@@ -100,7 +101,7 @@ describe("by change reconcile --discard-work", () => {
         yield* withTestRepository(
           root,
           Effect.gen(function* () {
-            const starts = yield* openSqliteChangeStartPersistence();
+            const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
             const changes = yield* openSqliteChangeTestDependencies();
             const created = yield* starts.create({
               baseRef: "refs/heads/main",

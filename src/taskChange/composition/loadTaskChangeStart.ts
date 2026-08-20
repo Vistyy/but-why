@@ -9,6 +9,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { openSqliteTaskChangeStartPersistence } from "../adapters/sqlite/sqliteTaskChangeStartPersistence.js";
+import { taskChangeStartTaskOperations } from "./loadTaskChangePersistence.js";
 import {
   startTaskChange,
   type TaskChangeStartInput,
@@ -21,7 +22,7 @@ export const openTaskChangeStartOperation = (input: {
   readonly context: LocalRepositoryContext;
   readonly globalConfigPath: string;
 }) =>
-  openSqliteTaskChangeStartPersistence().pipe(
+  openSqliteTaskChangeStartPersistence(taskChangeStartTaskOperations).pipe(
     Effect.map(
       (store) =>
         (

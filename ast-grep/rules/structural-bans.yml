@@ -212,6 +212,18 @@ rule:
   any:
     - pattern: openHerdrInteractiveSessionHost($$$ARGS)
 ---
+# Task/Change coordination receives Task SQLite operations from composition instead of importing Task Adapters.
+id: task-change-coordination-uses-composed-task-operations
+language: TypeScript
+severity: error
+message: Do not import Task SQLite Adapters from Task/Change coordination Adapters because composition owns concrete Task Adapter selection; receive operation-specific Task functions through the coordination Adapter interface.
+files:
+  - src/taskChange/adapters/**/*.ts
+rule:
+  all:
+    - kind: import_statement
+    - regex: '[\\s\\S]*from\\s+["`][^"`]*task/adapters/sqlite/[^"`]*["`][\\s\\S]*'
+---
 # Repository Runtime is the only production owner of the Shared Repository State database lifecycle.
 id: repository-sql-layer-belongs-to-repository-runtime
 language: TypeScript

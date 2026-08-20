@@ -7,10 +7,11 @@ import {
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
-import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskPersistence } from "../../task/adapters/sqlite/sqliteTaskPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
 import { openSqliteTaskChangeCancellationPort } from "../adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
+import { taskChangeTaskOperations } from "./loadTaskChangePersistence.js";
 import { type CancellationUseCases, openCancellationUseCases } from "../cancelTaskChange.js";
 
 type WithCancellationUseCasesResult<A> =
@@ -27,7 +28,7 @@ export const withCancellationUseCases = <A, E, R>(
 
   return loaded.runtime.provide(
     Effect.all({
-      changes: openSqliteTaskChangeCancellationPort(),
+      changes: openSqliteTaskChangeCancellationPort(taskChangeTaskOperations),
       tasks: openSqliteTaskPersistence(),
       activeValidation: openSqliteActiveValidationRunPort(),
       cleanupTerminal: composeTerminalCleanup(context),

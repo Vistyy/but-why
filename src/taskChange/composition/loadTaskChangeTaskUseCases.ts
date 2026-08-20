@@ -15,6 +15,7 @@ import type {
   ReviseTaskResult,
 } from "../../task/taskStore.js";
 import { openSqliteTaskChangeTaskPersistence } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
+import { taskChangeTaskOperations } from "./loadTaskChangePersistence.js";
 
 export type TaskChangeTaskUseCases = {
   readonly idPrefix: string;
@@ -42,7 +43,7 @@ export const withTaskChangeTaskUseCases = <A, E, R>(
   if (!loaded.ok) return Effect.succeed(loaded);
   const { context } = loaded.runtime;
   return loaded.runtime.provide(
-    openSqliteTaskChangeTaskPersistence().pipe(
+    openSqliteTaskChangeTaskPersistence(taskChangeTaskOperations).pipe(
       Effect.flatMap((persistence) =>
         use({
           idPrefix: context.idPrefix,

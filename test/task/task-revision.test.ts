@@ -2,10 +2,11 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskReviewPersistence } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeTaskPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
+import { taskChangeTaskOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import {
   passTaskReviewFixture,
   setTerminalTaskStateFixture,
@@ -75,7 +76,7 @@ it.scoped("renames a New Task while preserving its identity and surrounding fact
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
+      const taskChanges = yield* openSqliteTaskChangeTaskPersistence(taskChangeTaskOperations);
       yield* tasks.createTask({ title: "Dependency", description: "Required", now });
       yield* tasks.createTask({
         title: "Original title",
@@ -112,7 +113,7 @@ it.scoped("requires revision before renaming a Todo Task", () =>
   withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
+      const taskChanges = yield* openSqliteTaskChangeTaskPersistence(taskChangeTaskOperations);
       const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Approved title", description: "Intent", now });
       yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), now);
@@ -153,7 +154,7 @@ it.scoped(
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
-        const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
+        const taskChanges = yield* openSqliteTaskChangeTaskPersistence(taskChangeTaskOperations);
         const repository = yield* RepositorySql;
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
           yield* tasks.createTask({ title, description: `${title} intent`, now });
