@@ -194,6 +194,26 @@ A repository worker performs one bounded advancement pass:
 
 The Watcher must not reproduce Task eligibility, Change reconciliation, or terminal cleanup policy.
 
+## Open questions for pull request readiness and remediation
+
+Before this plan is resumed, determine how the Global Watcher should participate in pull request readiness without owning Change Delivery policy or provider-specific workflow state.
+
+Resolve at least these questions:
+
+- What exact conditions distinguish completed Candidate Publication, readiness for human review, and merge eligibility?
+- Which configured post-publication checks must pass for the exact published head, and where is that selection authorized when repository-host branch protection is not the authority?
+- Should Change Submit wait for initial checks, should repository workers only make point-in-time observations, or should the workflow combine both behaviors?
+- Which readiness observations belong in Shared Repository State, when do later base-branch or provider changes make an earlier observation stale, and what should remain derived from current external facts?
+- How should Change Delivery distinguish a Candidate defect, a conflict, pending work, provider unavailability, and CI or provider infrastructure failure without converting each condition into a Finding?
+- Which bounded pull request conditions may request implementation work, and which conditions must remain waiting for human review, repository policy, or another external action?
+- What explicit authority permits the Watcher to resume or start remediation for an already published Open Change, and how does that authority interact with Herdr Interactive Sessions and Automatic Implementation capacity?
+- How should conflict remediation preserve the exact owned pull request and expected head, incorporate the latest Change Base, and require the complete Validation Gate before another push?
+- What provider-neutral Change Delivery interface lets repository workers observe and act through GitHub or a future publication provider without giving the Implementer direct provider access?
+- Does ongoing readiness observation create a required dependency on Candidate Publication facts that changes this plan's current dependency boundary?
+
+Keep observation, scheduling, implementation authorization, and remediation as separate decisions.
+Do not infer automatic remediation authority from repository enrollment or pull request observation.
+
 ## Automatic Implementation
 
 Automatic Implementation remains separate from Task Submission and Task Review.
