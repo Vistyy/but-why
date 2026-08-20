@@ -736,7 +736,7 @@ describe("Candidate Specialist Review phase", () => {
   );
 
   it.scoped(
-    "restores real Candidate mutations before an output-correction retry",
+    "restores real Candidate mutations before retries and the next reviewer",
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
@@ -770,23 +770,25 @@ describe("Candidate Specialist Review phase", () => {
             const cwd = input.commandCwd;
             if (cwd === undefined) throw new Error("Reviewer command directory was not supplied.");
             statuses.push(git(cwd, "status", "--porcelain=v1"));
-            if (invocations < 3) {
+            if (input.reviewer === "standards") {
               writeFileSync(join(cwd, ".but-why/config.json"), "mutated\n");
               git(cwd, "add", ".but-why/config.json");
               writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
-              return {
-                ok: false as const,
-                failure: new ReviewerExecutionFailed({
-                  kind: "output_contract",
-                  operationName: "decode_reviewer_output",
-                  message: "Structured output correction is required.",
+              if (invocations < 3) {
+                return {
+                  ok: false as const,
+                  failure: new ReviewerExecutionFailed({
+                    kind: "output_contract",
+                    operationName: "decode_reviewer_output",
+                    message: "Structured output correction is required.",
+                    sessionReference: "session-1",
+                  }),
+                  sessionUsability: "unknown" as const,
+                  attempts: 1,
+                  stdout: "invalid output",
                   sessionReference: "session-1",
-                }),
-                sessionUsability: "unknown" as const,
-                attempts: 1,
-                stdout: "invalid output",
-                sessionReference: "session-1",
-              };
+                };
+              }
             }
             return success();
           }),
@@ -796,7 +798,7 @@ describe("Candidate Specialist Review phase", () => {
             validationRunId: 426614174001,
             changeId: captured.changeId,
             candidate: captured,
-            policies: [policy("standards")],
+            policies: [policy("standards"), policy("verification")],
             runtime: { review },
             commandExecutor,
             reviewerExecutor: unusedReviewerExecutor,
@@ -828,12 +830,13 @@ describe("Candidate Specialist Review phase", () => {
         );
 
         expect(result).toEqual({ outcome: "passed" });
-        expect(review).toHaveBeenCalledTimes(3);
-        expect(statuses).toEqual(["", "", ""]);
+        expect(review).toHaveBeenCalledTimes(4);
+        expect(statuses).toEqual(["", "", "", ""]);
         expect(git(worktreePath, "show", "HEAD:.but-why/config.json")).toBe(expectedConfig);
         expect(git(worktreePath, "status", "--porcelain=v1")).toBe("");
         expect(existsSync(join(worktreePath, "reviewer-untracked"))).toBe(false);
-        expect(results).toMatchObject([{ outcome: "passed" }]);
+        expect(results).toHaveLength(2);
+        expect(results.map(({ outcome }) => outcome)).toEqual(["passed", "passed"]);
         git(repo, "worktree", "remove", "--force", "--", worktreePath);
       }),
     15_000,

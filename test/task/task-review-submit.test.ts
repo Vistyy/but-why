@@ -128,12 +128,13 @@ it.effect("records Task Review preparation integrity failures and skips the revi
   }),
 );
 
-it.effect("rejects Task Review evidence after every reviewer invocation without retry", () =>
+it.effect("restores Task Review state before an output-correction retry", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
     yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
+    const originalConfig = readFileSync(join(root, ".but-why", "config.json"), "utf8");
     writeFileSync(
       globalConfigPath,
       JSON.stringify({
@@ -152,37 +153,52 @@ it.effect("rejects Task Review evidence after every reviewer invocation without 
       proposalPath,
     ]);
     let reviewerCalls = 0;
+    let observedConfig = "";
+    let observedStatus = "";
+    let observedUntracked = true;
     const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
       taskReviewerAgentRuntime: {
         review: (input) => {
           reviewerCalls += 1;
-          writeFileSync(join(input.commandCwd ?? ".", ".but-why", "config.json"), "changed\n");
-          return Effect.succeed({
-            ok: false as const,
-            failure: {
-              kind: "output_contract" as const,
-              operationName: "decode_reviewer_output",
-              message: "Structured output correction is required.",
+          const cwd = input.commandCwd ?? ".";
+          if (reviewerCalls === 1) {
+            writeFileSync(join(cwd, ".but-why", "config.json"), "changed\n");
+            expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd }).status).toBe(0);
+            writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
+            return Effect.succeed({
+              ok: false as const,
+              failure: {
+                kind: "output_contract" as const,
+                operationName: "decode_reviewer_output",
+                message: "Structured output correction is required.",
+                sessionReference: "session-1",
+              },
+              sessionUsability: "unknown" as const,
+              attempts: 1,
+              stdout: "invalid output",
               sessionReference: "session-1",
-            },
-            sessionUsability: "unknown" as const,
+            });
+          }
+          observedConfig = readFileSync(join(cwd, ".but-why", "config.json"), "utf8");
+          observedStatus = runTestProcess("git", ["status", "--porcelain=v1"], { cwd }).stdout;
+          observedUntracked = existsSync(join(cwd, "reviewer-untracked"));
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
             attempts: 1,
-            stdout: "invalid output",
+            stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
           });
         },
       },
     });
-    expect(submitted.status).toBe(1);
-    expect(reviewerCalls).toBe(1);
+    expect(submitted.status, submitted.stdout).toBe(0);
+    expect(reviewerCalls).toBe(2);
+    expect(observedConfig).toBe(originalConfig);
+    expect(observedStatus).toBe("");
+    expect(observedUntracked).toBe(false);
     expect(JSON.parse(submitted.stdout)).toMatchObject({
-      error: {
-        code: "task_review_tooling_failed",
-        review: {
-          outcome: "tooling_failed",
-          toolingFailure: { operation: "decode_reviewer_output" },
-        },
-      },
+      review: { outcome: "passed" },
     });
     const shown = yield* runByInProcessEffect(root, ["task", "review", "show", "1"]);
     expect(JSON.parse(shown.stdout)).toMatchObject({
