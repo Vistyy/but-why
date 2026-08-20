@@ -367,7 +367,7 @@ rule:
             - has:
                 regex: sendUserMessage
             - has:
-                regex: __butWhyTypeEvidenceFixture
+                regex: '__butWhyTypeEvidenceFixture\s*:\s*"extension-api"'
     - not:
         inside:
           all:
@@ -381,7 +381,7 @@ rule:
             - has:
                 regex: sessionManager
             - has:
-                regex: __butWhyTypeEvidenceFixture
+                regex: '__butWhyTypeEvidenceFixture\s*:\s*"extension-context"'
     - not:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
     - not:
