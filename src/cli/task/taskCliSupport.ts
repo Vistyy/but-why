@@ -75,15 +75,39 @@ export const withTasks = (
 
 export const withTaskChangeTasks = (
   environment: TaskCommandEnvironment,
-  use: (tasks: TaskChangeTaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+  use: (
+    tasks: Pick<
+      TaskChangeTaskUseCases,
+      "idPrefix" | "resolveTaskId" | "editTaskDependencies" | "reviseTask"
+    >,
+  ) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => {
   const injected = environment.taskChangeTaskUseCases;
   const program =
     injected === undefined
-      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), use).pipe(
+      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), (tasks) => use(tasks)).pipe(
           Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
         )
       : use(injected);
+  return program.pipe(
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+      ),
+    ),
+  );
+};
+
+export const withTaskRename = (
+  environment: TaskCommandEnvironment,
+  use: (tasks: TaskChangeTaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+): Effect.Effect<CliResult> => {
+  const program =
+    environment.taskChangeTaskUseCases === undefined
+      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), use).pipe(
+          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
+        )
+      : use(environment.taskChangeTaskUseCases);
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(

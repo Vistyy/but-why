@@ -55,6 +55,58 @@ describe("by task CLI process boundary", () => {
   );
 
   it.effect(
+    "renames a New Task through the packaged CLI boundary",
+    () =>
+      Effect.gen(function* () {
+        const root = createGitRepo();
+        expect((yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"])).status).toBe(0);
+        expect(
+          runBuiltByWithInput(
+            root,
+            "Task description",
+            {},
+            "task",
+            "create",
+            "--title",
+            "Original title",
+            "--file",
+            "-",
+          ).status,
+        ).toBe(0);
+
+        const renamed = runBuiltByWithEnv(
+          root,
+          {},
+          "task",
+          "rename",
+          "BY-1",
+          "--title",
+          "  Renamed title  ",
+        );
+        expect(renamed.status).toBe(0);
+        expect(renamed.stderr).toBe("");
+        expect(JSON.parse(renamed.stdout)).toEqual({
+          task: { id: "BY-1", title: "Renamed title", state: "new", noOp: false },
+        });
+
+        const noOp = runBuiltByWithEnv(
+          root,
+          {},
+          "task",
+          "rename",
+          "BY-1",
+          "--title",
+          "Renamed title",
+        );
+        expect(noOp.status).toBe(0);
+        expect(JSON.parse(noOp.stdout)).toEqual({
+          task: { id: "BY-1", title: "Renamed title", state: "new", noOp: true },
+        });
+      }),
+    90_000,
+  );
+
+  it.effect(
     "preserves piped bytes, structured results, exit status, and stdout framing",
     () =>
       Effect.gen(function* () {

@@ -10,12 +10,14 @@ import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
+import { normalizeTaskTitle } from "../../../task/taskTitle.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskMutationView,
   withTasks,
 } from "../taskCliSupport.js";
+import { taskTitleInputError } from "../taskTitle.js";
 
 export type TaskCreateCommand = {
   readonly title: string;
@@ -27,23 +29,8 @@ export const runCreateCommand = (
   command: TaskCreateCommand,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const title = command.title.trim();
-  if (title.length === 0)
-    return Effect.succeed(
-      usageError({
-        code: "empty_title",
-        message: "Task title must not be empty.",
-        help: ['Provide a non-empty title with `--title "..."`.'],
-      }),
-    );
-  if (/[\r\n]/u.test(title))
-    return Effect.succeed(
-      usageError({
-        code: "invalid_task_title",
-        message: "Task title must be one line.",
-        help: ['Provide a one-line title with `--title "..."`.'],
-      }),
-    );
+  const title = normalizeTaskTitle(command.title);
+  if (!title.ok) return Effect.succeed(taskTitleInputError(title));
   const description = readRecordingText(environment.cwd, command.file, environment.stdin);
   if (!description.ok) return Effect.succeed(descriptionInputError(description.error));
 
@@ -52,7 +39,7 @@ export const runCreateCommand = (
     if (!dependencies.ok) return Effect.succeed(dependencies.result);
     return Effect.map(
       tasks.createTask({
-        title,
+        title: title.title,
         description: description.content,
         now: environment.now().toISOString(),
         dependsOn: dependencies.taskIds,
