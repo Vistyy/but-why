@@ -4,8 +4,8 @@ import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "../change.js";
 import { branchNameForRef, changeBranchNameForRef } from "../changeBranch.js";
-import { removeRepositoryBranchUpstream } from "./localRepositoryBranchUpstream.js";
 import type { ChangeCleanupRemote, RemoteBranchDeletionResult } from "../changeCleanupRemote.js";
+import { removeRepositoryBranchUpstream } from "./localRepositoryBranchUpstream.js";
 
 export type { ChangeCleanupRemote } from "../changeCleanupRemote.js";
 
