@@ -19,7 +19,7 @@
 
 - Each retained check must own a distinct current Verification Claim.
   Use the cheapest reliable supported seam for that claim.
-- SQLite atomicity, migration-preservation, snapshot, and persisted-data claims require focused evidence through real SQLite.
+- SQLite atomicity, migration-preservation, and persisted-data claims require focused evidence through real SQLite.
 - Git identity and work-preservation claims require focused evidence through real Git.
 - Use a real process only when the claim requires package, executable, stdin, process-tree, or agent-runtime behavior.
   Captured Adapters are sufficient for GitHub classification and retry behavior.

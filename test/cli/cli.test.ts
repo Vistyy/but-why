@@ -73,7 +73,6 @@ describe("by CLI", () => {
       }
       expect(help).not.toContain("task task");
       expect(help).not.toContain("change change");
-      expect(help).not.toContain("- snapshot");
       for (const nativeCapability of [
         "(-h, --help)",
         "--version",
@@ -162,9 +161,6 @@ describe("by CLI", () => {
   it.effect("initializes the Git work tree root and renders setup decisions", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const unmanagedSnapshotPath = join(root, ".git", "but-why", "snapshots", "sentinel.sqlite");
-      mkdirSync(join(root, ".git", "but-why", "snapshots"), { recursive: true });
-      writeFileSync(unmanagedSnapshotPath, "unmanaged snapshot\n");
       const result = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
 
       expect(result.status).toBe(0);
@@ -199,7 +195,6 @@ describe("by CLI", () => {
         idPrefix: "BY",
       });
       expect(existsSync(sharedStatePath(root))).toBe(true);
-      expect(readFileSync(unmanagedSnapshotPath, "utf8")).toBe("unmanaged snapshot\n");
       expect(readdirSync(join(root, ".but-why/reviewers"))).toEqual([]);
       expect(existsSync(join(root, ".gitignore"))).toBe(false);
     }),
