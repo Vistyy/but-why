@@ -13,7 +13,10 @@ import {
   CandidateValidationPaths,
   CandidateValidationWorkspace,
 } from "../../src/change/candidateValidation/validateCandidate.js";
-import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
+import {
+  makeCreateSnapshotWorkspace,
+  type CreateSnapshotWorkspace,
+} from "../../src/change/validation/createSnapshotWorkspace.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import {
@@ -33,6 +36,7 @@ export const candidateValidationForTest = (input: {
   readonly repository: RepositorySqlConfig;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly agentPersistence?: AgentSessionPersistence;
+  readonly createSnapshotWorkspace?: CreateSnapshotWorkspace;
 }) => {
   const repositoryLayer = repositorySqlLayer(input.repository);
   const persistenceLayer = Layer.effect(
@@ -66,7 +70,8 @@ export const candidateValidationForTest = (input: {
         persistenceLayer,
         Layer.succeed(
           CandidateValidationWorkspace,
-          makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace),
+          input.createSnapshotWorkspace ??
+            makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace),
         ),
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,

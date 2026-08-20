@@ -269,6 +269,107 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
   }),
 );
 
+it.effect("keeps the dispatch failure active when Task Review cleanup fails", () =>
+  Effect.gen(function* () {
+    const taskId = publicTaskId("BY-1");
+    const reviewerProfile = {
+      agentProfile: "review",
+      scope: "global" as const,
+      profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test-model" } },
+    };
+    const reviewerPolicy = {
+      profile: reviewerProfile,
+      builtInInstructions: taskReviewBuiltInInstructions,
+      guidance: null,
+    };
+    const review: TaskReviewRecord = {
+      id: 1,
+      taskId,
+      proposal: { title: "Review", description: "Exact", dependencyIds: [] },
+      dependencyEvidence: [],
+      baseRef: "refs/heads/main",
+      baseCommit: "base-sha",
+      workspacePath: "/workspace",
+      state: "running",
+      outcome: null,
+      workspaceCleanup: "not_created",
+      cleanupBlockingReason: null,
+      toolingFailure: null,
+      findings: [],
+    };
+    let toolingFailure: TaskReviewRecord["toolingFailure"] = null;
+    const persistence: TaskReviewPersistence = {
+      reuseJudgment: () => Effect.succeed(undefined),
+      checkAdmission: () => Effect.succeed(undefined),
+      admit: () =>
+        Effect.succeed({
+          ok: true as const,
+          review,
+          policy: reviewerPolicy,
+          proposal: review.proposal,
+          dependencyEvidence: [],
+        }),
+      recordCleanup: () => Effect.void,
+      complete: () => Effect.die("Task Review must remain active after cleanup failure"),
+      abandon: () => Effect.die("Unexpected persistence operation"),
+      getById: () => Effect.succeed({ ...review, toolingFailure }),
+      getLatestForTask: () => Effect.succeed(undefined),
+      listForTask: () => Effect.succeed([]),
+      getReviewerAgentSession: () => Effect.succeed(undefined),
+      getReviewerConfiguration: () => Effect.succeed(undefined),
+      linkAgentInvocation: defaultAgentLink,
+      settleAgentReview: () => () => Effect.die("Dispatch failure must not settle an Invocation"),
+      recordActiveFailure: (_reviewId, failure) =>
+        Effect.sync(() => {
+          toolingFailure = failure;
+        }),
+      proposalIsCurrent: () => Effect.succeed(true),
+    };
+    const useCases = openTaskReviewUseCases({
+      repositoryRoot: "/repository",
+      repositoryCommonDirectory: "/common",
+      loadRepoConfig: () => ({ ok: true as const, config: { idPrefix: "BY" } }),
+      resolvePolicy: () => ({
+        ok: true as const,
+        policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
+      }),
+      persistence,
+      agentSessionStorageRoot: "/sessions",
+      agentPersistence: dispatchConflictAgentPersistence(),
+      reviewerRuntime: { review: () => Effect.die("Reviewer must not run") },
+      reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
+      readReviewBase: () => Effect.succeed({ ok: true as const, base: reviewBase(review) }),
+      verifyReviewBase: () => Effect.succeed({ ok: true as const }),
+      runWorkspace: (workspaceInput) =>
+        workspaceInput.runInWorkspace === undefined
+          ? Effect.succeed({ ok: true as const })
+          : workspaceInput
+              .runInWorkspace({
+                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                worktreePath: review.workspacePath,
+              })
+              .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
+      restoreWorkspace: () => Effect.void,
+      cleanupWorkspace: () =>
+        Effect.succeed({ workspace: "failed" as const, errorMessage: "Cleanup failed." }),
+      inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
+    });
+
+    const result = yield* useCases.submit(taskId, "2026-08-14T12:00:00.000Z");
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "task_review_recovery_required",
+      review: {
+        toolingFailure: {
+          operation: "dispatch_agent_invocation",
+          blockingInvocationId: 29,
+        },
+      },
+    });
+  }),
+);
+
 const reviewBase = (review: TaskReviewRecord): TaskReviewBase => ({
   ref: review.baseRef,
   commit: review.baseCommit,

@@ -15,6 +15,8 @@ import {
   type CandidateValidationService,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import type { CreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
+import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
@@ -271,6 +273,112 @@ describe("Candidate validation", () => {
             }),
           ],
         });
+      }),
+    10_000,
+  );
+
+  it.scoped(
+    "keeps dispatch evidence and the Validation Run active when cleanup fails",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
+        if (!captured.ok) throw new Error(captured.code);
+        yield* installAcceptanceContext(mainCheckout, captured.changeId);
+        const agentPersistence: AgentSessionPersistence = {
+          beginInvocation: () =>
+            Effect.succeed({
+              ok: false as const,
+              code: "concurrent_unsettled_invocation" as const,
+              invocationId: 73,
+            }),
+          settleInvocation: () => Effect.die("Dispatch failure must not settle an Invocation"),
+          readInvocationHistory: () => Effect.succeed([]),
+        };
+        const cleanupFailureWorkspace: CreateSnapshotWorkspace = (workspaceInput) =>
+          Effect.gen(function* () {
+            if (workspaceInput.runInWorkspace === undefined) {
+              return yield* Effect.die("Expected Validation Run workspace execution");
+            }
+            const execution = yield* Effect.either(
+              workspaceInput.runInWorkspace({
+                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                worktreePath: workspaceInput.repositoryRoot,
+              }),
+            );
+            const cleanupResult = { workspace: "failed" as const, errorMessage: "Cleanup failed." };
+            yield* workspaceInput.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void;
+            if (
+              execution._tag === "Left" &&
+              execution.left instanceof InfrastructureToolingFailed
+            ) {
+              return {
+                ok: false as const,
+                toolingFailure: execution.left,
+                cleanupResult,
+              };
+            }
+            if (execution._tag === "Right" && execution.right.outcome === "tooling_failed") {
+              return {
+                ok: false as const,
+                toolingFailure: new InfrastructureToolingFailed({
+                  operationName: "dispatch_agent_invocation",
+                  message: "Agent Invocation 73 dispatch was blocked.",
+                  blockingInvocationId: 73,
+                }),
+                cleanupResult,
+              };
+            }
+            return yield* Effect.die("Expected the dispatch conflict to fail Validation Run");
+          });
+        const validation = candidateValidationForTest({
+          localRepositoryRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+          agentPersistence,
+          createSnapshotWorkspace: cleanupFailureWorkspace,
+        });
+
+        const result = yield* validateAcceptanceContextCandidate(validation, {
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+        });
+
+        expect(result).toMatchObject({ ok: false, code: "active_validation_run" });
+        if (!result.ok && "toolingFailures" in result) {
+          expect(result.toolingFailures).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                operationName: "dispatch_agent_invocation",
+                blockingInvocationId: 73,
+              }),
+            ]),
+          );
+        }
+        if (result.ok || !("code" in result) || result.code !== "active_validation_run") return;
+        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+          state: "running",
+          outcome: null,
+          cleanup: { state: "pending", blockingReason: "Cleanup failed." },
+        });
+        const shown = yield* runByInProcessEffect(mainCheckout, [
+          "validation-run",
+          "show",
+          String(result.validationRunId),
+        ]);
+        expect(shown.status).toBe(0);
+        expect(JSON.parse(shown.stdout)).toMatchObject({
+          validationRun: { state: "running", outcome: null },
+        });
+        expect(JSON.parse(shown.stdout).toolingFailures).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              operationName: "dispatch_agent_invocation",
+              blockingInvocationId: 73,
+            }),
+          ]),
+        );
       }),
     10_000,
   );

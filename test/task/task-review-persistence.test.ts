@@ -14,11 +14,12 @@ import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskRev
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
+import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
-import { createGitRepo } from "../support/by-cli.js";
+import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { withTemporaryRepositoryState, withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 
@@ -37,6 +38,74 @@ const policy = {
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,
 };
+
+it.effect("persists dispatch identity through Task Review inspection and CLI output", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+    expect(initialized.status, initialized.stdout).toBe(0);
+    const loaded = openRepositoryRuntime(root);
+    if (!loaded.ok) throw new Error(`Could not open repository: ${loaded.error.code}`);
+    yield* loaded.runtime.provide(
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence();
+        const reviews = yield* openSqliteTaskReviewPersistence();
+        const taskId = publicTaskId("BY-1");
+        yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+        const admitted = yield* reviews.admit({
+          taskId,
+          policy,
+          baseRef: "refs/heads/main",
+          baseCommit: "a".repeat(40),
+          now,
+        });
+        if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
+        yield* reviews.recordCleanup(admitted.review.id, "removed", now);
+        const failure = {
+          operation: "dispatch_agent_invocation" as const,
+          message: "Agent Invocation dispatch was blocked.",
+          blockingInvocationId: 29,
+        };
+        yield* reviews.recordActiveFailure(admitted.review.id, failure, now);
+        const completed = yield* reviews.complete({
+          reviewId: admitted.review.id,
+          findings: [],
+          toolingFailure: failure,
+          now,
+        });
+        expect(completed).toMatchObject({
+          ok: true,
+          outcome: "tooling_failed",
+          review: { toolingFailure: failure },
+        });
+      }),
+    );
+
+    const reviewShown = yield* runByInProcessEffect(root, ["task", "review", "show", "1"]);
+    expect(reviewShown.status, reviewShown.stdout).toBe(0);
+    expect(JSON.parse(reviewShown.stdout)).toMatchObject({
+      review: {
+        toolingFailure: {
+          operation: "dispatch_agent_invocation",
+          blockingInvocationId: 29,
+        },
+        agentSession: { invocations: [] },
+      },
+    });
+    const taskShown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(taskShown.status, taskShown.stdout).toBe(0);
+    expect(JSON.parse(taskShown.stdout)).toMatchObject({
+      task: {
+        review: {
+          toolingFailure: {
+            operation: "dispatch_agent_invocation",
+            blockingInvocationId: 29,
+          },
+        },
+      },
+    });
+  }),
+);
 
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
   withTemporaryRepositoryState(() =>
