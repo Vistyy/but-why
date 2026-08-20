@@ -383,4 +383,34 @@ describe("Task dependency CLI", () => {
       });
     }),
   );
+
+  it.effect("maps linked Task dependency rejection through Task/Change coordination", () =>
+    Effect.gen(function* () {
+      let coordinatedCalls = 0;
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["task", "dependencies", "add", "BY-1", "--depends-on", "BY-2"],
+        now,
+        {
+          taskChangeTaskUseCases: dependencyErrorTaskChangeTaskUseCases({
+            editTaskDependencies: () => {
+              coordinatedCalls += 1;
+              return Effect.succeed({ ok: false, code: "dependencies_locked", state: "new" });
+            },
+          }),
+        },
+      );
+
+      expect(coordinatedCalls).toBe(1);
+      expectJsonError(result, {
+        error: {
+          code: "dependencies_locked",
+          message: "Dependencies for task BY-1 are locked after Start.",
+          taskId: "BY-1",
+          state: "new",
+        },
+        help: ["Dependency edits are available only before Change Start."],
+      });
+    }),
+  );
 });
