@@ -93,7 +93,7 @@ export const restoreDisposableWorkspace = (input: {
     yield* verifyOwnedDetachedWorktree(input);
     yield* runRestorationCommand(
       input,
-      `git reset --hard ${shellQuote(input.expectedCommitSha)} && git clean -ffd -- .`,
+      `git reset --hard ${shellQuote(input.expectedCommitSha)} && git clean -fd -- .`,
     );
     yield* verifyOwnedDetachedWorktree(input, true);
     const clean = yield* runWorkspaceCommand(
@@ -122,6 +122,19 @@ const verifyOwnedDetachedWorktree = (
       if (resolve(product.worktreePath) !== resolve(input.commandCwd) || !product.detached) {
         return yield* restorationFailed(
           "Disposable Workspace ownership or detached state could not be verified.",
+        );
+      }
+      const activeCommonDirectory = yield* runWorkspaceCommand(
+        input,
+        "git rev-parse --path-format=absolute --git-common-dir",
+      );
+      if (
+        activeCommonDirectory.exitCode !== 0 ||
+        resolve(activeCommonDirectory.stdout.trim()) !==
+          resolve(input.workspaceIdentity.repositoryCommonDirectory)
+      ) {
+        return yield* restorationFailed(
+          "Disposable Workspace Git Common Directory does not match its owned repository.",
         );
       }
       if (requireExpectedHead && product.head !== input.expectedCommitSha) {

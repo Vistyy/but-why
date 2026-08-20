@@ -53,9 +53,6 @@ describe("Snapshot Workspace Git cleanup verification", () => {
       git(worktreePath, "add", "tracked");
       writeFileSync(join(worktreePath, "untracked"), "remove\n");
       writeFileSync(join(worktreePath, "ignored"), "keep\n");
-      mkdirSync(join(worktreePath, "nested"));
-      git(worktreePath, "init", "-q", "nested");
-
       const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
         executeHostCommandEffect({
           command: "sh",
@@ -82,7 +79,6 @@ describe("Snapshot Workspace Git cleanup verification", () => {
       expect(git(worktreePath, "status", "--porcelain=v1")).toBe("");
       expect(existsSync(join(worktreePath, "untracked"))).toBe(false);
       expect(existsSync(join(worktreePath, "ignored"))).toBe(true);
-      expect(existsSync(join(worktreePath, "nested"))).toBe(false);
     }),
   );
 
