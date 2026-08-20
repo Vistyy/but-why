@@ -130,3 +130,11 @@ invalid:
   - import { loadTaskContextInspection } from "../../../taskChange/composition/loadTaskContextInspection.js";
   - import { queryTaskChangeProjection } from "../../../taskChange/inspectTaskChange.js";
   - import { inspectChange } from "../../../change/inspectChange.js";
+---
+id: linked-task-mutations-use-coordination
+valid:
+  - environment.taskChangeTaskUseCases.editTaskDependencies
+  - environment.taskChangeTaskUseCases.reviseTask
+invalid:
+  - environment.taskUseCases.editTaskDependencies
+  - environment.taskUseCases.reviseTask

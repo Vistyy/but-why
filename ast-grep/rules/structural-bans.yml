@@ -241,3 +241,15 @@ rule:
   all:
     - kind: import_statement
     - regex: '[\s\S]*from\s+["`][^"`]*(?:/change/|/taskChange/)[^"`]*["`][\s\S]*'
+---
+# Task dependency edits and revision must not obtain coordination operations from the generic Task use-case set.
+id: linked-task-mutations-use-coordination
+language: TypeScript
+severity: error
+message: Do not route linked Task dependency edits or Task revision through generic TaskUseCases; use the explicit Task/Change coordination use-case seam.
+files:
+  - src/cli/task/taskCliSupport.ts
+rule:
+  any:
+    - pattern: environment.taskUseCases.editTaskDependencies
+    - pattern: environment.taskUseCases.reviseTask
