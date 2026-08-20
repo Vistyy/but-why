@@ -55,6 +55,14 @@
     },
     "zones": [
       {
+        "name": "task-adapters",
+        "patterns": ["src/task/adapters/**"]
+      },
+      {
+        "name": "task-change-adapters",
+        "patterns": ["src/taskChange/adapters/**"]
+      },
+      {
         "name": "adapters",
         "patterns": ["src/**/adapters/**", "src/sqlite/**"]
       },
@@ -118,6 +126,14 @@
     ],
     "rules": [
       {
+        "from": "task-adapters",
+        "allow": ["adapters", "agent", "repository-runtime", "shared", "task"]
+      },
+      {
+        "from": "task-change-adapters",
+        "allow": ["adapters", "change", "repository-runtime", "shared", "task", "task-change"]
+      },
+      {
         "from": "adapters",
         "allow": ["agent", "change", "repository-runtime", "shared", "task", "task-change"]
       },
@@ -131,7 +147,16 @@
       },
       {
         "from": "task-composition",
-        "allow": ["adapters", "agent", "repository-runtime", "reviewer-prompts", "shared", "task"]
+        "allow": [
+          "adapters",
+          "agent",
+          "repository-runtime",
+          "reviewer-prompts",
+          "shared",
+          "task",
+          "task-adapters",
+          "task-change-adapters"
+        ]
       },
       {
         "from": "task-change-composition",
@@ -142,7 +167,9 @@
           "repository-runtime",
           "shared",
           "task",
-          "task-change"
+          "task-adapters",
+          "task-change",
+          "task-change-adapters"
         ]
       },
       {
@@ -157,6 +184,7 @@
           "change",
           "repository-runtime",
           "shared",
+          "task-change-adapters",
           "task-change-composition"
         ]
       },
@@ -202,7 +230,9 @@
           "reviewer-prompts",
           "shared",
           "task",
+          "task-adapters",
           "task-change",
+          "task-change-adapters",
           "task-change-composition",
           "task-composition"
         ]
