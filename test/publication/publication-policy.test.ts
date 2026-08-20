@@ -8,8 +8,8 @@ import type {
   GitHubPullRequest,
   GitHubPullRequestCreationRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
-import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
 import { localCandidatePublicationGit } from "../../src/change/publication/adapters/localCandidatePublicationGit.js";
+import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
