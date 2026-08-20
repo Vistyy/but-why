@@ -360,6 +360,8 @@ rule:
             - kind: variable_declarator
             - regex: '^api'
             - has:
+                pattern: api
+            - has:
                 pattern: $VALUE as unknown as ExtensionAPI
             - has:
                 regex: sendUserMessage
@@ -371,6 +373,8 @@ rule:
           all:
             - kind: variable_declarator
             - regex: '^context'
+            - has:
+                pattern: context
             - has:
                 pattern: $VALUE as unknown as ExtensionContext
             - has:
