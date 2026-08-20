@@ -1,6 +1,6 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-import { Cause, Clock, Effect, Option } from "effect";
+import { Cause, Clock, Data, Effect, Option } from "effect";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
@@ -17,6 +17,10 @@ import type {
   AgentSessionPersistence,
   AgentSessionSqlLink,
 } from "./agentSession.js";
+
+class TranscriptDiscoveryFailed extends Data.TaggedError("TranscriptDiscoveryFailed")<{
+  readonly cause: unknown;
+}> {}
 
 export type AgentExecutionEvidence = {
   readonly agentSessionId: number;
@@ -135,7 +139,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
                       input.sessionStorageRoot,
                       dispatch.dispatch.piSessionId,
                     ),
-                  catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+                  catch: (cause) => new TranscriptDiscoveryFailed({ cause }),
                 }),
               ),
             )
