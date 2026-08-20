@@ -735,6 +735,94 @@ describe("Candidate Specialist Review phase", () => {
     }),
   );
 
+  it.scoped("restores the workspace after an interrupted reviewer", () =>
+    Effect.gen(function* () {
+      const repo = candidateReadyRepo();
+      const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
+      if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+      const workspaceId = "validation-run-426614174002";
+      const repositoryCommonDirectory = commonDirectory(repo);
+      const worktreePath = expectedSnapshotWorkspacePath(repositoryCommonDirectory, 426614174002);
+      mkdirSync(dirname(worktreePath), { recursive: true });
+      git(repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
+      const expectedConfig = git(worktreePath, "show", "HEAD:.but-why/config.json");
+      const results: Parameters<
+        NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
+      >[0][] = [];
+      const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
+        Effect.sync(() => {
+          const result = runTestProcess("bash", ["-lc", command], {
+            cwd: options?.cwd ?? worktreePath,
+          });
+          return {
+            exitCode: result.status ?? 1,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          };
+        });
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+        Effect.gen(function* () {
+          writeFileSync(join(worktreePath, ".but-why/config.json"), "interrupted\n");
+          git(worktreePath, "add", ".but-why/config.json");
+          writeFileSync(join(worktreePath, "reviewer-untracked"), "remove\n");
+          return yield* Effect.interrupt;
+        }),
+      );
+      const result = yield* Effect.suspend(() =>
+        runSpecialistReviewPhase({
+          validationRunId: 426614174002,
+          changeId: captured.changeId,
+          candidate: captured,
+          policies: [policy("standards")],
+          runtime: { review },
+          commandExecutor,
+          reviewerExecutor: unusedReviewerExecutor,
+          artifactsRoot: createTestWorkspace(),
+          commandCwd: worktreePath,
+          resourceRoot: worktreePath,
+          workspaceIdentity: {
+            repositoryRoot: repo,
+            repositoryCommonDirectory,
+            workspaceId,
+          },
+          sessionStorageRoot: createTestWorkspace(),
+          restoreWorkspace: restoreDisposableWorkspace,
+          agentPersistence: defaultAgentPersistence(),
+          getAgentSession: () => Effect.succeed(undefined),
+          linkAgentInvocation: () => () => Effect.void,
+          settleAgentInvocationResult: (settled) => {
+            results.push(settled);
+            return () => Effect.void;
+          },
+          recordSpecialistResult: (specialistResult) =>
+            Effect.sync(() => {
+              results.push({ ...specialistResult, phase: "specialist_review" });
+            }),
+          allowedUntrackedFiles: [],
+          listArtifacts: () => Effect.succeed([]),
+          listPreviousCandidateReviewerFindings: () => Effect.succeed([]),
+        }),
+      );
+
+      expect(result).toEqual({ outcome: "tooling_failed" });
+      expect(review).toHaveBeenCalledOnce();
+      expect(git(worktreePath, "rev-parse", "HEAD")).toBe(captured.headSha);
+      expect(git(worktreePath, "show", "HEAD:.but-why/config.json")).toBe(expectedConfig);
+      expect(git(worktreePath, "status", "--porcelain=v1")).toBe("");
+      expect(existsSync(join(worktreePath, "reviewer-untracked"))).toBe(false);
+      expect(results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            toolingFailure: expect.objectContaining({
+              operationName: "agent_invocation_interrupted",
+            }),
+          }),
+        ]),
+      );
+      git(repo, "worktree", "remove", "--force", "--", worktreePath);
+    }),
+  );
+
   it.scoped(
     "restores real Candidate mutations before retries and the next reviewer",
     () =>
