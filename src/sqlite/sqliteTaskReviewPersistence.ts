@@ -681,25 +681,17 @@ const requireTaskReviewInvocationEvidence = (
         "Passing and Finding-blocked Task Reviews require Agent Invocation evidence",
       );
     }
-    if (invocations.some((invocation) => invocation.taskOwned !== 1)) {
+    if (
+      invocations.some(
+        (invocation) =>
+          invocation.taskOwned !== 1 ||
+          invocation.settledAt === null ||
+          invocation.settlementKind === null,
+      )
+    ) {
       return yield* invalid(
         "complete Task Review",
-        "Every linked Task Review Invocation must be Task-owned",
-      );
-    }
-    const unsettled = invocations.filter(
-      (invocation) => invocation.settledAt === null || invocation.settlementKind === null,
-    );
-    if (outcome !== "tooling_failed" && unsettled.length > 0) {
-      return yield* invalid(
-        "complete Task Review",
-        "Every linked Task Review Invocation must be settled",
-      );
-    }
-    if (outcome === "tooling_failed" && unsettled.length > 1) {
-      return yield* invalid(
-        "complete Task Review",
-        "A Tooling-failed Task Review cannot contain multiple unsettled Invocations",
+        "Every linked Task Review Invocation must be Task-owned and settled",
       );
     }
     if (
