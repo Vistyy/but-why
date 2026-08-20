@@ -31,6 +31,7 @@ export const fakeTaskChangeTaskUseCases = (
     readonly idPrefix: string;
     readonly resolveTaskId: TaskChangeTaskUseCases["resolveTaskId"];
     readonly editTaskDependencies: SyncMethod<TaskChangeTaskUseCases["editTaskDependencies"]>;
+    readonly renameTask: SyncMethod<TaskChangeTaskUseCases["renameTask"]>;
     readonly reviseTask: SyncMethod<TaskChangeTaskUseCases["reviseTask"]>;
   }> = {},
 ): TaskChangeTaskUseCases => {
@@ -41,6 +42,7 @@ export const fakeTaskChangeTaskUseCases = (
       taskId,
     }),
     editTaskDependencies: () => unexpectedTaskChange("editTaskDependencies"),
+    renameTask: () => unexpectedTaskChange("renameTask"),
     reviseTask: () => unexpectedTaskChange("reviseTask"),
     ...overrides,
   };
@@ -49,6 +51,7 @@ export const fakeTaskChangeTaskUseCases = (
     idPrefix: sync.idPrefix,
     resolveTaskId: sync.resolveTaskId,
     editTaskDependencies: (...args) => Effect.succeed(sync.editTaskDependencies(...args)),
+    renameTask: (...args) => Effect.succeed(sync.renameTask(...args)),
     reviseTask: (...args) => Effect.succeed(sync.reviseTask(...args)),
   };
 };
