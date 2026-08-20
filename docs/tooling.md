@@ -18,7 +18,9 @@ Change Submit owns the configured blocking Check and review phases.
 During Change implementation, use focused verification and let Change Submit run the configured repository-wide Check.
 
 `just health` is optional advisory code-health analysis.
-It reports complexity, duplication, and non-error Effect diagnostics without rerunning tests or generating coverage.
+It reports intrinsic Fallow complexity and Effect warning diagnostics without using coverage artifacts, reporting routine duplication findings, rerunning tests, or generating coverage.
+Health findings are advisory and the command succeeds when retained findings exist.
+Analyzer failures or invalid analyzer output fail the command.
 Health findings become implementation work only when repository evidence establishes a concrete defect or maintenance cost.
 
 Repository-wide quality, unselected test, and unselected coverage workloads share a capacity lock.
@@ -58,7 +60,7 @@ This procedure requires no checksum, manifest, rehearsal, backup verification, a
 
 Behavior tests own runtime contracts at supported interfaces.
 The output codec owns JSON serialization.
-Fallow owns dead-code, dependency, and configured architecture boundaries.
+Fallow owns complexity health, dead-code, dependency, and configured architecture boundaries.
 ast-grep owns configured structural TypeScript contracts.
 Documentation checks own reader-visible links and anchors.
 The package contract test owns packed contents, lazy command loading, installed runtime behavior, and portable asset availability.
