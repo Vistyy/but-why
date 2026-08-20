@@ -101,7 +101,7 @@ export const restoreDisposableWorkspace = (input: {
       "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
     );
     const [head, ...status] = clean.stdout.trimEnd().split("\n");
-    if (head !== input.expectedCommitSha || status.length > 0) {
+    if (clean.exitCode !== 0 || head !== input.expectedCommitSha || status.length > 0) {
       return yield* restorationFailed("Disposable Workspace was not clean after restoration.");
     }
   });
