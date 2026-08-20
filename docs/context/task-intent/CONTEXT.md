@@ -88,6 +88,10 @@ _Avoid_: Acceptance Context, dependency evidence, Task revision
 **Review Base**:
 The invoking current worktree branch ref and exact commit captured for one Task Review.
 Repository Preparation and reviewer execution use a disposable exact workspace at that commit.
+A Task Reviewer may temporarily modify that workspace to test a bounded hypothesis, but the exact commit remains the review subject.
+After every Agent Invocation, But Why restores the detached workspace to the Review Base commit, tracked files, index, and clean standard Git working tree before a retry or further reviewer execution.
+Ignored files remain outside this restoration boundary.
+Failure to terminate the reviewer, restore the workspace, or verify its clean identity produces a Task Review Tooling Failure and prevents further reviewer execution.
 _Avoid_: Change Base, mutable branch tip, Candidate
 
 **Task Revision**:

@@ -257,7 +257,6 @@ const runSpecialist = (
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
-      allowedUntrackedFiles: input.allowedUntrackedFiles,
       expectedHeadSha: input.candidate.headSha,
       makeFindings: (result) =>
         result.ok

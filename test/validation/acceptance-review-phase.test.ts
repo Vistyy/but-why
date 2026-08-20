@@ -505,8 +505,8 @@ describe("Acceptance Review phase", () => {
           findings: [],
           artifactRecords: [],
           toolingFailure: {
-            errorKind: "git_tooling_failed",
-            operationName: "verify_candidate_head",
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "verify_acceptance_review_candidate",
           },
         },
       ]);
@@ -552,12 +552,33 @@ const acceptancePhaseFixture = (
     NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][] = [];
   let integrityCheck = 0;
-  const commandExecutor = () =>
-    Effect.succeed({
+  const commandExecutor = (command: string) => {
+    if (command === "git worktree list --porcelain") {
+      return Effect.succeed({
+        exitCode: 0,
+        stdout: `worktree ${options.commandCwd ?? "/captured/snapshot-workspace"}\nHEAD ${exactCandidate.headSha}\ndetached\n`,
+        stderr: "",
+      });
+    }
+    if (command === "git rev-parse --show-toplevel") {
+      return Effect.succeed({
+        exitCode: 0,
+        stdout: `${options.commandCwd ?? "/captured/snapshot-workspace"}\n`,
+        stderr: "",
+      });
+    }
+    if (command === "git symbolic-ref --quiet HEAD") {
+      return Effect.succeed({ exitCode: 1, stdout: "", stderr: "" });
+    }
+    if (command.startsWith("git reset --hard") || command === "git clean -fd -- .") {
+      return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
+    }
+    return Effect.succeed({
       exitCode: 0,
       stdout: `${options.observedHeadShas?.[integrityCheck++] ?? options.observedHeadSha ?? exactCandidate.headSha}\n`,
       stderr: "",
     });
+  };
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
   const phasePolicy = options.policy ?? policy;
   const agentPersistence = options.agentPersistence ?? defaultAgentPersistence();

@@ -7,6 +7,9 @@ import { describe } from "vitest";
 
 import { snapshotWorkspaceCleanupGit } from "../../src/change/validation/adapters/snapshotWorkspaceCleanupGit.js";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
+import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
+import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
+import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/disposableWorkspace.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -36,6 +39,42 @@ describe("Snapshot Workspace Git cleanup verification", () => {
       expect(yield* cleanup.cleanup(input)).toEqual({ workspace: "removed" });
       expect(yield* cleanup.cleanup(input)).toEqual({ workspace: "removed" });
       expect(existsSync(worktreePath)).toBe(false);
+    }),
+  );
+
+  it.effect("restores tracked state and removes non-ignored files after an invocation", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
+      const commitSha = git(repository, "rev-parse", "HEAD");
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, 131);
+      createSnapshotWorkspace(repository, worktreePath, commitSha);
+      writeFileSync(join(worktreePath, "tracked"), "changed\n");
+      git(worktreePath, "add", "tracked");
+      writeFileSync(join(worktreePath, "untracked"), "remove\n");
+      writeFileSync(join(worktreePath, "ignored"), "keep\n");
+
+      const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
+        executeHostCommandEffect({
+          command: "sh",
+          args: ["-c", command],
+          cwd: options?.cwd ?? worktreePath,
+        }).pipe(
+          Effect.mapError(
+            (error) => new WorkspaceCommandExecutionFailed({ message: error.message }),
+          ),
+        );
+      yield* restoreDisposableWorkspace({
+        commandExecutor,
+        commandCwd: worktreePath,
+        expectedCommitSha: commitSha,
+      });
+
+      expect(git(worktreePath, "rev-parse", "HEAD")).toBe(commitSha);
+      expect(git(worktreePath, "show", "HEAD:tracked")).toBe("candidate");
+      expect(git(worktreePath, "status", "--porcelain=v1")).toBe("");
+      expect(existsSync(join(worktreePath, "untracked"))).toBe(false);
+      expect(existsSync(join(worktreePath, "ignored"))).toBe(true);
     }),
   );
 
@@ -97,7 +136,8 @@ const initializedRepository = (): string => {
   git(repository, "config", "user.name", "But Why Test");
   git(repository, "config", "user.email", "but-why@example.test");
   writeFileSync(join(repository, "tracked"), "candidate\n");
-  git(repository, "add", "tracked");
+  writeFileSync(join(repository, ".gitignore"), "ignored\n");
+  git(repository, "add", "tracked", ".gitignore");
   git(repository, "commit", "-m", "Initialize repository");
   return repository;
 };

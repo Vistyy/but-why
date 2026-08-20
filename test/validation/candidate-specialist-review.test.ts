@@ -145,12 +145,30 @@ const phaseHarness = (): PhaseHarness => {
   const results: Parameters<
     NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][] = [];
-  const commandExecutor = () =>
-    Effect.succeed({
+  const commandExecutor = (command: string, options?: { readonly cwd?: string }) => {
+    const cwd = options?.cwd ?? artifactsRoot;
+    if (command === "git worktree list --porcelain") {
+      return Effect.succeed({
+        exitCode: 0,
+        stdout: `worktree ${cwd}\nHEAD ${candidate.headSha}\ndetached\n`,
+        stderr: "",
+      });
+    }
+    if (command === "git rev-parse --show-toplevel") {
+      return Effect.succeed({ exitCode: 0, stdout: `${cwd}\n`, stderr: "" });
+    }
+    if (command === "git symbolic-ref --quiet HEAD") {
+      return Effect.succeed({ exitCode: 1, stdout: "", stderr: "" });
+    }
+    if (command.startsWith("git reset --hard") || command === "git clean -fd -- .") {
+      return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
+    }
+    return Effect.succeed({
       exitCode: 0,
       stdout: `${candidate.headSha}\n`,
       stderr: "",
     });
+  };
 
   return {
     results,
@@ -430,12 +448,33 @@ describe("Candidate Specialist Review phase", () => {
                     candidate: captured,
                     policies,
                     runtime,
-                    commandExecutor: () =>
-                      Effect.succeed({
+                    commandExecutor: (command: string, options?: { readonly cwd?: string }) => {
+                      const cwd = options?.cwd ?? repo;
+                      if (command === "git worktree list --porcelain") {
+                        return Effect.succeed({
+                          exitCode: 0,
+                          stdout: `worktree ${cwd}\nHEAD ${captured.headSha}\ndetached\n`,
+                          stderr: "",
+                        });
+                      }
+                      if (command === "git rev-parse --show-toplevel") {
+                        return Effect.succeed({ exitCode: 0, stdout: `${cwd}\n`, stderr: "" });
+                      }
+                      if (command === "git symbolic-ref --quiet HEAD") {
+                        return Effect.succeed({ exitCode: 1, stdout: "", stderr: "" });
+                      }
+                      if (
+                        command.startsWith("git reset --hard") ||
+                        command === "git clean -fd -- ."
+                      ) {
+                        return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
+                      }
+                      return Effect.succeed({
                         exitCode: 0,
                         stdout: `${captured.headSha}\n`,
                         stderr: "",
-                      }),
+                      });
+                    },
                     reviewerExecutor: unusedReviewerExecutor,
                     artifactsRoot,
                     commandCwd: repo,
@@ -712,8 +751,8 @@ describe("Candidate Specialist Review phase", () => {
             findings: [],
             artifactRecords: [],
             toolingFailure: {
-              errorKind: "git_tooling_failed",
-              operationName: "verify_candidate_head",
+              errorKind: "infrastructure_tooling_failed",
+              operationName: "verify_specialist_review_candidate",
             },
           },
         ]);

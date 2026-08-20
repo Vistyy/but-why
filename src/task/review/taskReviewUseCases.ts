@@ -19,6 +19,7 @@ import {
   type DisposableWorktreeInspection,
   type ExactDisposableWorkspaceCleanupInput,
   type ExactDisposableWorkspaceCleanupResult,
+  restoreDisposableWorkspace,
   verifyDisposableWorkspaceIntegrity,
 } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
@@ -346,17 +347,18 @@ const submitTaskReview = (
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
                 afterInvocation: ({ result }) =>
                   Effect.gen(function* () {
-                    const integrity = yield* Effect.either(
-                      verifyDisposableWorkspaceIntegrity({
-                        commandExecutor: active.commandExecutor,
-                        commandCwd: active.worktreePath,
-                        expectedCommitSha: base.base.commit,
-                        allowedUntrackedFiles: [],
-                      }),
+                    const restored = yield* Effect.either(
+                      Effect.uninterruptible(
+                        restoreDisposableWorkspace({
+                          commandExecutor: active.commandExecutor,
+                          commandCwd: active.worktreePath,
+                          expectedCommitSha: base.base.commit,
+                        }),
+                      ),
                     );
-                    return integrity._tag === "Right"
+                    return restored._tag === "Right"
                       ? result
-                      : taskReviewerIntegrityFailureResult(result, integrity.left);
+                      : taskReviewerIntegrityFailureResult(result, restored.left);
                   }),
                 settleDomain: ({ result }) =>
                   Effect.gen(function* () {

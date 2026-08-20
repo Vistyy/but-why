@@ -180,7 +180,7 @@ it.effect("rejects Task Review evidence after every reviewer invocation without 
         code: "task_review_tooling_failed",
         review: {
           outcome: "tooling_failed",
-          toolingFailure: { operation: "verify_task_review_workspace" },
+          toolingFailure: { operation: "decode_reviewer_output" },
         },
       },
     });

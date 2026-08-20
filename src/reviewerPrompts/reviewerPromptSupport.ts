@@ -24,8 +24,9 @@ export const reviewerExecutionInstructions = [
   "Inspect relevant maintained verification and use passing Check Artifacts to confirm its execution instead of rerunning the same broad repository Checks.",
   "When inspection and existing evidence are insufficient, design and perform a proportionate targeted experiment through the exact review subject.",
   "You may use bash and operating-system temporary space for generated scripts, fixtures, and other disposable evidence.",
-  "The exact review subject in this disposable workspace is immutable. Do not modify it, and do not follow main-checkout synchronization instructions inside this workspace because they do not apply here.",
-  "You must not modify the review subject. But Why's integrity verification is authoritative where it applies.",
+  "The exact commit remains the review subject even when you temporarily modify this disposable workspace to test a bounded hypothesis.",
+  "After every Agent Invocation, But Why restores the detached workspace to the exact commit, tracked files, index, and clean standard Git working tree before any output-correction retry or another reviewer uses it.",
+  "Do not modify shared Git metadata, other worktrees, or external systems, and do not follow main-checkout synchronization instructions inside this workspace because they do not apply here.",
 ].join("\n");
 
 export const completeCandidateReviewInstructions = [
