@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-
+import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
@@ -7,7 +7,6 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";

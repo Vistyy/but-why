@@ -2,6 +2,10 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import {
+  openSqliteAgentSessionPersistence,
+  settleUnsettledAgentInvocations,
+} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
@@ -14,10 +18,6 @@ import {
 } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import {
-  openSqliteAgentSessionPersistence,
-  settleUnsettledAgentInvocations,
-} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 
 const configuration: AgentSessionConfiguration = {
