@@ -1,8 +1,12 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
 import {
+  commitButWhyConfigAndRecordDefault,
   createGitRepo,
   passTaskReviewFixture,
   runBuiltByWithEnv,
@@ -49,6 +53,101 @@ describe("by task CLI process boundary", () => {
         const context = yield* runByInProcessEffect(root, ["task", "context", "BY-1"]);
         expect(JSON.parse(context.stdout)).toMatchObject({
           task: { id: "BY-1", title: "Approved intent", description: "Original intent" },
+        });
+      }),
+    90_000,
+  );
+
+  it.effect(
+    "keeps linked Task Context independent from Change blocker resolutions",
+    () =>
+      Effect.gen(function* () {
+        const root = createGitRepo();
+        expect((yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"])).status).toBe(0);
+        expect(
+          runBuiltByWithInput(
+            root,
+            "Current Task description",
+            {},
+            "task",
+            "create",
+            "--title",
+            "Current Task title",
+            "--file",
+            "-",
+          ).status,
+        ).toBe(0);
+        yield* passTaskReviewFixture(root, "BY-1");
+        writeFileSync(
+          join(root, ".but-why", "config.json"),
+          `${JSON.stringify(
+            {
+              idPrefix: "BY",
+              prepare: { command: "true" },
+              validation: { checks: [{ id: "test", command: "true" }] },
+              review: { acceptance: { agentProfile: { scope: "global", name: "test" } } },
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        commitButWhyConfigAndRecordDefault(root);
+        const globalConfigPath = join(root, ".test-global-config.json");
+        writeFileSync(
+          globalConfigPath,
+          `${JSON.stringify(
+            {
+              agentProfiles: {
+                test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
+              },
+            },
+            null,
+            2,
+          )}\n`,
+        );
+
+        const started = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--task", "BY-1"],
+          undefined,
+          { globalConfigPath },
+        );
+        expect(started.status).toBe(0);
+        const changeId = (JSON.parse(started.stdout) as { change: { id: string } }).change.id;
+
+        const raised = runBuiltByWithInput(
+          root,
+          "Unsafe implementation requires an operator decision.",
+          {},
+          "change",
+          "blocker",
+          "raise",
+          changeId,
+          "--file",
+          "-",
+        );
+        expect(raised.status).toBe(0);
+        const resolved = runBuiltByWithInput(
+          root,
+          "Continue with the approved Task intent.",
+          {},
+          "change",
+          "blocker",
+          "resolve",
+          changeId,
+          "--file",
+          "-",
+        );
+        expect(resolved.status).toBe(0);
+
+        const context = yield* runByInProcessEffect(root, ["task", "context", "BY-1"]);
+        expect(context.status).toBe(0);
+        expect(JSON.parse(context.stdout)).toEqual({
+          task: {
+            id: "BY-1",
+            title: "Current Task title",
+            description: "Current Task description",
+          },
         });
       }),
     90_000,

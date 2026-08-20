@@ -1,13 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteChangeAuthorityPort } from "../../src/sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
-import { openSqliteTaskChangeLinkPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
-import { queryTaskContext } from "../../src/taskChange/inspectTaskChange.js";
 import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 
 const firstNow = "2026-08-09T12:00:00.000Z";
@@ -17,8 +14,6 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
   withTemporaryRepositoryState(({ repositoryRoot, commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const links = yield* openSqliteTaskChangeLinkPort();
-      const authority = yield* openSqliteChangeAuthorityPort();
       const starts = yield* openSqliteChangeStartPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "New prerequisite");
@@ -71,12 +66,6 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
         id: "BY-5",
         title: "Task with Resolution",
         description: "Description for Task with Resolution",
-      });
-      expect(yield* queryTaskContext({ tasks, links, authority }, publicTaskId("BY-5"))).toEqual({
-        id: "BY-5",
-        title: "Task with Resolution",
-        description: "Description for Task with Resolution",
-        resolutions: ["Approved resolution"],
       });
       expect(yield* starts.prepareTask(publicTaskId("BY-2"))).toMatchObject({
         ok: false,

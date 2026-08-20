@@ -33,7 +33,6 @@ import {
   type TaskChangeTaskUseCases,
   withTaskChangeTaskUseCases,
 } from "../../taskChange/composition/loadTaskChangeTaskUseCases.js";
-import type { TaskContextInspectionUseCases } from "../../taskChange/inspectTaskChange.js";
 
 export type TaskIdCommand = { readonly taskId: string };
 
@@ -44,7 +43,6 @@ export type TaskCommandEnvironment = {
   readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
   readonly taskChangeTaskUseCases?: TaskChangeTaskUseCases;
-  readonly taskContextInspectionUseCases?: TaskContextInspectionUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
