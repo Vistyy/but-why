@@ -529,6 +529,77 @@ it.effect("discovers an initial transcript after interruption and keeps it resum
   }),
 );
 
+it.effect("continues an interrupted invocation when transcript discovery fails", () =>
+  Effect.gen(function* () {
+    const root = yield* initializedRepository();
+    yield* withPersistence(root, (persistence) =>
+      Effect.gen(function* () {
+        const result = yield* executeAgentSession({
+          configuration,
+          agentPersistence: persistence,
+          linkInvocation: noOpLink,
+          reviewerRuntime: {
+            review: (reviewInput) => {
+              const header = `${JSON.stringify({
+                type: "session",
+                id: reviewInput.sessionId,
+                cwd: root,
+              })}\n`;
+              writeFileSync(join(root, "interrupted-first.jsonl"), header);
+              writeFileSync(join(root, "interrupted-second.jsonl"), header);
+              return Effect.interrupt;
+            },
+          },
+          reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
+          decodeOutput: (output) => Effect.succeed(output),
+          systemPrompt: "Act as the test Reviewer.",
+          prompt: "Review.",
+          continuationPrompt: "Continue.",
+          commandCwd: root,
+          resourceRoot: root,
+          profile: {
+            agentProfile: "review",
+            scope: "global",
+            profile: { agentRuntime: "pi", runtimeConfig: { model: configuration.model } },
+          },
+          reviewer: "test",
+          sessionStorageRoot: root,
+        });
+
+        expect(result.result).toMatchObject({
+          ok: false,
+          failure: {
+            kind: "process_execution",
+            operationName: "agent_invocation_interrupted",
+          },
+          sessionUsability: "unknown",
+        });
+        expect(result.result).not.toHaveProperty("sessionFilePath");
+        expect(result.evidence.invocations).toMatchObject([
+          {
+            settlementKind: "return_unknown",
+            continuation: {
+              transcriptPath: null,
+              unusableReason: expect.any(String),
+            },
+          },
+        ]);
+        expect(
+          yield* persistence.readInvocationHistory(result.evidence.agentSessionId),
+        ).toMatchObject([
+          {
+            settlementKind: "return_unknown",
+            continuation: {
+              transcriptPath: null,
+              unusableReason: expect.any(String),
+            },
+          },
+        ]);
+      }),
+    );
+  }),
+);
+
 it.effect("keeps an interrupted invocation resumable when its transcript is known", () =>
   Effect.gen(function* () {
     const root = yield* initializedRepository();
