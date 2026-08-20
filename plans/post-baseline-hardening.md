@@ -183,7 +183,7 @@ Investigate one Change-owned persisted-value decoder and one encoding path rathe
 
 Agent Invocation projection decoding appears in:
 
-- `src/sqlite/sqliteAgentSessionPersistence.ts`;
+- `src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.ts`;
 - `src/sqlite/sqliteTaskReviewPersistence.ts`;
 - `src/sqlite/sqliteValidationEvidenceStorage.ts`.
 
