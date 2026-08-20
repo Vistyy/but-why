@@ -35,7 +35,7 @@ export class DisposableWorkspaceIntegrityFailed extends Data.TaggedError(
   readonly message: string;
 }> {}
 
-export class DisposableWorkspaceRestorationFailed extends Data.TaggedError(
+class DisposableWorkspaceRestorationFailed extends Data.TaggedError(
   "DisposableWorkspaceRestorationFailed",
 )<{
   readonly message: string;

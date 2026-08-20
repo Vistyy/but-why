@@ -316,12 +316,30 @@ const runReviewPhases = (
           },
         ],
       });
-      const commandExecutor = () =>
-        Effect.succeed({
+      const commandExecutor = (command: string, options?: { readonly cwd?: string }) => {
+        const cwd = options?.cwd ?? ready.repo;
+        if (command === "git worktree list --porcelain") {
+          return Effect.succeed({
+            exitCode: 0,
+            stdout: `worktree ${cwd}\nHEAD ${captured.headSha}\ndetached\n`,
+            stderr: "",
+          });
+        }
+        if (command === "git rev-parse --show-toplevel") {
+          return Effect.succeed({ exitCode: 0, stdout: `${cwd}\n`, stderr: "" });
+        }
+        if (command === "git symbolic-ref --quiet HEAD") {
+          return Effect.succeed({ exitCode: 1, stdout: "", stderr: "" });
+        }
+        if (command.startsWith("git reset --hard") || command === "git clean -fd -- .") {
+          return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
+        }
+        return Effect.succeed({
           exitCode: 0,
           stdout: `${captured.headSha}\n`,
           stderr: "",
         });
+      };
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId: started.validationRunId,
         changeId: captured.changeId,
