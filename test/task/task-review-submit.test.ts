@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
+import { DisposableWorkspaceRestorationFailed } from "../../src/disposableWorkspace/disposableWorkspace.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import {
   readCurrentWorktreeReviewBase,
@@ -204,6 +206,199 @@ it.effect("restores Task Review state before an output-correction retry", () =>
     expect(JSON.parse(shown.stdout)).toMatchObject({
       review: { workspace: { cleanup: "removed" } },
     });
+  }),
+);
+
+it.effect("observes final Task Review restoration and restoration failure", () =>
+  Effect.gen(function* () {
+    const runScenario = (forceRestorationFailure: boolean) =>
+      Effect.gen(function* () {
+        const root = createGitRepo();
+        runTestProcess("git", ["config", "user.name", "But Why Test"], { cwd: root });
+        runTestProcess("git", ["config", "user.email", "but-why@example.test"], { cwd: root });
+        mkdirSync(join(root, ".but-why"), { recursive: true });
+        writeFileSync(join(root, ".but-why", "config.json"), "candidate\n");
+        runTestProcess("git", ["add", ".but-why/config.json"], { cwd: root });
+        runTestProcess("git", ["commit", "-m", "Candidate"], { cwd: root });
+        const baseCommit = runTestProcess("git", ["rev-parse", "HEAD"], {
+          cwd: root,
+        }).stdout.trim();
+        const repositoryCommonDirectory = runTestProcess(
+          "git",
+          ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+          { cwd: root },
+        ).stdout.trim();
+        const workspacePath = expectedTaskReviewWorkspacePath(repositoryCommonDirectory, 1);
+        mkdirSync(dirname(workspacePath), { recursive: true });
+        runTestProcess("git", ["worktree", "add", "--detach", "--", workspacePath, baseCommit], {
+          cwd: root,
+        });
+        const taskId = publicTaskId("BY-1");
+        const reviewerProfile = {
+          agentProfile: "review",
+          scope: "global" as const,
+          profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test-model" } },
+        };
+        const reviewerPolicy = {
+          profile: reviewerProfile,
+          builtInInstructions: taskReviewBuiltInInstructions,
+          guidance: null,
+        };
+        const review: TaskReviewRecord = {
+          id: 1,
+          taskId,
+          proposal: { title: "Review me", description: "Exact", dependencyIds: [] },
+          dependencyEvidence: [],
+          baseRef: "refs/heads/main",
+          baseCommit,
+          workspacePath,
+          state: "running",
+          outcome: null,
+          workspaceCleanup: "not_created",
+          cleanupBlockingReason: null,
+          toolingFailure: null,
+          findings: [],
+        };
+        let restoredStatus = "not-observed";
+        let restoredUntracked = true;
+        const persistence: TaskReviewPersistence = {
+          reuseJudgment: () => Effect.succeed(undefined),
+          checkAdmission: () => Effect.succeed(undefined),
+          admit: () =>
+            Effect.succeed({
+              ok: true as const,
+              review,
+              policy: reviewerPolicy,
+              proposal: review.proposal,
+              dependencyEvidence: [],
+            }),
+          recordCleanup: () => Effect.void,
+          complete: (completion) =>
+            completion.toolingFailure === undefined
+              ? Effect.succeed({
+                  ok: true as const,
+                  outcome: "passed" as const,
+                  review: {
+                    ...review,
+                    state: "complete" as const,
+                    outcome: "passed" as const,
+                    workspaceCleanup: "removed" as const,
+                    toolingFailure: null,
+                    findings: [],
+                  },
+                  task: { id: taskId, state: "todo" as const },
+                })
+              : Effect.succeed({
+                  ok: true as const,
+                  outcome: "tooling_failed" as const,
+                  review: {
+                    ...review,
+                    state: "complete" as const,
+                    outcome: "tooling_failed" as const,
+                    workspaceCleanup: "removed" as const,
+                    toolingFailure: completion.toolingFailure,
+                    findings: completion.findings,
+                  },
+                  task: { id: taskId, state: "todo" as const },
+                }),
+          abandon: () => Effect.die("Unexpected persistence operation"),
+          getById: () => Effect.succeed(review),
+          getLatestForTask: () => Effect.succeed(undefined),
+          listForTask: () => Effect.succeed([]),
+          getReviewerAgentSession: () => Effect.succeed(undefined),
+          getReviewerConfiguration: () => Effect.succeed(undefined),
+          linkAgentInvocation: defaultAgentLink,
+          settleAgentReview: () => () => Effect.void,
+          recordActiveFailure: () => Effect.die("Unexpected persistence operation"),
+          proposalIsCurrent: () => Effect.succeed(true),
+        };
+        const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
+          Effect.sync(() => {
+            const result = runTestProcess("bash", ["-lc", command], {
+              cwd: options?.cwd ?? workspacePath,
+            });
+            return {
+              exitCode: result.status ?? 1,
+              stdout: result.stdout,
+              stderr: result.stderr,
+            };
+          });
+        const reviews = openTaskReviewUseCases({
+          repositoryRoot: root,
+          repositoryCommonDirectory,
+          loadRepoConfig: () => ({ ok: true as const, config: { idPrefix: "BY" } }),
+          resolvePolicy: () => ({
+            ok: true as const,
+            policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
+          }),
+          persistence,
+          agentSessionStorageRoot: createTestWorkspace(),
+          agentPersistence: defaultAgentPersistence(),
+          reviewerRuntime: {
+            review: (input) =>
+              Effect.sync(() => {
+                const cwd = input.commandCwd ?? workspacePath;
+                writeFileSync(join(cwd, ".but-why/config.json"), "changed\n");
+                runTestProcess("git", ["add", ".but-why/config.json"], { cwd });
+                writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
+                return {
+                  ok: true as const,
+                  report: { findings: [] },
+                  attempts: 1,
+                  stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
+                };
+              }),
+          },
+          reviewerExecutor: { execute: () => Effect.die("unused") },
+          readReviewBase: () =>
+            Effect.succeed({
+              ok: true as const,
+              base: { ref: "refs/heads/main", commit: baseCommit },
+            }),
+          verifyReviewBase: () => Effect.succeed({ ok: true as const }),
+          runWorkspace: (workspaceInput) =>
+            workspaceInput.runInWorkspace === undefined
+              ? Effect.succeed({ ok: true as const })
+              : workspaceInput
+                  .runInWorkspace({ commandExecutor, worktreePath: workspacePath })
+                  .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
+          restoreWorkspace: (restoreInput) =>
+            restoreDisposableWorkspace(restoreInput).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  restoredStatus = runTestProcess("git", ["status", "--porcelain=v1"], {
+                    cwd: workspacePath,
+                  }).stdout;
+                  restoredUntracked = existsSync(join(workspacePath, "reviewer-untracked"));
+                }),
+              ),
+              Effect.flatMap(() =>
+                forceRestorationFailure
+                  ? Effect.fail(new DisposableWorkspaceRestorationFailed({ message: "forced" }))
+                  : Effect.void,
+              ),
+            ),
+          cleanupWorkspace: () => {
+            runTestProcess("git", ["worktree", "remove", "--force", "--", workspacePath], {
+              cwd: root,
+            });
+            return Effect.succeed({ workspace: "removed" as const });
+          },
+          inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
+        });
+        const result = yield* reviews.submit(taskId, "2026-08-11T12:05:00.000Z");
+        return { result, restoredStatus, restoredUntracked };
+      });
+
+    const passed = yield* runScenario(false);
+    expect(passed.result).toMatchObject({ ok: true, outcome: "passed" });
+    expect(passed.restoredStatus).toBe("");
+    expect(passed.restoredUntracked).toBe(false);
+
+    const failed = yield* runScenario(true);
+    expect(failed.result).toMatchObject({ ok: true, outcome: "tooling_failed" });
+    expect(failed.restoredStatus).toBe("");
+    expect(failed.restoredUntracked).toBe(false);
   }),
 );
 
