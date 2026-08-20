@@ -85,6 +85,7 @@ export const withTaskChangeTasks = (
           idPrefix: environment.taskUseCases.idPrefix,
           resolveTaskId: environment.taskUseCases.resolveTaskId,
           editTaskDependencies: environment.taskUseCases.editTaskDependencies,
+          renameTask: environment.taskUseCases.renameTask,
           reviseTask: environment.taskUseCases.reviseTask,
         });
   const program =

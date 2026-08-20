@@ -12,6 +12,7 @@ import {
   completeTask,
   editTaskDependencies,
   getTaskById,
+  renameTask,
   reviseTask,
   validateTaskDependencyEditTarget,
   validateTaskRevisionTarget,
@@ -20,6 +21,8 @@ import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.j
 import type {
   EditTaskDependenciesInput,
   EditTaskDependenciesResult,
+  RenameTaskInput,
+  RenameTaskResult,
   ReviseTaskInput,
   ReviseTaskResult,
 } from "../../../task/taskStore.js";
@@ -30,6 +33,9 @@ type TaskChangeTaskPersistence = {
   readonly editTaskDependencies: (
     input: EditTaskDependenciesInput,
   ) => Effect.Effect<EditTaskDependenciesResult, RepositoryStorageError>;
+  readonly renameTask: (
+    input: RenameTaskInput,
+  ) => Effect.Effect<RenameTaskResult, RepositoryStorageError>;
   readonly reviseTask: (
     input: ReviseTaskInput,
   ) => Effect.Effect<ReviseTaskResult, RepositoryStorageError>;
@@ -72,6 +78,27 @@ export const openSqliteTaskChangeTaskPersistence = () =>
               };
             }
             return yield* editTaskDependencies(sql, input, repository.idPrefix);
+          }),
+        ),
+      renameTask: (input) =>
+        repository.transactionImmediate("rename Task", (sql) =>
+          Effect.gen(function* () {
+            const current = yield* getTaskById(sql, input.taskId, repository.idPrefix);
+            if (current === undefined) {
+              return { ok: false as const, code: "task_not_found" as const };
+            }
+            if (current.title === input.title) {
+              return { ok: true as const, noOp: true, task: current };
+            }
+            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix);
+            if (link !== undefined) {
+              return {
+                ok: false as const,
+                code: "task_change_linked" as const,
+                changeId: link.changeId,
+              };
+            }
+            return yield* renameTask(sql, input, repository.idPrefix);
           }),
         ),
       reviseTask: (input) =>

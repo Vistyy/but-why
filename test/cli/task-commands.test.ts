@@ -9,6 +9,7 @@ import { runContextCommand } from "../../src/cli/task/commands/context.js";
 import { runContextApplyCommand } from "../../src/cli/task/commands/contextApply.js";
 import { runContextDraftCommand } from "../../src/cli/task/commands/contextDraft.js";
 import { runListCommand } from "../../src/cli/task/commands/list.js";
+import { runRenameCommand } from "../../src/cli/task/commands/rename.js";
 import { runReviseCommand } from "../../src/cli/task/commands/revise.js";
 import { runTaskShowCommand } from "../../src/cli/task/commands/show.js";
 import { runTaskSubmitCommand } from "../../src/cli/task/commands/submit.js";
@@ -471,6 +472,88 @@ describe("Task command Adapters", () => {
           help: ["Inspect the Change with `by change show change-1`."],
         },
       });
+    }),
+  );
+
+  it.effect("renders Task Rename results and validates the normalized title", () =>
+    Effect.gen(function* () {
+      const renamed = taskRecord({ title: "Renamed task" });
+      let input: unknown;
+      const commandEnvironment = environment(
+        fakeTaskUseCases({
+          renameTask: (value) => {
+            input = value;
+            return { ok: true, noOp: false, task: renamed };
+          },
+        }),
+        secondNow,
+      );
+
+      const result = yield* runRenameCommand(
+        { taskId: "BY-1", title: "  Renamed task  " },
+        commandEnvironment,
+      );
+      const noOp = yield* runRenameCommand(
+        { taskId: "BY-1", title: "same" },
+        environment(
+          fakeTaskUseCases({
+            renameTask: () => ({ ok: true, noOp: true, task: taskRecord({ title: "same" }) }),
+          }),
+        ),
+      );
+      const invalid = yield* runRenameCommand(
+        { taskId: "BY-1", title: "line\nbreak" },
+        commandEnvironment,
+      );
+
+      expect(input).toEqual({ taskId: "BY-1", title: "Renamed task" });
+      expect(result).toEqual({
+        exitCode: 0,
+        stdout: { task: { id: "BY-1", title: "Renamed task", state: "new", noOp: false } },
+      });
+      expect(noOp).toEqual({
+        exitCode: 0,
+        stdout: { task: { id: "BY-1", title: "same", state: "new", noOp: true } },
+      });
+      expect(invalid).toMatchObject({
+        exitCode: 2,
+        stdout: { error: { code: "invalid_task_title" } },
+      });
+    }),
+  );
+
+  it.effect("renders Task Rename lifecycle and Change-link rejections", () =>
+    Effect.gen(function* () {
+      const cases = [
+        {
+          result: {
+            ok: false as const,
+            code: "task_revision_required" as const,
+            state: "todo" as const,
+          },
+          code: "task_revision_required",
+        },
+        {
+          result: { ok: false as const, code: "task_change_linked" as const, changeId: "BY-C1" },
+          code: "task_change_linked",
+        },
+        {
+          result: {
+            ok: false as const,
+            code: "invalid_task_state" as const,
+            state: "done" as const,
+          },
+          code: "invalid_task_state",
+        },
+      ] as const;
+
+      for (const testCase of cases) {
+        const result = yield* runRenameCommand(
+          { taskId: "BY-1", title: "New title" },
+          environment(fakeTaskUseCases({ renameTask: () => testCase.result })),
+        );
+        expect(result).toMatchObject({ exitCode: 1, stdout: { error: { code: testCase.code } } });
+      }
     }),
   );
 

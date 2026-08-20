@@ -19,6 +19,22 @@ export type EditTaskDependenciesInput = {
   readonly prerequisiteTaskIds: readonly PublicTaskId[];
 };
 
+export type RenameTaskInput = {
+  readonly taskId: PublicTaskId;
+  readonly title: string;
+};
+
+export type RenameTaskResult =
+  | { readonly ok: true; readonly noOp: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
+  | { readonly ok: false; readonly code: "task_revision_required"; readonly state: "todo" }
+  | {
+      readonly ok: false;
+      readonly code: "invalid_task_state";
+      readonly state: "done" | "cancelled";
+    };
+
 export type EditTaskDependenciesResult =
   | {
       readonly ok: true;

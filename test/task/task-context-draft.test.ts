@@ -57,6 +57,7 @@ const unexpected = (operation: string): never => {
 const persistence = (overrides: Partial<TaskPersistence> = {}): TaskPersistence => ({
   createTask: () => unexpected("createTask"),
   editTaskDependencies: () => unexpected("editTaskDependencies"),
+  renameTask: () => unexpected("renameTask"),
   listTasks: () => unexpected("listTasks"),
   listActionableTasks: () => unexpected("listActionableTasks"),
   getTaskById: () => unexpected("getTaskById"),

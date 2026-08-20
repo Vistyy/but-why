@@ -27,6 +27,7 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
     resolveTaskId: (taskId) => ({ ok: true, taskId }),
     createTask: () => unexpected("createTask"),
     editTaskDependencies: () => unexpected("editTaskDependencies"),
+    renameTask: () => unexpected("renameTask"),
     listTasks: () => unexpected("listTasks"),
     listActionableTasks: () => unexpected("listActionableTasks"),
     getTaskById: () => unexpected("getTaskById"),
@@ -63,6 +64,7 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
       });
     },
     editTaskDependencies: (...args) => Effect.succeed(sync.editTaskDependencies(...args)),
+    renameTask: (...args) => Effect.succeed(sync.renameTask(...args)),
     listTasks: (...args) => Effect.succeed(sync.listTasks(...args)),
     listActionableTasks: (...args) => Effect.succeed(sync.listActionableTasks(...args)),
     getTaskById: (...args) => Effect.succeed(sync.getTaskById(...args)),
