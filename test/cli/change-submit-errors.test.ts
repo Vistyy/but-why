@@ -105,6 +105,37 @@ describe("Change Submit Change Policy errors", () => {
     }
   });
 
+  it("does not give pending-publication guidance after a safely retryable absent branch", () => {
+    expect(
+      submitResult(
+        {
+          ok: false,
+          code: "publication_tooling_failed",
+          evidence: {
+            operation: "branch_push",
+            classification: "rejected",
+            exitStatus: 1,
+          },
+          recoveryEvidence: {
+            operation: "remote_lookup",
+            classification: "conflict",
+            remoteBranchState: "retryable_absence",
+          },
+        },
+        "change-1",
+      ),
+    ).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          message: "The uncertain initial push was observed with an absent Remote Change Branch.",
+          recoveryEvidence: { remoteBranchState: "retryable_absence" },
+        },
+        help: ["Retry Change Submit after confirming the publication remote is available."],
+      },
+    });
+  });
+
   it("gives destination-specific recovery guidance", () => {
     expect(
       submitResult(

@@ -25,6 +25,11 @@ export type PublicationFailureEvidence = {
     | "response_parse_failure"
     | "unavailable"
     | "conflict";
+  readonly remoteBranchState?:
+    | "retryable_absence"
+    | "retained_prior_head"
+    | "unexpected_head"
+    | "unavailable";
   readonly reason?:
     | "unavailable"
     | "destination_count"

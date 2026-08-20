@@ -878,8 +878,195 @@ describe("GitHub pull request gateway", () => {
       classification: "rejected",
       exitStatus: 1,
     });
+    expect(result.recoveryEvidence).toEqual({
+      operation: "remote_lookup",
+      classification: "conflict",
+      remoteBranchState: "retryable_absence",
+    });
     expect(JSON.stringify(result)).not.toContain("https://");
     expect(JSON.stringify(result)).not.toContain("SUPERSECRET");
+  });
+
+  it("continues pull request creation after an uncertain push is observed at the Candidate head", () => {
+    const candidateHead = "a".repeat(40);
+    const gitCalls: (readonly string[])[] = [];
+    let remoteReads = 0;
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        if (args[0] === "rev-parse") return { ok: true, stdout: `${candidateHead}\n` };
+        if (args[0] === "remote")
+          return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
+        return { ok: false, status: 1 };
+      },
+      runGh: (args) => {
+        if (args[1] === "graphql") {
+          remoteReads += 1;
+          return {
+            ok: true,
+            stdout: remoteReads === 1 ? remoteHeadResponse() : remoteHeadResponse(candidateHead),
+          };
+        }
+        return {
+          ok: true,
+          stdout:
+            '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"' +
+            candidateHead +
+            '"}}',
+        };
+      },
+    });
+
+    expect(
+      gateway.createPullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: candidateHead,
+        title: "Publish",
+        body: "Body",
+      }),
+    ).toMatchObject({ ok: true, pullRequest: { headSha: candidateHead } });
+    expect(gitCalls.filter((args) => args[0] === "push")).toHaveLength(0);
+    expect(gitCalls.filter((args) => args[0] === "-c")).toHaveLength(1);
+    expect(remoteReads).toBe(2);
+  });
+
+  it("reports a retained prior head after an uncertain revised push without updating the pull request", () => {
+    const candidateHead = "a".repeat(40);
+    const previousHead = "b".repeat(40);
+    const gitCalls: (readonly string[])[] = [];
+    let remoteReads = 0;
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        if (args[0] === "rev-parse") return { ok: true, stdout: `${candidateHead}\n` };
+        if (args[0] === "remote")
+          return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
+        return { ok: false, status: 1 };
+      },
+      runGh: () => {
+        remoteReads += 1;
+        return { ok: true, stdout: remoteHeadResponse(previousHead) };
+      },
+    });
+
+    const result = gateway.updatePullRequest({
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      baseBranch: "main",
+      headBranch: "feature",
+      branchRef: "refs/heads/feature",
+      expectedHeadSha: candidateHead,
+      expectedCurrentHeadSha: previousHead,
+      allowExistingRemoteHead: true,
+      number: 42,
+      body: "Body",
+    });
+    expect(result).toEqual({
+      ok: false,
+      code: "push_failed",
+      evidence: { operation: "branch_push", classification: "rejected", exitStatus: 1 },
+      recoveryEvidence: {
+        operation: "remote_lookup",
+        classification: "conflict",
+        remoteBranchState: "retained_prior_head",
+      },
+      observedRemoteHeadSha: previousHead,
+    });
+    expect(remoteReads).toBe(2);
+    expect(gitCalls.filter((args) => args[0] === "-c")).toHaveLength(1);
+  });
+
+  it("rejects an unexpected branch head after an uncertain push without a pull request mutation", () => {
+    const candidateHead = "a".repeat(40);
+    const unexpectedHead = "c".repeat(40);
+    let remoteReads = 0;
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        if (args[0] === "rev-parse") return { ok: true, stdout: `${candidateHead}\n` };
+        if (args[0] === "remote")
+          return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
+        return { ok: false, status: 1 };
+      },
+      runGh: () => {
+        remoteReads += 1;
+        return {
+          ok: true,
+          stdout: remoteHeadResponse(remoteReads === 1 ? undefined : unexpectedHead),
+        };
+      },
+    });
+
+    expect(
+      gateway.createPullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: candidateHead,
+        title: "Publish",
+        body: "Body",
+      }),
+    ).toEqual({
+      ok: false,
+      code: "remote_head_mismatch",
+      evidence: { operation: "branch_push", classification: "rejected", exitStatus: 1 },
+      recoveryEvidence: {
+        operation: "remote_lookup",
+        classification: "conflict",
+        remoteBranchState: "unexpected_head",
+      },
+      observedRemoteHeadSha: unexpectedHead,
+    });
+    expect(remoteReads).toBe(2);
+  });
+
+  it("rejects an unavailable branch observation after an uncertain push without a pull request mutation", () => {
+    let remoteReads = 0;
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        if (args[0] === "rev-parse") return { ok: true, stdout: `${"a".repeat(40)}\n` };
+        if (args[0] === "remote")
+          return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
+        return { ok: false, status: 1 };
+      },
+      runGh: () => {
+        remoteReads += 1;
+        return remoteReads === 1
+          ? { ok: true, stdout: remoteHeadResponse() }
+          : { ok: false, status: 503 };
+      },
+    });
+
+    expect(
+      gateway.createPullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "a".repeat(40),
+        title: "Publish",
+        body: "Body",
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: "push_failed",
+      recoveryEvidence: {
+        operation: "remote_lookup",
+        classification: "unavailable",
+        remoteBranchState: "unavailable",
+      },
+    });
+    expect(remoteReads).toBe(2);
   });
 
   it("rejects unsafe push destinations without a push or pull request mutation", () => {

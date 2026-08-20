@@ -14,6 +14,7 @@ import type {
   GitHubPullRequestCreationRequest,
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
+  PublicationFailureEvidence,
 } from "../../change/ownedPullRequestGateway.js";
 import {
   decodeGitHubPullRequest,
@@ -357,12 +358,10 @@ const createPullRequest = (
     return { ok: false, code: "remote_head_mismatch" };
   if (remoteHead.kind === "missing") {
     const pushed = pushExactHead(runGit, request, destination.url);
-    if (!pushed.ok)
-      return {
-        ok: false,
-        code: "push_failed",
-        evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
-      };
+    if (!pushed.ok) {
+      const reconciled = reconcilePushFailure(runGh, request, pushed);
+      if (!reconciled.ok) return reconciled;
+    }
   }
   const result = runGh([
     "api",
@@ -440,12 +439,15 @@ const updatePullRequest = (
     const destination = resolvePushDestination(runGit, request);
     if (!destination.ok) return destination.failure;
     const pushed = pushExpectedHead(runGit, request, destination.url);
-    if (!pushed.ok)
-      return {
-        ok: false,
-        code: "push_failed",
-        evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
-      };
+    if (!pushed.ok) {
+      const reconciled = reconcilePushFailure(
+        runGh,
+        request,
+        pushed,
+        request.expectedCurrentHeadSha,
+      );
+      if (!reconciled.ok) return reconciled;
+    }
   }
   const result = runGh([
     "api",
@@ -541,6 +543,68 @@ const initialRemoteHeadState = (
     };
   return { kind: "present", sha: oid };
 };
+
+type PushFailure = Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>;
+
+type PushRecoveryResult = { readonly ok: true } | PushFailure;
+
+const reconcilePushFailure = (
+  runGh: PublicationCommandRunner,
+  request: GitHubPullRequestCoordinates,
+  pushed: PublicationCommandResult,
+  expectedCurrentHeadSha?: string,
+): PushRecoveryResult => {
+  const remoteHead = initialRemoteHeadState(runGh, request);
+  if (remoteHead.kind === "unknown") {
+    return {
+      ok: false,
+      code: "push_failed",
+      evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
+      recoveryEvidence: remoteBranchRecoveryEvidence("unavailable", remoteHead.evidence),
+    };
+  }
+  if (remoteHead.kind === "present" && remoteHead.sha === request.expectedHeadSha) {
+    return { ok: true };
+  }
+  if (remoteHead.kind === "missing" && expectedCurrentHeadSha === undefined) {
+    return {
+      ok: false,
+      code: "push_failed",
+      evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
+      recoveryEvidence: remoteBranchRecoveryEvidence("retryable_absence"),
+    };
+  }
+  if (
+    remoteHead.kind === "present" &&
+    expectedCurrentHeadSha !== undefined &&
+    remoteHead.sha === expectedCurrentHeadSha
+  ) {
+    return {
+      ok: false,
+      code: "push_failed",
+      evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
+      recoveryEvidence: remoteBranchRecoveryEvidence("retained_prior_head"),
+      observedRemoteHeadSha: remoteHead.sha,
+    };
+  }
+  return {
+    ok: false,
+    code: "remote_head_mismatch",
+    evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
+    recoveryEvidence: remoteBranchRecoveryEvidence("unexpected_head"),
+    ...(remoteHead.sha === undefined ? {} : { observedRemoteHeadSha: remoteHead.sha }),
+  };
+};
+
+const remoteBranchRecoveryEvidence = (
+  remoteBranchState: NonNullable<PublicationFailureEvidence["remoteBranchState"]>,
+  observed?: PublicationFailureEvidence,
+): PublicationFailureEvidence => ({
+  ...(observed === undefined ? {} : observed),
+  operation: "remote_lookup",
+  classification: remoteBranchState === "unavailable" ? "unavailable" : "conflict",
+  remoteBranchState,
+});
 
 type PushDestinationFailureReason =
   | "unavailable"
