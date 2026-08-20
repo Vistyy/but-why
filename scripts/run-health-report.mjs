@@ -136,6 +136,9 @@ const firstAction = (finding, label) => {
   return concise(requiredString(action, "description", `${label} remediation action`));
 };
 
+// A safe maximum suppresses coverage-derived CRAP findings while retaining intrinsic complexity findings.
+const intrinsicComplexityMaxCrap = "9007199254740991";
+
 const health = decodeObject(
   "Fallow health",
   runAnalyzer("Fallow health", [
@@ -144,22 +147,10 @@ const health = decodeObject(
     "health",
     "--no-production",
     "--no-cache",
+    "--complexity",
+    "--max-crap",
+    intrinsicComplexityMaxCrap,
     "--report-only",
-    "--format",
-    "json",
-    "--quiet",
-  ]),
-);
-const duplication = decodeObject(
-  "Fallow duplication",
-  runAnalyzer("Fallow duplication", [
-    "exec",
-    "fallow",
-    "dupes",
-    "--no-production",
-    "--no-cache",
-    "--threshold",
-    "0",
     "--format",
     "json",
     "--quiet",
@@ -176,33 +167,26 @@ const effect = decodeObject(
     "--format",
     "json",
     "--severity",
-    "warning,message",
+    "warning",
   ]),
 );
 
 const complexityFindings = requiredArray(health, "findings", "Fallow health");
-const cloneGroups = requiredArray(duplication, "clone_groups", "Fallow duplication");
 const effectDiagnostics = requiredArray(effect, "diagnostics", "Effect diagnostics");
 const effectSummary = requiredObject(effect, "summary", "Effect diagnostics");
-let duplicationLocations = 0;
-for (const [index, group] of cloneGroups.entries()) {
-  duplicationLocations += requiredArray(
-    group,
-    "instances",
-    `Fallow duplication finding ${index + 1}`,
-  ).length;
+const effectWarningCount = requiredNumber(effectSummary, "warnings", "Effect summary");
+const effectMessageCount = requiredNumber(effectSummary, "messages", "Effect summary");
+if (effectWarningCount !== effectDiagnostics.length) {
+  throw new Error("Effect diagnostics summary does not match its warning findings");
 }
-const findingCount = complexityFindings.length + cloneGroups.length + effectDiagnostics.length;
-const locationCount = complexityFindings.length + duplicationLocations + effectDiagnostics.length;
+if (effectMessageCount !== 0)
+  throw new Error("Effect diagnostics returned message-level suggestions");
+const findingCount = complexityFindings.length + effectDiagnostics.length;
+const locationCount = findingCount;
 
 console.log(`Advisory health summary: ${findingCount} findings across ${locationCount} locations.`);
 console.log(`- Fallow complexity: ${complexityFindings.length} findings.`);
-console.log(
-  `- Fallow duplication: ${cloneGroups.length} findings across ${duplicationLocations} locations.`,
-);
-console.log(
-  `- Effect diagnostics: ${effectDiagnostics.length} findings (${requiredNumber(effectSummary, "warnings", "Effect summary")} warnings, ${requiredNumber(effectSummary, "messages", "Effect summary")} messages).`,
-);
+console.log(`- Effect warnings: ${effectWarningCount} findings.`);
 console.log("Findings are advisory. This report exits successfully when findings exist.");
 
 console.log("\nFallow complexity findings");
@@ -218,26 +202,7 @@ for (const [index, finding] of complexityFindings.entries()) {
   );
 }
 
-console.log("\nFallow duplication findings");
-for (const [groupIndex, group] of cloneGroups.entries()) {
-  const label = `Fallow duplication finding ${groupIndex + 1}`;
-  const fingerprint = requiredString(group, "fingerprint", label);
-  const remediation = firstAction(group, label);
-  const instances = requiredArray(group, "instances", label);
-  for (const [instanceIndex, instance] of instances.entries()) {
-    const instanceLabel = `${label} location ${instanceIndex + 1}`;
-    const path = requiredString(instance, "file", instanceLabel);
-    const line = requiredNumber(instance, "start_line", instanceLabel);
-    const column = requiredNumber(instance, "start_col", instanceLabel);
-    const endLine = optionalNumber(instance, "end_line");
-    const endColumn = optionalNumber(instance, "end_col");
-    console.log(
-      `source=Fallow dupes | rule=code-duplication/${fingerprint} | path=${path} | location=${location(line, column, endLine, endColumn)} | remediation=${remediation}`,
-    );
-  }
-}
-
-console.log("\nEffect diagnostic findings");
+console.log("\nEffect warning findings");
 for (const [index, diagnostic] of effectDiagnostics.entries()) {
   const label = `Effect diagnostic ${index + 1}`;
   const path = repositoryPath(requiredString(diagnostic, "file", label));
@@ -246,6 +211,7 @@ for (const [index, diagnostic] of effectDiagnostics.entries()) {
   const endLine = optionalNumber(diagnostic, "endLine");
   const endColumn = optionalNumber(diagnostic, "endColumn");
   const severity = requiredString(diagnostic, "severity", label);
+  if (severity !== "warning") throw new Error(`${label} is not a warning`);
   const rule = requiredString(diagnostic, "name", label);
   const remediation = concise(requiredString(diagnostic, "message", label));
   console.log(

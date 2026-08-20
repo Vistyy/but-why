@@ -280,15 +280,11 @@ describe("repository-authored tooling diagnostics", () => {
 set -euo pipefail
 case "$*" in
   *"fallow health"*)
-    [[ " $* " == *" --report-only "* && " $* " != *" --coverage "* ]] || exit 8
+    [[ " $* " == *" --complexity "* && " $* " == *" --max-crap 9007199254740991 "* && " $* " == *" --report-only "* && " $* " != *" --coverage "* ]] || exit 8
     printf '%s' '{"findings":[{"path":"src/complex.ts","name":"complexWork","line":4,"col":7,"severity":"high","actions":[{"description":"Extract focused helper functions"}]}]}'
     ;;
-  *"fallow dupes"*)
-    [[ " $* " == *" --threshold 0 "* && " $* " != *" --fail-on-issues "* ]] || exit 8
-    printf '%s' '{"clone_groups":[{"fingerprint":"dup:1234","instances":[{"file":"src/first.ts","start_line":8,"start_col":3,"end_line":12,"end_col":5},{"file":"src/second.ts","start_line":20,"start_col":2,"end_line":24,"end_col":4}],"actions":[{"description":"Extract the shared behavior"}]}]}'
-    ;;
   *"effect-tsgo diagnostics"*)
-    [[ " $* " == *" --severity warning,message "* && " $* " != *" --strict "* ]] || exit 8
+    [[ " $* " == *" --severity warning "* && " $* " != *" warning,message "* && " $* " != *" --strict "* ]] || exit 8
     printf '{"diagnostics":[{"file":"%s/src/effect.ts","line":5,"column":6,"endLine":5,"endColumn":10,"severity":"warning","name":"effectRule","message":"Use Effect.gen for immediate execution."}],"summary":{"warnings":1,"messages":0}}' "$PWD"
     ;;
   *)
@@ -306,13 +302,14 @@ esac
     });
 
     expect(result.status).toBe(0);
-    expect(result.output).toContain("Advisory health summary: 3 findings across 4 locations.");
+    expect(result.output).toContain("Advisory health summary: 2 findings across 2 locations.");
     expect(result.output).toContain(
       "source=Fallow health | rule=complexity | severity=high | path=src/complex.ts | location=4:7 | symbol=complexWork | remediation=Extract focused helper functions",
     );
-    expect(result.output).toContain(
-      "source=Fallow dupes | rule=code-duplication/dup:1234 | path=src/second.ts | location=20:2-24:4 | remediation=Extract the shared behavior",
-    );
+    expect(result.output).not.toContain("Fallow duplication");
+    expect(result.output).not.toContain("code-duplication");
+    expect(result.output).not.toContain("severity=message");
+    expect(result.output).toContain("- Effect warnings: 1 findings.");
     expect(result.output).toContain(
       "source=Effect diagnostics | rule=effectRule | severity=warning | path=src/effect.ts | location=5:6-5:10 | remediation=Use Effect.gen for immediate execution.",
     );
