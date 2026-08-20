@@ -464,13 +464,7 @@ const completeReview = (
         new RepositoryPersistedDataInvalid({ operationName: "complete Task Review", cause }),
     });
     const admission = yield* inspectCurrentAdmission(sql, current, idPrefix);
-    const preservesBlockingDispatchFailure =
-      validatedToolingFailure?.operation === "dispatch_agent_invocation" &&
-      validatedToolingFailure.blockingInvocationId !== undefined;
-    const failure =
-      admission.ok || preservesBlockingDispatchFailure
-        ? validatedToolingFailure
-        : admission.failure;
+    const failure = admission.ok ? validatedToolingFailure : admission.failure;
     const outcome =
       failure !== undefined
         ? "tooling_failed"
@@ -483,7 +477,7 @@ const completeReview = (
         "Only atomic Agent settlement can pass or block an Active Task Review",
       );
     }
-    yield* requireTaskReviewInvocationEvidence(sql, reviewId, outcome, failure);
+    yield* requireTaskReviewInvocationEvidence(sql, reviewId, outcome);
     if (outcome === "passed") {
       yield* sql`
         UPDATE tasks SET state = 'todo'
@@ -678,7 +672,6 @@ const requireTaskReviewInvocationEvidence = (
   sql: SqlClient.SqlClient,
   reviewId: number,
   outcome: "passed" | "blocked" | "tooling_failed",
-  toolingFailure?: TaskReviewToolingFailure,
 ) =>
   Effect.gen(function* () {
     const invocations = yield* readTaskReviewInvocationEvidence(sql, reviewId);
@@ -688,32 +681,17 @@ const requireTaskReviewInvocationEvidence = (
         "Passing and Finding-blocked Task Reviews require Agent Invocation evidence",
       );
     }
-    const blockingInvocationId =
-      outcome === "tooling_failed" && toolingFailure?.operation === "dispatch_agent_invocation"
-        ? toolingFailure.blockingInvocationId
-        : undefined;
     if (
       invocations.some(
         (invocation) =>
           invocation.taskOwned !== 1 ||
-          (invocation.settledAt === null
-            ? invocation.invocationId !== blockingInvocationId
-            : invocation.settlementKind === null),
+          invocation.settledAt === null ||
+          invocation.settlementKind === null,
       )
     ) {
       return yield* invalid(
         "complete Task Review",
         "Every linked Task Review Invocation must be Task-owned and settled",
-      );
-    }
-    if (
-      blockingInvocationId !== undefined &&
-      invocations.some((invocation) => invocation.invocationId === blockingInvocationId) &&
-      invocations.filter((invocation) => invocation.settledAt === null).length !== 1
-    ) {
-      return yield* invalid(
-        "complete Task Review",
-        "A dispatch Tooling Failure must preserve exactly one blocking Invocation",
       );
     }
     if (

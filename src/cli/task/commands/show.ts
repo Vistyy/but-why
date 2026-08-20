@@ -62,6 +62,12 @@ export const runTaskShowCommand = (
                           : {
                               operation: review.toolingFailure.operation,
                               message: review.toolingFailure.message,
+                              ...(review.toolingFailure.blockingInvocationId === undefined
+                                ? {}
+                                : {
+                                    blockingInvocationId:
+                                      review.toolingFailure.blockingInvocationId,
+                                  }),
                             },
                     },
             },
