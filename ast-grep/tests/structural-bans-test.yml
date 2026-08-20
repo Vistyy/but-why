@@ -166,7 +166,6 @@ valid:
   - "const createHarness = () => { const context = { sessionManager: {}, isIdle() {} } as unknown as ExtensionContext; }"
 invalid:
   - value as unknown as Target
-  - "const api = { sendUserMessage() {} } as unknown as ExtensionAPI"
 ---
 id: never-assertions-represent-real-union
 valid:

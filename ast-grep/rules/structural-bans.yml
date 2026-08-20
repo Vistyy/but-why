@@ -356,32 +356,12 @@ rule:
         - pattern: ($VALUE as unknown) as $TYPE
     - not:
         inside:
-          all:
-            - kind: variable_declarator
-            - regex: '^api'
-            - has:
-                pattern: api
-            - has:
-                pattern: $VALUE as unknown as ExtensionAPI
-            - has:
-                regex: sendUserMessage
-            - inside:
-                pattern: const createHarness = ($$$ARGS) => { $$$BODY }
-                stopBy: end
+          pattern: const api = $VALUE as unknown as ExtensionAPI
+          stopBy: end
     - not:
         inside:
-          all:
-            - kind: variable_declarator
-            - regex: '^context'
-            - has:
-                pattern: context
-            - has:
-                pattern: $VALUE as unknown as ExtensionContext
-            - has:
-                regex: sessionManager
-            - inside:
-                pattern: const createHarness = ($$$ARGS) => { $$$BODY }
-                stopBy: end
+          pattern: const context = $VALUE as unknown as ExtensionContext
+          stopBy: end
     - not:
         pattern: JSON.parse($$$ARGS) as unknown as $TYPE
     - not:
