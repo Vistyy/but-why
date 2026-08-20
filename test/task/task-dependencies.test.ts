@@ -163,6 +163,29 @@ describe("Task dependency CLI", () => {
     }),
   );
 
+  it.effect("keeps malformed global options and positional arguments as generic usage errors", () =>
+    Effect.gen(function* () {
+      const root = createTestWorkspace();
+      for (const operation of ["add", "remove", "replace"] as const) {
+        for (const args of [
+          ["--unknown", "task", "dependencies", operation, "BY-1"],
+          ["--log-level=info", "task", "dependencies", operation, "BY-1"],
+          ["--log-level", "invalid", "task", "dependencies", operation, "BY-1"],
+          ["task", "dependencies", operation, "BY-1", "extra"],
+        ]) {
+          const result = yield* runByInProcessEffect(root, args, now);
+
+          expect(result.status).toBe(2);
+          expect(result.stderr).toBe("");
+          expect(JSON.parse(result.stdout)).toMatchObject({
+            error: { code: "invalid_usage" },
+            help: ["Run `by --help` for generated command help."],
+          });
+        }
+      }
+    }),
+  );
+
   it.effect("maps the defensive create-time dependency cycle result", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
