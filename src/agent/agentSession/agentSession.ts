@@ -1,6 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
-import type { Effect } from "effect";
+import { Data, type Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { TokenUsage } from "../tokenUsage.js";
 
@@ -54,7 +54,20 @@ export type AgentDispatch = {
 
 export type AgentDispatchResult =
   | { readonly ok: true; readonly dispatch: AgentDispatch }
-  | { readonly ok: false; readonly code: "concurrent_unsettled_invocation" };
+  | {
+      readonly ok: false;
+      readonly code: "concurrent_unsettled_invocation";
+      readonly invocationId: number;
+    };
+
+export class AgentInvocationDispatchFailed extends Data.TaggedError(
+  "AgentInvocationDispatchFailed",
+)<{
+  readonly invocationId: number;
+}> {}
+
+export const agentInvocationDispatchFailureMessage = (invocationId: number): string =>
+  `Agent Invocation dispatch was blocked by unsettled Agent Invocation ${invocationId}.`;
 
 export type AgentSessionSqlLink = (
   sql: SqlClient.SqlClient,

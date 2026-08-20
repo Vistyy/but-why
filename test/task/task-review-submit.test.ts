@@ -11,7 +11,7 @@ import {
   readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
-import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import type { TaskReviewBase, TaskReviewRecord } from "../../src/task/review/taskReview.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
 import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
@@ -24,6 +24,17 @@ import {
 } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+
+const dispatchConflictAgentPersistence = (): AgentSessionPersistence => ({
+  beginInvocation: () =>
+    Effect.succeed({
+      ok: false as const,
+      code: "concurrent_unsettled_invocation" as const,
+      invocationId: 29,
+    }),
+  settleInvocation: () => Effect.die("Dispatch failure must not settle an Invocation"),
+  readInvocationHistory: () => Effect.succeed([]),
+});
 
 const defaultAgentPersistence = (): AgentSessionPersistence => ({
   beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
@@ -129,6 +140,137 @@ it.effect("records Task Review preparation integrity failures and skips the revi
     });
   }),
 );
+
+it.effect("records a dispatch Tooling Failure before completing a Task Review", () =>
+  Effect.gen(function* () {
+    const taskId = publicTaskId("BY-1");
+    const reviewerProfile = {
+      agentProfile: "review",
+      scope: "global" as const,
+      profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test-model" } },
+    };
+    const reviewerPolicy = {
+      profile: reviewerProfile,
+      builtInInstructions: taskReviewBuiltInInstructions,
+      guidance: null,
+    };
+    const review: TaskReviewRecord = {
+      id: 1,
+      taskId,
+      proposal: { title: "Review", description: "Exact", dependencyIds: [] },
+      dependencyEvidence: [],
+      baseRef: "refs/heads/main",
+      baseCommit: "base-sha",
+      workspacePath: "/workspace",
+      state: "running",
+      outcome: null,
+      workspaceCleanup: "not_created",
+      cleanupBlockingReason: null,
+      toolingFailure: null,
+      findings: [],
+    };
+    const failures: TaskReviewRecord["toolingFailure"][] = [];
+    let cleanupCalls = 0;
+    const persistence: TaskReviewPersistence = {
+      reuseJudgment: () => Effect.succeed(undefined),
+      checkAdmission: () => Effect.succeed(undefined),
+      admit: () =>
+        Effect.succeed({
+          ok: true as const,
+          review,
+          policy: reviewerPolicy,
+          proposal: review.proposal,
+          dependencyEvidence: [],
+        }),
+      recordCleanup: () => Effect.void,
+      complete: (input) => {
+        if (input.toolingFailure === undefined) return Effect.die("Expected a Tooling Failure");
+        return Effect.succeed({
+          ok: true as const,
+          outcome: "tooling_failed" as const,
+          review: {
+            ...review,
+            state: "complete" as const,
+            outcome: "tooling_failed" as const,
+            workspaceCleanup: "removed" as const,
+            toolingFailure: input.toolingFailure,
+          },
+          task: { id: taskId, state: "new" as const },
+        });
+      },
+      abandon: () => Effect.die("Unexpected persistence operation"),
+      getById: () => Effect.succeed({ ...review, toolingFailure: failures.at(-1) ?? null }),
+      getLatestForTask: () => Effect.succeed(undefined),
+      listForTask: () => Effect.succeed([]),
+      getReviewerAgentSession: () => Effect.succeed(undefined),
+      getReviewerConfiguration: () => Effect.succeed(undefined),
+      linkAgentInvocation: defaultAgentLink,
+      settleAgentReview: () => () => Effect.die("Dispatch failure must not settle an Invocation"),
+      recordActiveFailure: (_reviewId, failure) =>
+        Effect.sync(() => {
+          failures.push(failure);
+        }),
+      proposalIsCurrent: () => Effect.succeed(true),
+    };
+    const useCases = openTaskReviewUseCases({
+      repositoryRoot: "/repository",
+      repositoryCommonDirectory: "/common",
+      loadRepoConfig: () => ({ ok: true as const, config: { idPrefix: "BY" } }),
+      resolvePolicy: () => ({
+        ok: true as const,
+        policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
+      }),
+      persistence,
+      agentSessionStorageRoot: "/sessions",
+      agentPersistence: dispatchConflictAgentPersistence(),
+      reviewerRuntime: { review: () => Effect.die("Reviewer must not run") },
+      reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
+      readReviewBase: () => Effect.succeed({ ok: true as const, base: reviewBase(review) }),
+      verifyReviewBase: () => Effect.succeed({ ok: true as const }),
+      runWorkspace: (workspaceInput) =>
+        workspaceInput.runInWorkspace === undefined
+          ? Effect.succeed({ ok: true as const })
+          : workspaceInput
+              .runInWorkspace({
+                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                worktreePath: review.workspacePath,
+              })
+              .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
+      restoreWorkspace: () => Effect.void,
+      cleanupWorkspace: () =>
+        Effect.sync(() => {
+          cleanupCalls += 1;
+          return { workspace: "removed" as const };
+        }),
+      inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
+    });
+
+    const result = yield* useCases.submit(taskId, "2026-08-14T12:00:00.000Z");
+
+    expect(result).toMatchObject({
+      ok: true,
+      outcome: "tooling_failed",
+      review: {
+        toolingFailure: {
+          operation: "dispatch_agent_invocation",
+          message: expect.stringContaining("Agent Invocation 29"),
+        },
+      },
+    });
+    expect(cleanupCalls).toBe(1);
+    expect(failures).toMatchObject([
+      {
+        operation: "dispatch_agent_invocation",
+        message: expect.stringContaining("Agent Invocation 29"),
+      },
+    ]);
+  }),
+);
+
+const reviewBase = (review: TaskReviewRecord): TaskReviewBase => ({
+  ref: review.baseRef,
+  commit: review.baseCommit,
+});
 
 it.effect("restores Task Review state before an output-correction retry", () =>
   Effect.gen(function* () {

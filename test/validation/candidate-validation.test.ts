@@ -4,6 +4,7 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe, vi } from "vitest";
+import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -17,6 +18,7 @@ import {
 import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { runByInProcessEffect } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
@@ -207,6 +209,68 @@ describe("Candidate validation", () => {
         expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
       }),
     15_000,
+  );
+
+  it.scoped(
+    "records a dispatch Tooling Failure and cleans the Snapshot Workspace",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
+        if (!captured.ok) throw new Error(captured.code);
+        yield* installAcceptanceContext(mainCheckout, captured.changeId);
+        const agentPersistence: AgentSessionPersistence = {
+          beginInvocation: () =>
+            Effect.succeed({
+              ok: false as const,
+              code: "concurrent_unsettled_invocation" as const,
+              invocationId: 73,
+            }),
+          settleInvocation: () => Effect.void,
+          readInvocationHistory: () => Effect.succeed([]),
+        };
+        const validation = candidateValidationForTest({
+          localRepositoryRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+          agentPersistence,
+        });
+
+        const result = yield* validateAcceptanceContextCandidate(validation, {
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+        });
+
+        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        if (result.ok || "code" in result) return;
+        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+          state: "complete",
+          outcome: "tooling_failed",
+          cleanup: { state: "complete", blockingReason: null },
+        });
+        expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual([
+          expect.objectContaining({
+            operationName: "dispatch_agent_invocation",
+            errorMessage: expect.stringContaining("Agent Invocation 73"),
+          }),
+        ]);
+        const shown = yield* runByInProcessEffect(mainCheckout, [
+          "validation-run",
+          "show",
+          String(result.validationRunId),
+        ]);
+        expect(shown.status).toBe(0);
+        expect(JSON.parse(shown.stdout)).toMatchObject({
+          toolingFailures: [
+            expect.objectContaining({
+              operationName: "dispatch_agent_invocation",
+              errorMessage: expect.stringContaining("Agent Invocation 73"),
+            }),
+          ],
+        });
+      }),
+    10_000,
   );
 
   it.scoped(

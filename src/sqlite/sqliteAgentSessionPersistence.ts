@@ -86,8 +86,14 @@ const beginInvocation = (
         AND invocation.settled_at IS NULL
       LIMIT 1
     `;
-    if (unsettled.length > 0)
-      return { ok: false, code: "concurrent_unsettled_invocation" } as const;
+    const blockingInvocationId = unsettled[0]?.id;
+    if (blockingInvocationId !== undefined) {
+      return {
+        ok: false,
+        code: "concurrent_unsettled_invocation",
+        invocationId: blockingInvocationId,
+      } as const;
+    }
 
     let sessionId = input.agentSessionId;
     if (sessionId === undefined) {

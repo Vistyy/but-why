@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect";
-
 import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
+import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -32,6 +32,7 @@ export const candidateValidationForTest = (input: {
   readonly artifactsRoot: string;
   readonly repository: RepositorySqlConfig;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly agentPersistence?: AgentSessionPersistence;
 }) => {
   const repositoryLayer = repositorySqlLayer(input.repository);
   const persistenceLayer = Layer.effect(
@@ -52,7 +53,7 @@ export const candidateValidationForTest = (input: {
         artifactsRoot: input.artifactsRoot,
         agentSessionsRoot: input.artifactsRoot,
         restoreWorkspace: restoreDisposableWorkspace,
-        agentPersistence,
+        agentPersistence: input.agentPersistence ?? agentPersistence,
         getAgentSession: agentSessions.getAgentSession,
         linkAgentInvocation: agentSessions.linkAgentInvocation,
       };

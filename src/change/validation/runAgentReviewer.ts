@@ -2,10 +2,11 @@ import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
-import type {
-  AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+import {
+  type AgentSessionConfiguration,
+  type AgentSessionPersistence,
+  type AgentSessionSqlLink,
+  agentInvocationDispatchFailureMessage,
 } from "../../agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import type {
@@ -213,7 +214,16 @@ export const runAgentReviewer = (
                 }),
           });
         }),
-    });
+    }).pipe(
+      Effect.catchTag("AgentInvocationDispatchFailed", (failure) =>
+        Effect.fail(
+          new InfrastructureToolingFailed({
+            operationName: "dispatch_agent_invocation",
+            message: agentInvocationDispatchFailureMessage(failure.invocationId),
+          }),
+        ),
+      ),
+    );
     if (phaseOutcome === undefined) {
       return yield* Effect.die("Agent reviewer completed without phase settlement");
     }

@@ -100,6 +100,7 @@ export const requireCoherentValidationCompletion = (
       const evidenceByPosition = new Map(
         evidenceRows.map((row) => [positionKey(row.phase as ValidationPhase, row.producer), row]),
       );
+      const dispatchToolingFailure = isAgentInvocationDispatchToolingFailure(runToolingFailure);
       const reviewerInvocations = new Map<string, ReviewerInvocationEvidenceRow[]>();
       for (const row of reviewerInvocationRows) {
         const key = positionKey(row.phase as ValidationPhase, row.producer);
@@ -110,10 +111,13 @@ export const requireCoherentValidationCompletion = (
           row.phase === validationPhase.acceptanceReview ||
           row.phase === validationPhase.specialistReview
         ) {
-          if (!resultByPosition.has(key)) {
+          if (!resultByPosition.has(key) && !dispatchToolingFailure) {
             throw new Error("Every linked reviewer position requires its final Phase Result");
           }
-          if (row.changeOwned !== 1 || row.settledAt === null || row.settlementKind === null) {
+          if (
+            row.changeOwned !== 1 ||
+            (!dispatchToolingFailure && (row.settledAt === null || row.settlementKind === null))
+          ) {
             throw new Error(
               "Every linked reviewer Invocation must be Change-owned and settled before completion",
             );
@@ -194,12 +198,18 @@ export const requireCoherentValidationCompletion = (
         const failed = finalResults.filter((result) => result.outcome === "failed");
         if (failed.length === 0) {
           if (finalResults.length !== finalGroup.producers.length) {
-            throw new Error("A passing Validation phase is incomplete");
+            if (runToolingFailure === null) {
+              throw new Error("A passing Validation phase is incomplete");
+            }
+            phaseOutcome = "tooling_failed";
+          } else if (lastReached.index !== expected.length - 1) {
+            if (runToolingFailure === null) {
+              throw new Error("Validation Run stopped after a passing phase");
+            }
+            phaseOutcome = "tooling_failed";
+          } else {
+            phaseOutcome = "passed";
           }
-          if (lastReached.index !== expected.length - 1) {
-            throw new Error("Validation Run stopped after a passing phase");
-          }
-          phaseOutcome = "passed";
         } else {
           const hasPhaseToolingFailure = failed.some((result) =>
             toolingPositions.has(positionKey(result.phase, result.producer)),
@@ -223,6 +233,17 @@ export const requireCoherentValidationCompletion = (
       }
     });
   }).pipe(Effect.asVoid);
+
+const isAgentInvocationDispatchToolingFailure = (value: string | null): boolean => {
+  if (value === null) return false;
+  const parsed = JSON.parse(value) as unknown;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+  const failure = parsed as { readonly errorKind?: unknown; readonly operationName?: unknown };
+  return (
+    failure.errorKind === "infrastructure_tooling_failed" &&
+    failure.operationName === "dispatch_agent_invocation"
+  );
+};
 
 const isPreDispatchReviewerIntegrityFailure = (
   phase: ValidationPhase,

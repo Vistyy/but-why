@@ -1,21 +1,19 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { Cause, Clock, Effect, Option } from "effect";
-import {
-  RepositoryPersistedDataInvalid,
-  type RepositoryStorageError,
-} from "../../contracts/repositoryStorageError.js";
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
 import { findUniquePiSessionTranscript } from "../piSessionTranscript.js";
 import type { ReviewerAgentResult, ReviewerAgentRuntime } from "../reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../reviewerExecution.js";
 import type { TokenUsage } from "../tokenUsage.js";
-import type {
-  AgentInvocationRecord,
-  AgentInvocationSettlementKind,
-  AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+import {
+  AgentInvocationDispatchFailed,
+  type AgentInvocationRecord,
+  type AgentInvocationSettlementKind,
+  type AgentSessionConfiguration,
+  type AgentSessionPersistence,
+  type AgentSessionSqlLink,
 } from "./agentSession.js";
 
 export type AgentExecutionEvidence = {
@@ -67,7 +65,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
   input: ExecuteAgentSessionInput<Output, DomainError, DomainRequirements>,
 ): Effect.Effect<
   ExecuteAgentSessionResult<Output>,
-  RepositoryStorageError | DomainError,
+  RepositoryStorageError | DomainError | AgentInvocationDispatchFailed,
   DomainRequirements
 > =>
   Effect.gen(function* () {
@@ -87,9 +85,8 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         linkInvocation: input.linkInvocation,
       });
       if (!dispatch.ok) {
-        return yield* new RepositoryPersistedDataInvalid({
-          operationName: "dispatch Agent Invocation",
-          cause: new Error("An Agent Session already has an unsettled Invocation"),
+        return yield* new AgentInvocationDispatchFailed({
+          invocationId: dispatch.invocationId,
         });
       }
       sessionId = dispatch.dispatch.agentSessionId;

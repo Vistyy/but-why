@@ -2,10 +2,11 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import type {
-  AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+import {
+  AgentInvocationDispatchFailed,
+  type AgentSessionConfiguration,
+  type AgentSessionPersistence,
+  type AgentSessionSqlLink,
 } from "../../src/agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
 import {
@@ -238,7 +239,11 @@ it.effect("rejects concurrent unsettled dispatch and rolls back failed domain se
           createdAt: "2026-08-14T12:00:01.000Z",
           linkInvocation: noOpLink,
         });
-        expect(concurrent).toEqual({ ok: false, code: "concurrent_unsettled_invocation" });
+        expect(concurrent).toEqual({
+          ok: false,
+          code: "concurrent_unsettled_invocation",
+          invocationId: first.dispatch.invocation.id,
+        });
 
         const failed = yield* Effect.exit(
           persistence.settleInvocation({
@@ -277,6 +282,56 @@ it.effect("rejects concurrent unsettled dispatch and rolls back failed domain se
         expect(retry).toMatchObject({ ok: true, dispatch: { invocation: { id: 2 } } });
       }),
     );
+  }),
+);
+
+it.effect("surfaces the blocking Invocation from a failed dispatch", () =>
+  Effect.gen(function* () {
+    let reviewerCalled = false;
+    let settlementCalled = false;
+    const persistence: AgentSessionPersistence = {
+      beginInvocation: () =>
+        Effect.succeed({
+          ok: false as const,
+          code: "concurrent_unsettled_invocation" as const,
+          invocationId: 41,
+        }),
+      settleInvocation: () =>
+        Effect.sync(() => {
+          settlementCalled = true;
+        }),
+      readInvocationHistory: () => Effect.succeed([]),
+    };
+
+    const failure = yield* executeAgentSession({
+      configuration,
+      agentPersistence: persistence,
+      linkInvocation: noOpLink,
+      reviewerRuntime: {
+        review: () => {
+          reviewerCalled = true;
+          return Effect.die("Reviewer must not run after dispatch failure");
+        },
+      },
+      reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
+      decodeOutput: (output) => Effect.succeed(output),
+      systemPrompt: "Act as the test Reviewer.",
+      prompt: "Review.",
+      continuationPrompt: "Continue.",
+      commandCwd: ".",
+      resourceRoot: ".",
+      profile: {
+        agentProfile: "review",
+        scope: "global",
+        profile: { agentRuntime: "pi", runtimeConfig: { model: configuration.model } },
+      },
+      reviewer: "test",
+      sessionStorageRoot: ".",
+    }).pipe(Effect.flip);
+
+    expect(failure).toEqual(new AgentInvocationDispatchFailed({ invocationId: 41 }));
+    expect(reviewerCalled).toBe(false);
+    expect(settlementCalled).toBe(false);
   }),
 );
 

@@ -1,9 +1,10 @@
 import { Effect } from "effect";
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
-import type {
-  AgentSessionConfiguration,
-  AgentSessionPersistence,
+import {
+  type AgentSessionConfiguration,
+  type AgentSessionPersistence,
+  agentInvocationDispatchFailureMessage,
 } from "../../agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import {
@@ -399,7 +400,21 @@ const submitTaskReview = (
                       complete: toolingFailure === undefined,
                     });
                   }),
-              });
+              }).pipe(
+                Effect.catchTag("AgentInvocationDispatchFailed", (failure) =>
+                  Effect.succeed({ dispatchFailure: failure } as const),
+                ),
+              );
+              if ("dispatchFailure" in execution) {
+                const failure: TaskReviewToolingFailure = {
+                  operation: "dispatch_agent_invocation",
+                  message: agentInvocationDispatchFailureMessage(
+                    execution.dispatchFailure.invocationId,
+                  ),
+                };
+                yield* input.persistence.recordActiveFailure(reviewId, failure, now);
+                return { ok: false, failure } as const;
+              }
               const reviewed = execution.result;
               const sessionReference = reviewed.sessionReference ?? null;
               return reviewed.ok

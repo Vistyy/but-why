@@ -103,11 +103,17 @@ const settlementFailed = (
   now: string,
 ): Effect.Effect<TaskReviewEvidenceSettlementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    yield* persistence.recordActiveFailure(review.id, failure, now);
     const current = yield* persistence.getById(review.id);
+    if (current?.toolingFailure?.operation !== "dispatch_agent_invocation") {
+      yield* persistence.recordActiveFailure(review.id, failure, now);
+    }
+    const updated =
+      current?.toolingFailure?.operation === "dispatch_agent_invocation"
+        ? current
+        : yield* persistence.getById(review.id);
     return {
       ok: false,
-      review: current ?? { ...review, toolingFailure: failure },
+      review: updated ?? { ...review, toolingFailure: failure },
       message: failure.message,
     } as const;
   });
