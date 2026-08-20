@@ -161,7 +161,21 @@ describe("Task command Adapters", () => {
           help: ["Inspect the Change and resolve the remote mismatch before retrying."],
         },
         {
-          result: { ok: false, code: "github_close_failed", taskId },
+          result: {
+            ok: false,
+            code: "github_close_failed",
+            taskId,
+            evidence: {
+              operation: "pull_request_close",
+              classification: "rejected",
+              exitStatus: 1,
+            },
+            recoveryEvidence: {
+              operation: "remote_lookup",
+              classification: "unavailable",
+              reason: "unavailable",
+            },
+          },
           message: "The owned pull request could not be closed, so the Task remains unfinished.",
           help: ["Resolve the GitHub issue, then retry Task Cancel."],
         },
@@ -201,6 +215,10 @@ describe("Task command Adapters", () => {
             message: failure.message,
             ...("validationRunId" in failure.result
               ? { validationRunId: failure.result.validationRunId }
+              : {}),
+            ...("evidence" in failure.result ? { evidence: failure.result.evidence } : {}),
+            ...("recoveryEvidence" in failure.result
+              ? { recoveryEvidence: failure.result.recoveryEvidence }
               : {}),
           },
           help: failure.help,
