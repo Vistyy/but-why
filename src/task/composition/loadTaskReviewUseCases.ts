@@ -9,6 +9,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import {
   cleanupExactDisposableWorkspace,
   inspectDisposableWorktree,
+  restoreDisposableWorkspace,
 } from "../../disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
@@ -240,6 +241,7 @@ const submitFreshTaskReview = <A, E, R>(
           readReviewBase: readCurrentWorktreeReviewBase,
           verifyReviewBase: verifyRecordedTaskReviewBase,
           runWorkspace: runDisposableExactCommitWorkspace,
+          restoreWorkspace: restoreDisposableWorkspace,
           cleanupWorkspace: cleanupExactDisposableWorkspace,
           inspectWorkspace: inspectDisposableWorktree,
           ...(input.progress === undefined ? {} : { progress: input.progress }),

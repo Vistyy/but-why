@@ -502,11 +502,9 @@ describe("Acceptance Review phase", () => {
       expect(fixture.results).toMatchObject([
         {
           outcome: "failed",
-          findings: [],
-          artifactRecords: [],
           toolingFailure: {
-            errorKind: "git_tooling_failed",
-            operationName: "verify_candidate_head",
+            errorKind: "reviewer_output_contract_failed",
+            operationName: "decode_reviewer_output",
           },
         },
       ]);
@@ -552,12 +550,33 @@ const acceptancePhaseFixture = (
     NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][] = [];
   let integrityCheck = 0;
-  const commandExecutor = () =>
-    Effect.succeed({
+  const commandExecutor = (command: string) => {
+    if (command === "git worktree list --porcelain") {
+      return Effect.succeed({
+        exitCode: 0,
+        stdout: `worktree ${options.commandCwd ?? "/captured/snapshot-workspace"}\nHEAD ${exactCandidate.headSha}\ndetached\n`,
+        stderr: "",
+      });
+    }
+    if (command === "git rev-parse --show-toplevel") {
+      return Effect.succeed({
+        exitCode: 0,
+        stdout: `${options.commandCwd ?? "/captured/snapshot-workspace"}\n`,
+        stderr: "",
+      });
+    }
+    if (command === "git symbolic-ref --quiet HEAD") {
+      return Effect.succeed({ exitCode: 1, stdout: "", stderr: "" });
+    }
+    if (command.startsWith("git reset --hard") || command.startsWith("git clean -f")) {
+      return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
+    }
+    return Effect.succeed({
       exitCode: 0,
       stdout: `${options.observedHeadShas?.[integrityCheck++] ?? options.observedHeadSha ?? exactCandidate.headSha}\n`,
       stderr: "",
     });
+  };
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
   const phasePolicy = options.policy ?? policy;
   const agentPersistence = options.agentPersistence ?? defaultAgentPersistence();
@@ -598,7 +617,13 @@ const acceptancePhaseFixture = (
         artifactsRoot,
         commandCwd: options.commandCwd ?? "/captured/snapshot-workspace",
         resourceRoot: options.resourceRoot ?? "/captured/snapshot-workspace",
+        workspaceIdentity: {
+          repositoryRoot: options.commandCwd ?? "/captured/snapshot-workspace",
+          repositoryCommonDirectory: "/captured/common",
+          workspaceId: "validation-run-1",
+        },
         sessionStorageRoot: options.sessionStorageRoot ?? artifactsRoot,
+        restoreWorkspace: () => Effect.void,
         agentPersistence,
         getAgentSession,
         linkAgentInvocation,

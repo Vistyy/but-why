@@ -8,6 +8,7 @@ import {
 } from "../../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
+import { restoreDisposableWorkspace } from "../../../disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import type { ChangeAgentSessionPort } from "../../changePorts.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
@@ -44,6 +45,7 @@ export const candidateValidationLayer = (input: {
           localRepositoryCommonDirectory: input.localRepositoryCommonDirectory,
           artifactsRoot: input.artifactsRoot,
           agentSessionsRoot: input.agentSessionsRoot,
+          restoreWorkspace: restoreDisposableWorkspace,
           agentPersistence: input.agentPersistence,
           getAgentSession: input.getAgentSession,
           linkAgentInvocation: input.linkAgentInvocation,

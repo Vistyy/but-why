@@ -19,6 +19,7 @@ import {
   type DisposableWorktreeInspection,
   type ExactDisposableWorkspaceCleanupInput,
   type ExactDisposableWorkspaceCleanupResult,
+  type RestoreDisposableWorkspace,
   verifyDisposableWorkspaceIntegrity,
 } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
@@ -168,6 +169,7 @@ export const openTaskReviewUseCases = (input: {
     recorded: TaskReviewBase,
   ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
   readonly runWorkspace: RunDisposableExactCommitWorkspace;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly cleanupWorkspace: (
     repositoryRoot: string,
     repositoryCommonDirectory: string,
@@ -346,17 +348,23 @@ const submitTaskReview = (
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
                 afterInvocation: ({ result }) =>
                   Effect.gen(function* () {
-                    const integrity = yield* Effect.either(
-                      verifyDisposableWorkspaceIntegrity({
-                        commandExecutor: active.commandExecutor,
-                        commandCwd: active.worktreePath,
-                        expectedCommitSha: base.base.commit,
-                        allowedUntrackedFiles: [],
-                      }),
+                    const restored = yield* Effect.either(
+                      Effect.uninterruptible(
+                        input.restoreWorkspace({
+                          commandExecutor: active.commandExecutor,
+                          commandCwd: active.worktreePath,
+                          expectedCommitSha: base.base.commit,
+                          workspaceIdentity: {
+                            repositoryRoot: input.repositoryRoot,
+                            repositoryCommonDirectory: input.repositoryCommonDirectory,
+                            workspaceId: taskReviewWorkspaceId(reviewId),
+                          },
+                        }),
+                      ),
                     );
-                    return integrity._tag === "Right"
+                    return restored._tag === "Right"
                       ? result
-                      : taskReviewerIntegrityFailureResult(result, integrity.left);
+                      : taskReviewerIntegrityFailureResult(result, restored.left);
                   }),
                 settleDomain: ({ result }) =>
                   Effect.gen(function* () {

@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
@@ -12,9 +13,11 @@ import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
@@ -24,6 +27,7 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
+import { runTestProcess } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
@@ -109,6 +113,52 @@ const passingValidationPolicy = {
 layer(acceptanceTemplateLayer)(
   "Candidate Acceptance Review for a Change linked to a Task",
   (it) => {
+    it.scoped("restores the Acceptance workspace before an output-correction retry", () =>
+      Effect.gen(function* () {
+        let calls = 0;
+        const statuses: string[] = [];
+        const ready = yield* acceptanceReadyRepo({
+          review: (input) =>
+            Effect.sync(() => {
+              calls += 1;
+              const cwd = input.commandCwd;
+              if (cwd === undefined)
+                throw new Error("Acceptance reviewer workspace was not supplied.");
+              statuses.push(git(cwd, "status", "--porcelain=v1"));
+              if (calls === 1) {
+                writeFileSync(join(cwd, ".but-why/config.json"), "mutated\n");
+                git(cwd, "add", ".but-why/config.json");
+                writeFileSync(join(cwd, "acceptance-untracked"), "remove\n");
+                return {
+                  ok: false as const,
+                  failure: new ReviewerExecutionFailed({
+                    kind: "output_contract",
+                    operationName: "decode_reviewer_output",
+                    message: "Structured output correction is required.",
+                    sessionReference: "session-1",
+                  }),
+                  sessionUsability: "unknown" as const,
+                  attempts: 1,
+                  stdout: "invalid output",
+                  sessionReference: "session-1",
+                };
+              }
+              return {
+                ok: true as const,
+                report: { findings: [] },
+                attempts: 1,
+                stdout: "acceptance output",
+              };
+            }),
+        });
+        const result = yield* runTaskBackedCandidate(ready);
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed" });
+        expect(calls).toBe(2);
+        expect(statuses).toEqual(["", ""]);
+      }),
+    );
+
     it.scoped("blocks on every Acceptance Finding and stores reviewer evidence", () =>
       Effect.gen(function* () {
         const ready = yield* acceptanceReadyRepo({
@@ -298,6 +348,13 @@ const runReviewPhases = (
         validationRunId: started.validationRunId,
         cleanupWorkspace: "not_created",
       });
+      const repositoryCommonDirectory = commonDirectory(ready.repo);
+      const worktreePath = expectedSnapshotWorkspacePath(
+        repositoryCommonDirectory,
+        started.validationRunId,
+      );
+      mkdirSync(dirname(worktreePath), { recursive: true });
+      git(ready.repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
 
       yield* persistence.execution.recordCheckResult({
         validationRunId: started.validationRunId,
@@ -316,11 +373,16 @@ const runReviewPhases = (
           },
         ],
       });
-      const commandExecutor = () =>
-        Effect.succeed({
-          exitCode: 0,
-          stdout: `${captured.headSha}\n`,
-          stderr: "",
+      const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
+        Effect.sync(() => {
+          const result = runTestProcess("bash", ["-lc", command], {
+            cwd: options?.cwd ?? worktreePath,
+          });
+          return {
+            exitCode: result.status ?? 1,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          };
         });
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId: started.validationRunId,
@@ -339,11 +401,17 @@ const runReviewPhases = (
         runtime: ready.reviewerAgentRuntime,
         commandExecutor,
         reviewerExecutor: unusedReviewerExecutor,
-        artifactsRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
+        artifactsRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
         artifactMaxBytes: maxValidationArtifactBytes,
-        commandCwd: ready.repo,
-        resourceRoot: ready.repo,
-        sessionStorageRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
+        commandCwd: worktreePath,
+        resourceRoot: worktreePath,
+        workspaceIdentity: {
+          repositoryRoot: ready.repo,
+          repositoryCommonDirectory,
+          workspaceId: `validation-run-${started.validationRunId}`,
+        },
+        sessionStorageRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
+        restoreWorkspace: restoreDisposableWorkspace,
         agentPersistence: persistence.agentPersistence,
         getAgentSession: persistence.agentSessions.getAgentSession,
         linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
@@ -354,6 +422,7 @@ const runReviewPhases = (
         listPreviousCandidateReviewerFindings:
           persistence.execution.listPreviousCandidateReviewerFindings,
       }).pipe(Effect.provide(NodeFileSystem.layer));
+      git(ready.repo, "worktree", "remove", "--force", "--", worktreePath);
       yield* persistence.execution.complete({
         validationRunId: started.validationRunId,
         outcome: acceptance.outcome,

@@ -18,6 +18,10 @@ import {
 } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type {
+  DisposableWorkspaceIdentity,
+  RestoreDisposableWorkspace,
+} from "../../disposableWorkspace/disposableWorkspace.js";
 import {
   buildReviewerOutputCorrectionPrompt,
   reviewerFindingHistory,
@@ -62,6 +66,8 @@ export type RunSpecialistReviewPhaseInput = {
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
   readonly resourceRoot?: string;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly sessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
@@ -252,12 +258,13 @@ const runSpecialist = (
       commandCwd: input.commandCwd,
       commandExecutor: input.commandExecutor,
       resourceRoot: input.resourceRoot ?? input.commandCwd,
+      workspaceIdentity: input.workspaceIdentity,
+      restoreWorkspace: input.restoreWorkspace,
       profile: policy.profile,
       sessionStorageRoot: input.sessionStorageRoot,
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
-      allowedUntrackedFiles: input.allowedUntrackedFiles,
       expectedHeadSha: input.candidate.headSha,
       makeFindings: (result) =>
         result.ok

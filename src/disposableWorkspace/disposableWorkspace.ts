@@ -4,6 +4,23 @@ import type {
   WorkspaceCommandExecutor,
 } from "../command/workspaceCommand.js";
 
+export type DisposableWorkspaceIdentity = {
+  readonly repositoryRoot: string;
+  readonly repositoryCommonDirectory: string;
+  readonly workspaceId: string;
+};
+
+export type DisposableWorkspaceRestorationInput = {
+  readonly commandExecutor: WorkspaceCommandExecutor;
+  readonly commandCwd: string;
+  readonly expectedCommitSha: string;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
+};
+
+export type RestoreDisposableWorkspace = (
+  input: DisposableWorkspaceRestorationInput,
+) => Effect.Effect<void, DisposableWorkspaceRestorationFailed>;
+
 export type DisposableWorkspaceCleanupState = "not_created" | "removed" | "failed";
 
 export type DisposableWorkspaceCleanupResult = {
@@ -29,6 +46,12 @@ export type DisposableWorkspaceOperationName =
 
 export class DisposableWorkspaceIntegrityFailed extends Data.TaggedError(
   "DisposableWorkspaceIntegrityFailed",
+)<{
+  readonly message: string;
+}> {}
+
+export class DisposableWorkspaceRestorationFailed extends Data.TaggedError(
+  "DisposableWorkspaceRestorationFailed",
 )<{
   readonly message: string;
 }> {}

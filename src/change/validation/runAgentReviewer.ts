@@ -17,6 +17,10 @@ import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import { ReviewerOutputContractFailed } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type {
+  DisposableWorkspaceIdentity,
+  RestoreDisposableWorkspace,
+} from "../../disposableWorkspace/disposableWorkspace.js";
 import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   reviewerEvidenceFromAgentSession,
@@ -29,10 +33,10 @@ import type {
 import type { CandidateValidationExecutionPort } from "./changeValidationPorts.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import {
+  InfrastructureToolingFailed,
   ReviewerProcessToolingFailed,
   validationToolingFailureRecord,
 } from "./validationToolingFailures.js";
-import { verifyCandidateIntegrity } from "./verifyCandidateIntegrity.js";
 
 export type TranslatedReviewerResult<Output> =
   | Extract<ReviewerAgentResult<Output>, { readonly ok: true }>
@@ -61,12 +65,13 @@ export type RunAgentReviewerInput = {
   readonly commandCwd: string;
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly resourceRoot: string;
+  readonly workspaceIdentity: DisposableWorkspaceIdentity;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly profile: ResolvedPiAgentProfile;
   readonly sessionStorageRoot: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
-  readonly allowedUntrackedFiles: readonly string[];
   readonly expectedHeadSha: string;
   readonly makeFindings: (
     result: TranslatedReviewerResult<ReviewerOutput>,
@@ -109,18 +114,23 @@ export const runAgentReviewer = (
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
       afterInvocation: ({ result }) =>
         Effect.gen(function* () {
-          const integrity = yield* Effect.either(
-            verifyCandidateIntegrity({
-              commandExecutor: input.commandExecutor,
-              commandCwd: input.commandCwd,
-              expectedHeadSha: input.expectedHeadSha,
-              allowedUntrackedFiles: input.allowedUntrackedFiles,
-              operationName: `verify_${input.phase}_candidate`,
-            }),
+          const restored = yield* Effect.either(
+            Effect.uninterruptible(
+              input.restoreWorkspace({
+                commandExecutor: input.commandExecutor,
+                commandCwd: input.commandCwd,
+                expectedCommitSha: input.expectedHeadSha,
+                workspaceIdentity: input.workspaceIdentity,
+              }),
+            ),
           );
-          if (integrity._tag === "Right") return result;
-          integrityFailure = integrity.left;
-          return integrityFailureResult(result, integrity.left);
+          if (restored._tag === "Right") return result;
+          const failure = new InfrastructureToolingFailed({
+            operationName: `verify_${input.phase}_candidate`,
+            message: restored.left.message,
+          });
+          integrityFailure = failure;
+          return integrityFailureResult(result, failure);
         }),
       settleDomain: ({ result: runtimeResult, evidence }) =>
         Effect.gen(function* () {

@@ -7,6 +7,7 @@ import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js"
 import {
   cleanupExactDisposableWorkspace,
   inspectDisposableWorktree,
+  restoreDisposableWorkspace,
 } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
@@ -94,6 +95,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
           verifyReviewBase: (repositoryRoot, base) =>
             verifyRecordedTaskReviewBase(repositoryRoot, base),
           runWorkspace: (input) => runDisposableExactCommitWorkspace(input),
+          restoreWorkspace: restoreDisposableWorkspace,
           cleanupWorkspace: (repositoryRoot, repositoryCommonDirectory, cleanup) =>
             cleanupExactDisposableWorkspace(repositoryRoot, repositoryCommonDirectory, cleanup),
           inspectWorkspace: (repositoryRoot, repositoryCommonDirectory, workspaceId, commitSha) =>

@@ -3,10 +3,14 @@ import { dirname, resolve } from "node:path";
 
 import { Effect } from "effect";
 import { executeHostCommandEffect } from "../../command/hostCommand.js";
-import type {
-  DisposableWorktreeInspection,
-  ExactDisposableWorkspaceCleanupInput,
-  ExactDisposableWorkspaceCleanupResult,
+import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
+import {
+  type DisposableWorkspaceIdentity,
+  DisposableWorkspaceRestorationFailed,
+  type DisposableWorkspaceRestorationInput,
+  type DisposableWorktreeInspection,
+  type ExactDisposableWorkspaceCleanupInput,
+  type ExactDisposableWorkspaceCleanupResult,
 } from "../disposableWorkspace.js";
 import {
   disposableWorkspaceRoot,
@@ -45,6 +49,159 @@ export const prepareDisposableWorkspaceParent = (
       }
     });
   });
+
+const verifyProductOwnedDisposableWorktree = (
+  identity: DisposableWorkspaceIdentity,
+): Effect.Effect<
+  | {
+      readonly ok: true;
+      readonly worktreePath: string;
+      readonly head: string | undefined;
+      readonly detached: boolean;
+    }
+  | { readonly ok: false; readonly message: string }
+> =>
+  inspectProductOwnedDisposableWorktree(
+    identity.repositoryRoot,
+    identity.repositoryCommonDirectory,
+    identity.workspaceId,
+  ).pipe(
+    Effect.map((inspection) =>
+      inspection.state === "owned"
+        ? {
+            ok: true as const,
+            worktreePath: inspection.worktreePath,
+            head: inspection.record.head,
+            detached: inspection.record.detached,
+          }
+        : {
+            ok: false as const,
+            message:
+              inspection.state === "unproven"
+                ? inspection.message
+                : "Disposable Workspace is not registered.",
+          },
+    ),
+  );
+
+export const restoreDisposableWorkspace = (
+  input: DisposableWorkspaceRestorationInput,
+): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
+  Effect.gen(function* () {
+    yield* verifyOwnedDetachedWorktree(input);
+    yield* runRestorationCommand(
+      input,
+      `git reset --hard ${shellQuote(input.expectedCommitSha)} && git clean -fd -- .`,
+    );
+    yield* verifyOwnedDetachedWorktree(input, true);
+    const clean = yield* runWorkspaceCommand(
+      input,
+      "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
+    );
+    const [head, ...status] = clean.stdout.trimEnd().split("\n");
+    if (clean.exitCode !== 0 || head !== input.expectedCommitSha || status.length > 0) {
+      return yield* restorationFailed("Disposable Workspace was not clean after restoration.");
+    }
+  });
+
+const verifyOwnedDetachedWorktree = (
+  input: DisposableWorkspaceRestorationInput,
+  requireExpectedHead = false,
+): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
+  Effect.gen(function* () {
+    const product = yield* verifyProductOwnedDisposableWorktree(input.workspaceIdentity);
+    if (!product.ok) return yield* restorationFailed(product.message);
+    if (resolve(product.worktreePath) !== resolve(input.commandCwd) || !product.detached) {
+      return yield* restorationFailed(
+        "Disposable Workspace ownership or detached state could not be verified.",
+      );
+    }
+    const activeCommonDirectory = yield* runWorkspaceCommand(
+      input,
+      "git rev-parse --path-format=absolute --git-common-dir",
+    );
+    if (
+      activeCommonDirectory.exitCode !== 0 ||
+      resolve(activeCommonDirectory.stdout.trim()) !==
+        resolve(input.workspaceIdentity.repositoryCommonDirectory)
+    ) {
+      return yield* restorationFailed(
+        "Disposable Workspace Git Common Directory does not match its owned repository.",
+      );
+    }
+    if (requireExpectedHead && product.head !== input.expectedCommitSha) {
+      return yield* restorationFailed(
+        "Disposable Workspace registration does not match the expected commit after restoration.",
+      );
+    }
+    const listed = yield* runWorkspaceCommand(input, "git worktree list --porcelain");
+    const worktree = parseWorktreeRecords(listed.stdout).find(
+      (record) => resolve(record.path) === resolve(input.commandCwd),
+    );
+    if (worktree === undefined || !worktree.detached) {
+      return yield* restorationFailed(
+        "Disposable Workspace ownership or detached state could not be verified.",
+      );
+    }
+    if (requireExpectedHead && worktree.head !== input.expectedCommitSha) {
+      return yield* restorationFailed(
+        "Disposable Workspace registration does not match the expected commit after restoration.",
+      );
+    }
+    const topLevel = yield* runWorkspaceCommand(input, "git rev-parse --show-toplevel");
+    if (resolve(topLevel.stdout.trim()) !== resolve(input.commandCwd)) {
+      return yield* restorationFailed(
+        "Disposable Workspace path does not match the registered worktree.",
+      );
+    }
+    const symbolicHead = yield* runWorkspaceCommand(input, "git symbolic-ref --quiet HEAD");
+    if (symbolicHead.exitCode === 0 || symbolicHead.exitCode !== 1) {
+      return yield* restorationFailed("Disposable Workspace HEAD is not detached.");
+    }
+  });
+
+const runRestorationCommand = (
+  input: {
+    readonly commandExecutor: WorkspaceCommandExecutor;
+    readonly commandCwd: string;
+  },
+  command: string,
+): Effect.Effect<void, DisposableWorkspaceRestorationFailed> =>
+  Effect.gen(function* () {
+    const result = yield* runWorkspaceCommand(input, command);
+    if (result.exitCode !== 0) {
+      return yield* restorationFailed(
+        [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n") ||
+          "Disposable Workspace restoration failed.",
+      );
+    }
+  });
+
+const runWorkspaceCommand = (
+  input: {
+    readonly commandExecutor: WorkspaceCommandExecutor;
+    readonly commandCwd: string;
+  },
+  command: string,
+): Effect.Effect<
+  { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
+  DisposableWorkspaceRestorationFailed
+> =>
+  input.commandExecutor(command, { cwd: input.commandCwd }).pipe(
+    Effect.mapError(
+      (error) =>
+        new DisposableWorkspaceRestorationFailed({
+          message: error.message,
+        }),
+    ),
+  );
+
+const restorationFailed = (
+  message: string,
+): Effect.Effect<never, DisposableWorkspaceRestorationFailed> =>
+  Effect.fail(new DisposableWorkspaceRestorationFailed({ message }));
+
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 export const inspectDisposableWorktree = (
   repositoryRoot: string,
