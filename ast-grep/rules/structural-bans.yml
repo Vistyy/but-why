@@ -525,6 +525,18 @@ ignores:
 rule:
   all:
     - any:
+        - all:
+            - kind: satisfies_expression
+            - inside:
+                kind: return_statement
+                stopBy: end
+            - not:
+                inside:
+                  any:
+                    - kind: object
+                    - kind: array
+                    - kind: call_expression
+                  stopBy: end
         - pattern: return $VALUE satisfies $TYPE
         - pattern: return await $VALUE satisfies $TYPE
         - pattern: return ($VALUE satisfies $TYPE)
