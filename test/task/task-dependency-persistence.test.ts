@@ -1,10 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { internalTaskId, publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { openSqliteTaskChangeTaskPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
+import { taskChangeTaskMutationOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -118,7 +119,9 @@ it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", (
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
+      const taskChanges = yield* openSqliteTaskChangeTaskPersistence(
+        taskChangeTaskMutationOperations,
+      );
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Linked");
       yield* createTask(tasks, "Dependency");

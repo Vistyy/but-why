@@ -20,8 +20,13 @@ import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
 import type { TaskReviewInspectionUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import type { RenameTaskInput, RenameTaskResult } from "../../src/task/taskStore.js";
 import type { ApplyTaskContextDraftResult, TaskUseCases } from "../../src/task/taskUseCases.js";
+import type {
+  CancellationUseCases,
+  TaskCancellationResult,
+} from "../../src/taskChange/cancelTaskChange.js";
 import type { TaskChangeTaskUseCases } from "../../src/taskChange/composition/loadTaskChangeTaskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { fakeTaskChangeTaskUseCases, fakeTaskUseCases } from "../support/taskUseCases.js";
@@ -116,6 +121,112 @@ const renameEnvironment = (
 };
 
 describe("Task command Adapters", () => {
+  it.effect("renders every Task Cancel failure through its presentation policy", () =>
+    Effect.gen(function* () {
+      const taskId = publicTaskId("BY-1");
+      const failureCases: ReadonlyArray<{
+        readonly result: Extract<TaskCancellationResult, { readonly ok: false }>;
+        readonly message: string;
+        readonly help: readonly string[];
+      }> = [
+        {
+          result: { ok: false, code: "task_not_found", taskId },
+          message: "Task was not found: BY-1",
+          help: ["Run `by task list --all --limit all` to see known Tasks."],
+        },
+        {
+          result: { ok: false, code: "change_not_found", taskId },
+          message: "Change for Task BY-1 was not found.",
+          help: ["Inspect the Task and its Change linkage before retrying."],
+        },
+        {
+          result: { ok: false, code: "task_already_done", taskId },
+          message: "Cannot cancel completed Task BY-1.",
+          help: ["Only unfinished Tasks can be cancelled."],
+        },
+        {
+          result: { ok: false, code: "change_already_completed", taskId },
+          message: "Task BY-1 is already complete through its Change.",
+          help: ["Inspect the Change with `by change show <change-id>`."],
+        },
+        {
+          result: { ok: false, code: "github_pull_request_unavailable", taskId },
+          message: "The owned pull request could not be read, so the Task remains unfinished.",
+          help: ["Restore GitHub access, then retry Task Cancel."],
+        },
+        {
+          result: { ok: false, code: "owned_pull_request_mismatch", taskId },
+          message:
+            "The owned pull request does not match the recorded Change facts, so the Task remains unfinished.",
+          help: ["Inspect the Change and resolve the remote mismatch before retrying."],
+        },
+        {
+          result: {
+            ok: false,
+            code: "github_close_failed",
+            taskId,
+            evidence: {
+              operation: "pull_request_close",
+              classification: "rejected",
+              exitStatus: 1,
+            },
+            recoveryEvidence: {
+              operation: "remote_lookup",
+              classification: "unavailable",
+              reason: "unavailable",
+            },
+          },
+          message: "The owned pull request could not be closed, so the Task remains unfinished.",
+          help: ["Resolve the GitHub issue, then retry Task Cancel."],
+        },
+        {
+          result: { ok: false, code: "submission_in_progress", taskId },
+          message:
+            "Another Submission or cancellation already owns this Change, so the Task remains unfinished.",
+          help: ["Wait for the other operation to finish, then retry Task Cancel."],
+        },
+        {
+          result: { ok: false, code: "active_validation_run", taskId, validationRunId: 42 },
+          message: "A Validation Run remains active, so the Task remains unfinished.",
+          help: [
+            "After stopping every process from the run, execute `by validation-run abandon 42 --reason <reason>`.",
+          ],
+        },
+      ];
+
+      for (const failure of failureCases) {
+        const cancellationUseCases: CancellationUseCases = {
+          resolveTaskId: (id) => ({ ok: true, taskId: id }),
+          cancelTask: () => Effect.succeed(failure.result),
+          cancelChange: () => Effect.die("Unexpected Change Cancel call"),
+        };
+        const result = yield* runByInProcessEffect(
+          createTestWorkspace(),
+          ["task", "cancel", "BY-1", "--reason", "Stop"],
+          firstNow,
+          { cancellationUseCases },
+        );
+
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: {
+            taskId: "BY-1",
+            code: failure.result.code,
+            message: failure.message,
+            ...("validationRunId" in failure.result
+              ? { validationRunId: failure.result.validationRunId }
+              : {}),
+            ...("evidence" in failure.result ? { evidence: failure.result.evidence } : {}),
+            ...("recoveryEvidence" in failure.result
+              ? { recoveryEvidence: failure.result.recoveryEvidence }
+              : {}),
+          },
+          help: failure.help,
+        });
+      }
+    }),
+  );
+
   it("renders only valid Task Review recovery actions", () => {
     const running = taskReviewRecord({ state: "running", outcome: null });
 

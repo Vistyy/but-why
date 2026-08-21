@@ -1,15 +1,15 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
-import { settleUnsettledAgentInvocations } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { settleUnsettledAgentInvocations } from "../../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type {
   AgentInvocationRecord,
   AgentSessionSqlLink,
-} from "../agent/agentSession/agentSession.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodeReviewerFindingCore } from "../contracts/reviewerFinding.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import type { TaskState } from "../task/lifecycle.js";
+} from "../../../agent/agentSession/agentSession.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { decodeReviewerFindingCore } from "../../../contracts/reviewerFinding.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import type { TaskState } from "../../lifecycle.js";
 import {
   decodeTaskReviewPolicySnapshot,
   decodeTaskReviewToolingFailure,
@@ -19,16 +19,16 @@ import {
   type TaskReviewProposal,
   type TaskReviewRecord,
   type TaskReviewToolingFailure,
-} from "../task/review/taskReview.js";
+} from "../../review/taskReview.js";
 import type {
   AdmitTaskReviewInput,
   AdmitTaskReviewResult,
   CompleteTaskReviewSuccess,
   TaskReviewAdmissionRejection,
   TaskReviewPersistence,
-} from "../task/review/taskReviewPersistence.js";
-import { expectedTaskReviewWorkspacePath } from "../task/review/taskReviewWorkspace.js";
-import { internalTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
+} from "../../review/taskReviewPersistence.js";
+import { expectedTaskReviewWorkspacePath } from "../../review/taskReviewWorkspace.js";
+import { internalTaskId, publicTaskIdFromInternal } from "../../taskId.js";
 
 const reviewColumns = `
   id, task_id AS taskId, proposal AS proposalSnapshot,

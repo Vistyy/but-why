@@ -1,6 +1,6 @@
-import { isTaskState, type TaskState } from "../task/lifecycle.js";
-import type { TaskDependencyFact } from "../task/task.js";
-import { type PublicTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
+import { isTaskState, type TaskState } from "../../lifecycle.js";
+import type { TaskDependencyFact } from "../../task.js";
+import { type PublicTaskId, publicTaskIdFromInternal } from "../../taskId.js";
 
 export type DecodedTaskSummaryRow = {
   readonly id: PublicTaskId;

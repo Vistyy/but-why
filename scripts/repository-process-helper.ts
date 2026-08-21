@@ -8,7 +8,7 @@ import {
   RepositorySql,
   repositorySqlLayer,
 } from "../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskPersistence } from "../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../src/task/taskId.js";
 
 const usage = `Usage: repositoryProcessHelper.ts <hold-lock|open-state|open-read> ...

@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskPersistence } from "../adapters/sqlite/sqliteTaskPersistence.js";
 import { openTaskUseCases, type TaskUseCases } from "../taskUseCases.js";
 
 export type LoadTaskUseCasesInput = {

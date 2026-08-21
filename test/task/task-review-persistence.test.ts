@@ -13,8 +13,12 @@ import {
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
+import {
+  admitTaskReview,
+  openSqliteTaskReviewPersistence,
+  taskReviewAdmissionRejection,
+} from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { settleTaskReviewEvidence } from "../../src/task/review/taskReviewEvidenceSettlement.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
@@ -365,7 +369,10 @@ it.scoped("derives an admitted Task Review workspace from the Git Common Directo
   withTemporaryRepositoryState((input) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const admission = yield* openSqliteTaskChangeReviewAdmissionPersistence();
+      const admission = yield* openSqliteTaskChangeReviewAdmissionPersistence({
+        checkAdmission: taskReviewAdmissionRejection,
+        admit: admitTaskReview,
+      });
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
 
       const admitted = yield* admission.admit({

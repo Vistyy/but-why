@@ -20,6 +20,10 @@ import {
   openSqliteTaskChangeReconciliationCompletion,
   openSqliteTaskChangeSubmissionCompletion,
 } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
+import {
+  taskChangeCancellationOperations,
+  taskChangeCompletionOperations,
+} from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import type { TaskChangeCancellationPort } from "../../src/taskChange/taskChangePorts.js";
 
 type ChangeDeliveryTestPort = {
@@ -33,8 +37,13 @@ type ChangeDeliveryTestPort = {
 const openChangeDeliveryTestPort = () =>
   Effect.all({
     reconciliationOwner: openSqliteChangeReconciliationPort(),
-    reconciliationCompletion: openSqliteTaskChangeReconciliationCompletion(),
-    cancellation: openSqliteTaskChangeCancellationPort(),
+    reconciliationCompletion: openSqliteTaskChangeReconciliationCompletion(
+      taskChangeCompletionOperations,
+    ),
+    cancellation: openSqliteTaskChangeCancellationPort(
+      taskChangeCancellationOperations,
+      taskChangeCompletionOperations,
+    ),
     cleanup: openSqliteTerminalChangeCleanupPort(),
   }).pipe(
     Effect.map(
@@ -61,7 +70,7 @@ export const openSqliteChangeTestDependencies = () =>
     agentSessions: openSqliteChangeAgentSessionPort(),
     publication: openSqliteCandidatePublicationPort(),
     submissionOwner: openSqliteChangeSubmissionPort(),
-    submissionCompletion: openSqliteTaskChangeSubmissionCompletion(),
+    submissionCompletion: openSqliteTaskChangeSubmissionCompletion(taskChangeCompletionOperations),
   }).pipe(
     Effect.map(
       ({
