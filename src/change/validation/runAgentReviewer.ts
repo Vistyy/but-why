@@ -80,6 +80,9 @@ export type RunAgentReviewerInput = {
   readonly settleAgentInvocationResult: NonNullable<
     CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
+  readonly recordDispatchFailure: (
+    failure: ValidationToolingFailure,
+  ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
 export type RunAgentReviewerResult = {
@@ -216,13 +219,16 @@ export const runAgentReviewer = (
         }),
     }).pipe(
       Effect.catchTag("AgentInvocationDispatchFailed", (failure) =>
-        Effect.fail(
-          new InfrastructureToolingFailed({
+        Effect.gen(function* () {
+          const toolingFailure = new InfrastructureToolingFailed({
             operationName: "dispatch_agent_invocation",
             message: agentInvocationDispatchFailureMessage(failure.invocationId),
             blockingInvocationId: failure.invocationId,
-          }),
-        ),
+          });
+          phaseOutcome = "tooling_failed";
+          yield* input.recordDispatchFailure(toolingFailure);
+          return { outcome: phaseOutcome };
+        }),
       ),
     );
     if (phaseOutcome === undefined) {

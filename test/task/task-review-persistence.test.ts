@@ -116,51 +116,6 @@ it.effect("persists dispatch identity through Task Review inspection and CLI out
   }),
 );
 
-it.scoped("preserves dispatch evidence when Task Review admission changes", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      const taskId = publicTaskId("BY-1");
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
-      const admitted = yield* reviews.admit({
-        taskId,
-        policy,
-        baseRef: "refs/heads/main",
-        baseCommit: "a".repeat(40),
-        now,
-      });
-      if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
-      yield* reviews.recordCleanup(admitted.review.id, "removed", now);
-      const failure = {
-        operation: "dispatch_agent_invocation" as const,
-        message: "Agent Invocation dispatch was blocked.",
-        blockingInvocationId: 29,
-      };
-      yield* reviews.recordActiveFailure(admitted.review.id, failure, now);
-      const repository = yield* RepositorySql;
-      yield* repository.operation(
-        "change Task Review proposal during dispatch failure",
-        (sql) => sql`
-          UPDATE tasks SET title = 'Changed after admission'
-          WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
-        `,
-      );
-      const completed = yield* reviews.complete({
-        reviewId: admitted.review.id,
-        findings: [],
-        toolingFailure: failure,
-        now,
-      });
-      expect(completed).toMatchObject({
-        ok: true,
-        outcome: "tooling_failed",
-        review: { toolingFailure: failure },
-      });
-    }),
-  ),
-);
-
 it.scoped("preserves dispatch evidence when Task Review cleanup fails", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

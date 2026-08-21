@@ -277,6 +277,18 @@ const runSpecialist = (
             }))
           : [],
       settleAgentInvocationResult: input.settleAgentInvocationResult,
+      recordDispatchFailure: (failure) =>
+        input.recordSpecialistResult({
+          validationRunId: input.validationRunId,
+          producer: policy.id,
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: {
+            ...validationToolingFailureRecord(failure),
+            validationRunId: input.validationRunId,
+          },
+        }),
     });
     return execution;
   });

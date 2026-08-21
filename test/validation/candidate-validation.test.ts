@@ -19,7 +19,10 @@ import {
 import { internalChangeId } from "../../src/change/changeId.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
-import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../../src/contracts/repositoryStorageError.js";
 import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -280,23 +283,32 @@ describe("Candidate validation", () => {
   );
 
   it.scoped(
-    "does not link the blocking Agent Invocation during Change Validation dispatch",
+    "completes after a retry dispatch conflict without adopting its blocking Invocation",
     () =>
       Effect.gen(function* () {
         const mainCheckout = candidateReadyRepo();
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         if (!captured.ok) throw new Error(captured.code);
         yield* installAcceptanceContext(mainCheckout, captured.changeId);
-        const first = yield* withTestRepository(
+        yield* withTestRepository(
           mainCheckout,
           Effect.gen(function* () {
             const agents = yield* openSqliteAgentSessionPersistence();
             const started = yield* agents.beginInvocation({
-              configuration: { harness: "pi" as const, model: "test-model" },
+              configuration: { harness: "pi" as const, model: "acceptance-model" },
               createdAt: "2026-08-14T12:00:00.000Z",
               linkInvocation: () => Effect.void,
             });
-            if (!started.ok) throw new Error(`Agent Invocation setup failed: ${started.code}`);
+            if (!started.ok) throw new Error(`Agent Session setup failed: ${started.code}`);
+            yield* agents.settleInvocation({
+              invocationId: started.dispatch.invocation.id,
+              continuationId: started.dispatch.continuation.id,
+              settlement: {
+                settledAt: "2026-08-14T12:00:01.000Z",
+                kind: "returned",
+                transcriptPath: "session.jsonl",
+              },
+            });
             const repository = yield* RepositorySql;
             yield* repository.operation(
               "assign acceptance Agent Session fixture",
@@ -305,13 +317,73 @@ describe("Candidate validation", () => {
                 VALUES (${internalChangeId(captured.changeId, repository.idPrefix)}, 'acceptance', ${started.dispatch.agentSessionId})
               `,
             );
-            return started.dispatch.invocation.id;
+          }),
+        );
+        let dispatchCount = 0;
+        let firstReviewerInvocationId: number | undefined;
+        let blockingInvocationId: number | undefined;
+        const withAgents = <A>(
+          use: (agents: AgentSessionPersistence) => Effect.Effect<A, RepositoryStorageError>,
+        ) =>
+          withTestRepository(
+            mainCheckout,
+            Effect.flatMap(openSqliteAgentSessionPersistence(), use),
+          );
+        const agentPersistence: AgentSessionPersistence = {
+          beginInvocation: (input) =>
+            withAgents((agents) =>
+              Effect.gen(function* () {
+                dispatchCount += 1;
+                if (dispatchCount === 2) {
+                  if (input.agentSessionId === undefined) {
+                    return yield* Effect.die("Acceptance Agent Session was not assigned");
+                  }
+                  const blocker = yield* agents.beginInvocation({
+                    agentSessionId: input.agentSessionId,
+                    configuration: input.configuration,
+                    createdAt: input.createdAt,
+                    linkInvocation: () => Effect.void,
+                  });
+                  if (!blocker.ok) {
+                    return yield* Effect.die(
+                      `Could not create blocking Invocation: ${blocker.code}`,
+                    );
+                  }
+                  blockingInvocationId = blocker.dispatch.invocation.id;
+                }
+                const dispatched = yield* agents.beginInvocation(input);
+                if (dispatchCount === 1 && dispatched.ok) {
+                  firstReviewerInvocationId = dispatched.dispatch.invocation.id;
+                }
+                return dispatched;
+              }),
+            ),
+          settleInvocation: (input) => withAgents((agents) => agents.settleInvocation(input)),
+          readInvocationHistory: (agentSessionId) =>
+            withAgents((agents) => agents.readInvocationHistory(agentSessionId)),
+        };
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed({
+            ok: false as const,
+            failure: new ReviewerExecutionFailed({
+              kind: "output_contract",
+              operationName: "decode_reviewer_output",
+              message: "Acceptance output was invalid.",
+              correctionPrompt: "Retry the Acceptance Review.",
+              sessionReference: "retry-session",
+            }),
+            sessionUsability: "unknown" as const,
+            attempts: 1,
+            stdout: "invalid reviewer output",
+            sessionReference: "retry-session",
           }),
         );
         const validation = candidateValidationForTest({
           localRepositoryRoot: mainCheckout,
           artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
           repository: repositoryConfig(mainCheckout),
+          reviewerAgentRuntime: { review },
+          agentPersistence,
         });
 
         const result = yield* validateAcceptanceContextCandidate(validation, {
@@ -321,35 +393,66 @@ describe("Candidate validation", () => {
         });
 
         expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        expect(dispatchCount).toBe(2);
+        expect(review).toHaveBeenCalledTimes(1);
         if (result.ok || "code" in result) return;
+        expect(blockingInvocationId).toBeDefined();
+        expect(firstReviewerInvocationId).toBeDefined();
+        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+          state: "complete",
+          outcome: "tooling_failed",
+          cleanup: { state: "complete", blockingReason: null },
+        });
+        expect(yield* validation.listPhaseResults(result.validationRunId)).toEqual(
+          expect.arrayContaining([{ producer: "acceptance", outcome: "failed" }]),
+        );
         expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual([
           expect.objectContaining({
             operationName: "dispatch_agent_invocation",
-            blockingInvocationId: first,
+            blockingInvocationId,
           }),
         ]);
         const evidence = yield* withTestRepository(
           mainCheckout,
           Effect.flatMap(RepositorySql, (repository) =>
             repository.operation(
-              "inspect failed Validation Invocation ownership",
+              "inspect retry dispatch Validation evidence",
               (sql) => sql<{
-                readonly linkedCount: number;
+                readonly invocationId: number;
                 readonly settledAt: string | null;
+                readonly settlementKind: string | null;
+                readonly blockerSettledAt: string | null;
+                readonly blockerLinkCount: number;
               }>`
                 SELECT
+                  linked.agent_invocation_id AS invocationId,
+                  invocation.settled_at AS settledAt,
+                  invocation.settlement_kind AS settlementKind,
+                  blocker.settled_at AS blockerSettledAt,
                   (SELECT COUNT(*) FROM validation_phase_agent_invocations
-                   WHERE validation_run_id = ${result.validationRunId}) AS linkedCount,
-                  invocation.settled_at AS settledAt
-                FROM agent_invocations AS invocation
-                WHERE invocation.id = ${first}
+                   WHERE validation_run_id = ${result.validationRunId}
+                     AND agent_invocation_id = ${blockingInvocationId}) AS blockerLinkCount
+                FROM validation_phase_agent_invocations AS linked
+                JOIN agent_invocations AS invocation
+                  ON invocation.id = linked.agent_invocation_id
+                JOIN agent_invocations AS blocker
+                  ON blocker.id = ${blockingInvocationId}
+                WHERE linked.validation_run_id = ${result.validationRunId}
               `,
             ),
           ),
         );
-        expect(evidence).toEqual([{ linkedCount: 0, settledAt: null }]);
+        expect(evidence).toEqual([
+          {
+            invocationId: firstReviewerInvocationId,
+            settledAt: expect.any(String),
+            settlementKind: "returned",
+            blockerSettledAt: null,
+            blockerLinkCount: 0,
+          },
+        ]);
       }),
-    10_000,
+    15_000,
   );
 
   it.scoped(

@@ -102,7 +102,7 @@ export const openSqliteCandidateValidationExecutionPort = () =>
       recordAcceptanceResult: (input) =>
         repository.transactionImmediate("record Candidate Acceptance Review Result", (sql) =>
           Effect.gen(function* () {
-            yield* requirePreDispatchReviewerIntegrityFailure(
+            yield* requireDirectReviewerFailureEvidence(
               sql,
               input,
               validationPhase.acceptanceReview,
@@ -123,7 +123,7 @@ export const openSqliteCandidateValidationExecutionPort = () =>
       recordSpecialistResult: (input) =>
         repository.transactionImmediate("record Candidate Specialist Review Result", (sql) =>
           Effect.gen(function* () {
-            yield* requirePreDispatchReviewerIntegrityFailure(
+            yield* requireDirectReviewerFailureEvidence(
               sql,
               input,
               validationPhase.specialistReview,
@@ -521,7 +521,7 @@ const recordPhaseResult = (
     `;
   }).pipe(Effect.asVoid);
 
-const requirePreDispatchReviewerIntegrityFailure = (
+const requireDirectReviewerFailureEvidence = (
   sql: SqlClient.SqlClient,
   input: Pick<
     RecordCandidateValidationPhaseResultInput,
@@ -550,16 +550,21 @@ const requirePreDispatchReviewerIntegrityFailure = (
         failure.operationName === "verify_candidate_head") ||
         (failure.errorKind === "infrastructure_tooling_failed" &&
           failure.operationName === expectedInfrastructureOperation));
+    const isDispatchFailure =
+      failure !== undefined &&
+      failure.errorKind === "infrastructure_tooling_failed" &&
+      failure.operationName === "dispatch_agent_invocation" &&
+      failure.blockingInvocationId !== undefined;
     if (
-      (linked[0]?.count ?? 0) > 0 ||
+      ((linked[0]?.count ?? 0) > 0 && !isDispatchFailure) ||
       input.outcome !== "failed" ||
       (input.findings ?? []).length !== 0 ||
       input.artifactRecords.length !== 0 ||
-      !isIntegrityFailure
+      (!isIntegrityFailure && !isDispatchFailure)
     ) {
       return yield* invalidData(
         operationName,
-        "A direct reviewer Result requires pre-dispatch Candidate integrity failure evidence",
+        "A direct reviewer Result requires pre-dispatch Candidate integrity or dispatch failure evidence",
       );
     }
   }).pipe(Effect.asVoid);

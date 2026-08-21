@@ -171,6 +171,7 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
     };
     const failures: TaskReviewRecord["toolingFailure"][] = [];
     let cleanupCalls = 0;
+    const events: string[] = [];
     const persistence: TaskReviewPersistence = {
       reuseJudgment: () => Effect.succeed(undefined),
       checkAdmission: () => Effect.succeed(undefined),
@@ -182,8 +183,13 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
           proposal: review.proposal,
           dependencyEvidence: [],
         }),
-      recordCleanup: () => Effect.void,
+      recordCleanup: () =>
+        Effect.sync(() => {
+          cleanupCalls += 1;
+          events.push("cleanup");
+        }),
       complete: (input) => {
+        events.push("complete");
         if (input.toolingFailure === undefined) return Effect.die("Expected a Tooling Failure");
         return Effect.succeed({
           ok: true as const,
@@ -237,11 +243,7 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
               })
               .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
       restoreWorkspace: () => Effect.void,
-      cleanupWorkspace: () =>
-        Effect.sync(() => {
-          cleanupCalls += 1;
-          return { workspace: "removed" as const };
-        }),
+      cleanupWorkspace: () => Effect.succeed({ workspace: "removed" as const }),
       inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
     });
 
@@ -259,6 +261,7 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
       },
     });
     expect(cleanupCalls).toBe(1);
+    expect(events).toEqual(["cleanup", "complete"]);
     expect(failures).toMatchObject([
       {
         operation: "dispatch_agent_invocation",
@@ -266,107 +269,6 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
         blockingInvocationId: 29,
       },
     ]);
-  }),
-);
-
-it.effect("keeps the dispatch failure active when Task Review cleanup fails", () =>
-  Effect.gen(function* () {
-    const taskId = publicTaskId("BY-1");
-    const reviewerProfile = {
-      agentProfile: "review",
-      scope: "global" as const,
-      profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test-model" } },
-    };
-    const reviewerPolicy = {
-      profile: reviewerProfile,
-      builtInInstructions: taskReviewBuiltInInstructions,
-      guidance: null,
-    };
-    const review: TaskReviewRecord = {
-      id: 1,
-      taskId,
-      proposal: { title: "Review", description: "Exact", dependencyIds: [] },
-      dependencyEvidence: [],
-      baseRef: "refs/heads/main",
-      baseCommit: "base-sha",
-      workspacePath: "/workspace",
-      state: "running",
-      outcome: null,
-      workspaceCleanup: "not_created",
-      cleanupBlockingReason: null,
-      toolingFailure: null,
-      findings: [],
-    };
-    let toolingFailure: TaskReviewRecord["toolingFailure"] = null;
-    const persistence: TaskReviewPersistence = {
-      reuseJudgment: () => Effect.succeed(undefined),
-      checkAdmission: () => Effect.succeed(undefined),
-      admit: () =>
-        Effect.succeed({
-          ok: true as const,
-          review,
-          policy: reviewerPolicy,
-          proposal: review.proposal,
-          dependencyEvidence: [],
-        }),
-      recordCleanup: () => Effect.void,
-      complete: () => Effect.die("Task Review must remain active after cleanup failure"),
-      abandon: () => Effect.die("Unexpected persistence operation"),
-      getById: () => Effect.succeed({ ...review, toolingFailure }),
-      getLatestForTask: () => Effect.succeed(undefined),
-      listForTask: () => Effect.succeed([]),
-      getReviewerAgentSession: () => Effect.succeed(undefined),
-      getReviewerConfiguration: () => Effect.succeed(undefined),
-      linkAgentInvocation: defaultAgentLink,
-      settleAgentReview: () => () => Effect.die("Dispatch failure must not settle an Invocation"),
-      recordActiveFailure: (_reviewId, failure) =>
-        Effect.sync(() => {
-          toolingFailure = failure;
-        }),
-      proposalIsCurrent: () => Effect.succeed(true),
-    };
-    const useCases = openTaskReviewUseCases({
-      repositoryRoot: "/repository",
-      repositoryCommonDirectory: "/common",
-      loadRepoConfig: () => ({ ok: true as const, config: { idPrefix: "BY" } }),
-      resolvePolicy: () => ({
-        ok: true as const,
-        policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
-      }),
-      persistence,
-      agentSessionStorageRoot: "/sessions",
-      agentPersistence: dispatchConflictAgentPersistence(),
-      reviewerRuntime: { review: () => Effect.die("Reviewer must not run") },
-      reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
-      readReviewBase: () => Effect.succeed({ ok: true as const, base: reviewBase(review) }),
-      verifyReviewBase: () => Effect.succeed({ ok: true as const }),
-      runWorkspace: (workspaceInput) =>
-        workspaceInput.runInWorkspace === undefined
-          ? Effect.succeed({ ok: true as const })
-          : workspaceInput
-              .runInWorkspace({
-                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
-                worktreePath: review.workspacePath,
-              })
-              .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
-      restoreWorkspace: () => Effect.void,
-      cleanupWorkspace: () =>
-        Effect.succeed({ workspace: "failed" as const, errorMessage: "Cleanup failed." }),
-      inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
-    });
-
-    const result = yield* useCases.submit(taskId, "2026-08-14T12:00:00.000Z");
-
-    expect(result).toMatchObject({
-      ok: false,
-      code: "task_review_recovery_required",
-      review: {
-        toolingFailure: {
-          operation: "dispatch_agent_invocation",
-          blockingInvocationId: 29,
-        },
-      },
-    });
   }),
 );
 

@@ -158,7 +158,7 @@ export const requireCoherentValidationCompletion = (
           if (
             result.outcome === "failed" &&
             terminal === undefined &&
-            !isPreDispatchReviewerIntegrityFailure(result.phase, evidenceByPosition.get(key))
+            !isDirectReviewerFailureEvidence(result.phase, evidenceByPosition.get(key))
           ) {
             throw new Error("A failed reviewer Result has no Agent Invocation evidence");
           }
@@ -229,7 +229,7 @@ export const requireCoherentValidationCompletion = (
     });
   }).pipe(Effect.asVoid);
 
-const isPreDispatchReviewerIntegrityFailure = (
+const isDirectReviewerFailureEvidence = (
   phase: ValidationPhase,
   evidence: PhaseResultEvidenceRow | undefined,
 ): boolean => {
@@ -248,14 +248,21 @@ const isPreDispatchReviewerIntegrityFailure = (
   ) {
     return false;
   }
-  const value = failure as { readonly errorKind?: unknown; readonly operationName?: unknown };
+  const value = failure as {
+    readonly errorKind?: unknown;
+    readonly operationName?: unknown;
+    readonly blockingInvocationId?: unknown;
+  };
   return (
     (value.errorKind === "git_tooling_failed" && value.operationName === "verify_candidate_head") ||
     (value.errorKind === "infrastructure_tooling_failed" &&
       value.operationName ===
         (phase === validationPhase.acceptanceReview
           ? "verify_acceptance_candidate"
-          : "verify_specialist_candidate"))
+          : "verify_specialist_candidate")) ||
+    (value.errorKind === "infrastructure_tooling_failed" &&
+      value.operationName === "dispatch_agent_invocation" &&
+      typeof value.blockingInvocationId === "number")
   );
 };
 

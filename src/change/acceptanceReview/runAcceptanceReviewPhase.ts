@@ -241,6 +241,17 @@ export const runAcceptanceReviewPhase = (
               }))
             : [],
         settleAgentInvocationResult: input.settleAgentInvocationResult,
+        recordDispatchFailure: (failure) =>
+          input.recordAcceptanceResult({
+            validationRunId: input.validationRunId,
+            outcome: "failed",
+            findings: [],
+            artifactRecords: [],
+            toolingFailure: {
+              ...validationToolingFailureRecord(failure),
+              validationRunId: input.validationRunId,
+            },
+          }),
       });
       return execution;
     }),
