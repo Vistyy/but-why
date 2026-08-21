@@ -12,6 +12,7 @@ import {
   repositorySqlLayer,
 } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
+import { taskChangeStartTaskOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import {
   noOpTerminalCleanupDependencies,
@@ -51,7 +52,7 @@ const sqlConfig = (fixture: ReconcileFixture): RepositorySqlConfig => ({
 
 const createTerminalChange = (fixture: ReconcileFixture) =>
   Effect.gen(function* () {
-    const starts = yield* openSqliteChangeStartPersistence();
+    const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
     const changes = yield* openSqliteChangeTestDependencies();
 
     const created = yield* starts.create({
@@ -228,7 +229,7 @@ describe("Change reconciliation discard boundary", () => {
   it.effect("rejects discard for an open Change before observing the owned pull request", () =>
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
-        const starts = yield* openSqliteChangeStartPersistence();
+        const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* starts.create({
           baseRef: "refs/heads/main",

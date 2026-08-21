@@ -1,18 +1,18 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
-import type { TaskState } from "../task/lifecycle.js";
-import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { TaskState } from "../../lifecycle.js";
+import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../../task.js";
 import {
   internalTaskId,
   type PublicTaskId,
   publicTaskId,
   publicTaskIdFromInternal,
-} from "../task/taskId.js";
-import type { TaskPersistence } from "../task/taskPersistence.js";
+} from "../../taskId.js";
+import type { TaskPersistence } from "../../taskPersistence.js";
 import type {
   CancelTaskInput,
   CancelTaskResult,
@@ -24,14 +24,15 @@ import type {
   ReviseTaskInput,
   StoredTaskRecord,
   UpdateTaskContextInput,
-} from "../task/taskStore.js";
-import { normalizeTaskTitle } from "../task/taskTitle.js";
+} from "../../taskStore.js";
+import { normalizeTaskTitle } from "../../taskTitle.js";
 import {
   type DecodedStoredTaskRecordRow,
   type DecodedTaskSummaryRow,
   decodeStoredTaskRecordRow,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
+  decodeTaskState,
   decodeTaskSummaryRow,
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
@@ -273,6 +274,41 @@ export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPr
       decodeStoredTaskRecordRow(row, idPrefix),
     );
     return yield* rowToStoredTaskRecord(sql, decoded, "read Task", idPrefix);
+  });
+
+export const getTaskContextAndStateById = (
+  sql: SqlClient.SqlClient,
+  taskId: PublicTaskId,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<StoredTaskContextRow & { readonly state: unknown }>`
+      SELECT id, title, description, state FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}
+    `;
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    return yield* decodePersisted("prepare Change Start linked to a Task", () => ({
+      ...decodeTaskContextRow(row, idPrefix),
+      state: decodeTaskState(row.state),
+    }));
+  });
+
+export const getTaskDependencyFacts = (
+  sql: SqlClient.SqlClient,
+  taskId: PublicTaskId,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const dependencies = yield* sql<StoredTaskDependencyFactRow>`
+      SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
+      FROM task_dependencies
+      LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
+      WHERE task_dependencies.dependent_task_id = ${internalTaskId(taskId, idPrefix)}
+      ORDER BY tasks.id ASC
+    `;
+    return yield* decodePersisted("prepare Change Start linked to a Task", () =>
+      decodeTaskDependencyFacts(dependencies, taskId, idPrefix),
+    );
   });
 
 export const completeTask = (

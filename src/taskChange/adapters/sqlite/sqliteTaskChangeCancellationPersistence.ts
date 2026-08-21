@@ -1,4 +1,5 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
@@ -9,16 +10,32 @@ import {
   cancelChange as cancelChangeOnly,
   readCancellationChange,
 } from "../../../sqlite/sqliteChangeCancellationPersistence.js";
-import { cancelTaskState, getTaskById } from "../../../sqlite/sqliteTaskPersistence.js";
 import { internalTaskId, publicTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import { canCancelLinkedTask } from "../../taskChange.js";
 import type {
   TaskChangeCancellationChange,
   TaskChangeCancellationPort,
 } from "../../taskChangePorts.js";
-import { completeLinkedChange } from "./sqliteTaskChangePersistence.js";
+import {
+  completeLinkedChange,
+  type TaskChangeCompletionOperations,
+  type TaskReadOperation,
+} from "./sqliteTaskChangePersistence.js";
 
-export const openSqliteTaskChangeCancellationPort = () =>
+export type TaskChangeCancellationOperations = TaskReadOperation & {
+  readonly cancelTaskState: (
+    sql: SqlClient.SqlClient,
+    taskId: string,
+    reason: string,
+    now: string,
+    idPrefix: string,
+  ) => Effect.Effect<readonly unknown[], SqlError>;
+};
+
+export const openSqliteTaskChangeCancellationPort = (
+  taskOperations: TaskChangeCancellationOperations,
+  completionOperations: TaskChangeCompletionOperations,
+) =>
   Effect.map(
     RepositorySql,
     (repository): TaskChangeCancellationPort => ({
@@ -38,25 +55,40 @@ export const openSqliteTaskChangeCancellationPort = () =>
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeLinkedChange(sql, input, repository.idPrefix);
+            const result = yield* completeLinkedChange(
+              sql,
+              input,
+              repository.idPrefix,
+              completionOperations,
+            );
             if (!result.ok) return result;
             const change = yield* requireTaskChangeCancellation(
               sql,
               input.changeId,
               repository.idPrefix,
             );
-            const task = yield* readTaskForCancellation(sql, change.taskId, repository.idPrefix);
+            const task = yield* readTaskForCancellation(
+              sql,
+              change.taskId,
+              repository.idPrefix,
+              taskOperations,
+            );
             return { ...result, change, task };
           }),
         ),
       cancelChange: (input) =>
         repository.transactionImmediate("cancel Change", (sql) =>
-          cancelChange(sql, input, repository.idPrefix),
+          cancelChange(sql, input, repository.idPrefix, taskOperations),
         ),
     }),
   );
 
-const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput, idPrefix: string) =>
+const cancelChange = (
+  sql: SqlClient.SqlClient,
+  input: CancelChangeInput,
+  idPrefix: string,
+  taskOperations: TaskChangeCancellationOperations,
+) =>
   Effect.gen(function* () {
     const current = yield* readTaskChangeCancellation(
       sql,
@@ -68,13 +100,13 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput, idPref
       if (current.closeReason !== "cancelled") {
         return { ok: false as const, code: "change_already_completed" as const };
       }
-      const task = yield* readTaskForCancellation(sql, current.taskId, idPrefix);
+      const task = yield* readTaskForCancellation(sql, current.taskId, idPrefix, taskOperations);
       return { ok: true as const, changed: false, change: current, task };
     }
 
     const link = yield* linkedTask(sql, input.changeId, idPrefix);
     if (link !== undefined) {
-      const task = yield* getTaskById(
+      const task = yield* taskOperations.getTaskById(
         sql,
         publicTaskIdFromInternal(link.taskId, idPrefix),
         idPrefix,
@@ -90,7 +122,7 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput, idPref
     const result = yield* cancelChangeOnly(sql, input, idPrefix);
     if (!result.ok) return result;
     if (result.changed && link !== undefined) {
-      yield* cancelTaskState(
+      yield* taskOperations.cancelTaskState(
         sql,
         publicTaskIdFromInternal(link.taskId, idPrefix),
         input.reason,
@@ -99,7 +131,7 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput, idPref
       );
     }
     const change = yield* requireTaskChangeCancellation(sql, input.changeId, idPrefix);
-    const task = yield* readTaskForCancellation(sql, change.taskId, idPrefix);
+    const task = yield* readTaskForCancellation(sql, change.taskId, idPrefix, taskOperations);
     return { ...result, change, task };
   });
 
@@ -158,10 +190,11 @@ const readTaskForCancellation = (
   sql: SqlClient.SqlClient,
   taskId: string | null,
   idPrefix: string,
+  taskOperations: TaskChangeCancellationOperations,
 ) =>
   taskId === null
     ? Effect.succeed(null)
-    : Effect.flatMap(getTaskById(sql, publicTaskId(taskId), idPrefix), (task) =>
+    : Effect.flatMap(taskOperations.getTaskById(sql, publicTaskId(taskId), idPrefix), (task) =>
         task === undefined
           ? invalidData("read committed cancellation", "Linked Task was not found")
           : Effect.succeed(task),

@@ -14,6 +14,7 @@ import {
   type TaskChangeStartInput,
   type TaskChangeStartResult,
 } from "../taskChangeStart.js";
+import { taskChangeStartTaskOperations } from "./loadTaskChangePersistence.js";
 
 export type { TaskChangeStartInput, TaskChangeStartResult } from "../taskChangeStart.js";
 
@@ -21,7 +22,7 @@ export const openTaskChangeStartOperation = (input: {
   readonly context: LocalRepositoryContext;
   readonly globalConfigPath: string;
 }) =>
-  openSqliteTaskChangeStartPersistence().pipe(
+  openSqliteTaskChangeStartPersistence(taskChangeStartTaskOperations).pipe(
     Effect.map(
       (store) =>
         (

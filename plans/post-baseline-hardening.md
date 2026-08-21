@@ -184,7 +184,7 @@ Investigate one Change-owned persisted-value decoder and one encoding path rathe
 Agent Invocation projection decoding appears in:
 
 - `src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.ts`;
-- `src/sqlite/sqliteTaskReviewPersistence.ts`;
+- `src/task/adapters/sqlite/sqliteTaskReviewPersistence.ts`;
 - `src/sqlite/sqliteValidationEvidenceStorage.ts`.
 
 Investigate whether Agent Session storage should own the common projection while Task Review and Validation Evidence add only their owner-specific links and policy fields.

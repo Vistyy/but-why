@@ -7,11 +7,15 @@ import {
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
-import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
+import { openSqliteTaskPersistence } from "../../task/adapters/sqlite/sqliteTaskPersistence.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
 import { openSqliteTaskChangeCancellationPort } from "../adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import { type CancellationUseCases, openCancellationUseCases } from "../cancelTaskChange.js";
+import {
+  taskChangeCancellationOperations,
+  taskChangeCompletionOperations,
+} from "./loadTaskChangePersistence.js";
 
 type WithCancellationUseCasesResult<A> =
   | { readonly ok: true; readonly value: A }
@@ -27,7 +31,10 @@ export const withCancellationUseCases = <A, E, R>(
 
   return loaded.runtime.provide(
     Effect.all({
-      changes: openSqliteTaskChangeCancellationPort(),
+      changes: openSqliteTaskChangeCancellationPort(
+        taskChangeCancellationOperations,
+        taskChangeCompletionOperations,
+      ),
       tasks: openSqliteTaskPersistence(),
       activeValidation: openSqliteActiveValidationRunPort(),
       cleanupTerminal: composeTerminalCleanup(context),

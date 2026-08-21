@@ -1,10 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
+import { taskChangeStartTaskOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 
 const firstNow = "2026-08-09T12:00:00.000Z";
@@ -14,7 +15,7 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
   withTemporaryRepositoryState(({ repositoryRoot, commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const starts = yield* openSqliteChangeStartPersistence();
+      const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "New prerequisite");
       yield* createTask(tasks, "Blocked todo", ["BY-1"]);
@@ -86,7 +87,7 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
   withTemporaryRepositoryState(({ repositoryRoot, commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const starts = yield* openSqliteChangeStartPersistence();
+      const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1"]);
@@ -131,7 +132,7 @@ it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
   withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const starts = yield* openSqliteChangeStartPersistence();
+      const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Self-dependent Task");
       yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), secondNow);
