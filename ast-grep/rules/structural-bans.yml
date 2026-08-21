@@ -664,7 +664,12 @@ rule:
         - all:
             - kind: satisfies_expression
             - inside:
-                kind: return_statement
+                all:
+                  - kind: return_statement
+                  - not:
+                      has:
+                        kind: arrow_function
+                        stopBy: end
                 stopBy: end
             - not:
                 inside:
@@ -685,7 +690,6 @@ rule:
                     - kind: template_string
                     - kind: assignment_expression
                     - kind: class
-                    - kind: arrow_function
                   stopBy: end
         - pattern: return $VALUE satisfies $TYPE
         - pattern: return await $VALUE satisfies $TYPE
