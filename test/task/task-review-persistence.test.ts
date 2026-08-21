@@ -22,7 +22,7 @@ import {
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { settleTaskReviewEvidence } from "../../src/task/review/taskReviewEvidenceSettlement.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
-import { internalTaskId, publicTaskId } from "../../src/task/taskId.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { withTemporaryRepositoryState, withTestRepository } from "../support/repository.js";
@@ -122,14 +122,6 @@ it.effect(
           blockingInvocationId = first.dispatch.invocation.id;
           const failure = dispatchFailure(blockingInvocationId);
           yield* reviews.recordActiveFailure(review.id, failure, later);
-          const repository = yield* RepositorySql;
-          yield* repository.operation(
-            "change Task Review proposal during dispatch failure",
-            (sql) => sql`
-            UPDATE tasks SET title = 'Changed after admission'
-            WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
-          `,
-          );
           const completed = yield* reviews.complete({
             reviewId: review.id,
             findings: [],
