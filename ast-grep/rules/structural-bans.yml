@@ -685,6 +685,7 @@ rule:
                     - kind: assignment_expression
                     - kind: class
                     - kind: function_expression
+                    - kind: generator_function
                     - kind: arrow_function
                   stopBy: end
 

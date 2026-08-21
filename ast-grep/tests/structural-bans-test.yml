@@ -200,6 +200,7 @@ valid:
   - "return JSON.parse(raw).foo satisfies Result"
   - "return Reflect.get(value, \"foo\") satisfies Result"
   - "return function (value) { value satisfies Result; }"
+  - "return function* (value) { value satisfies Result; }"
   - "return function (value) { const result = value satisfies Result; return result; }"
   - "vi.mock(\"module\", (value) => value satisfies Result)"
 invalid:
