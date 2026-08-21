@@ -18,13 +18,13 @@ import {
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { internalChangeId } from "../../src/change/changeId.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
+import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../src/contracts/repositoryStorageError.js";
 import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
