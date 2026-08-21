@@ -57,6 +57,16 @@ describe("Change Submit orchestration", () => {
             ok: false as const,
             code: "active_validation_run" as const,
             validationRunId: 102,
+            toolingFailures: [
+              {
+                sequence: 1,
+                validationRunId: 102,
+                errorKind: "infrastructure_tooling_failed",
+                operationName: "dispatch_agent_invocation",
+                errorMessage: "Agent Invocation 73 dispatch was blocked.",
+                blockingInvocationId: 73,
+              },
+            ],
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
@@ -73,6 +83,16 @@ describe("Change Submit orchestration", () => {
         code: "active_validation_run",
         changeId: "change-1",
         validationRunId: 102,
+        toolingFailures: [
+          {
+            sequence: 1,
+            validationRunId: 102,
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "dispatch_agent_invocation",
+            errorMessage: "Agent Invocation 73 dispatch was blocked.",
+            blockingInvocationId: 73,
+          },
+        ],
       });
       expect(events).toEqual(["capture", "detect_target"]);
     }),

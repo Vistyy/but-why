@@ -168,6 +168,9 @@ const makeCandidateValidation = (dependencies: {
         ok: false,
         code: "active_validation_run",
         validationRunId: started.validationRunId,
+        toolingFailures: yield* dependencies.persistence.listToolingFailures(
+          started.validationRunId,
+        ),
       } as const;
     }
     if (started.reused) {

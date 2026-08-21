@@ -335,8 +335,9 @@ describe("Task command Adapters", () => {
                         state: "complete" as const,
                         outcome: "tooling_failed" as const,
                         toolingFailure: {
-                          operation: "confirm_task_review_context",
-                          message: "Task title or description changed during review.",
+                          operation: "dispatch_agent_invocation",
+                          message: "Agent Invocation dispatch was blocked.",
+                          blockingInvocationId: 29,
                         },
                       },
                       task: { id: "BY-1", state: "new" as const },
@@ -381,8 +382,9 @@ describe("Task command Adapters", () => {
               state: "complete",
               outcome: "tooling_failed",
               toolingFailure: {
-                operation: "confirm_task_review_context",
-                message: "Task title or description changed during review.",
+                operation: "dispatch_agent_invocation",
+                message: "Agent Invocation dispatch was blocked.",
+                blockingInvocationId: 29,
               },
             },
             task: { id: "BY-1", state: "new" },

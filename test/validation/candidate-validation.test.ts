@@ -527,6 +527,22 @@ describe("Candidate validation", () => {
           outcome: null,
           cleanup: { state: "pending", blockingReason: "Cleanup failed." },
         });
+        const later = yield* validateAcceptanceContextCandidate(validation, {
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+        });
+        expect(later).toMatchObject({
+          ok: false,
+          code: "active_validation_run",
+          validationRunId: result.validationRunId,
+          toolingFailures: expect.arrayContaining([
+            expect.objectContaining({
+              operationName: "dispatch_agent_invocation",
+              blockingInvocationId: 73,
+            }),
+          ]),
+        });
         const shown = yield* runByInProcessEffect(mainCheckout, [
           "validation-run",
           "show",
