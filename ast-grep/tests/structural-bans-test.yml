@@ -201,6 +201,8 @@ valid:
   - "return Reflect.get(value, \"foo\") satisfies Result"
   - "return function (value) { value satisfies Result; }"
   - "return function* (value) { value satisfies Result; }"
+  - "function* f() { return yield (value satisfies Result); }"
+  - "function* g() { return yield* (value satisfies Result); }"
   - "return function (value) { const result = value satisfies Result; return result; }"
   - "vi.mock(\"module\", (value) => value satisfies Result)"
 invalid:
