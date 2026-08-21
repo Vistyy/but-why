@@ -639,6 +639,35 @@ rule:
                       has:
                         kind: arrow_function
                         stopBy: end
+                  - not:
+                      has:
+                        field: body
+                        kind: statement_block
+                  - not:
+                      has:
+                        field: body
+                        has:
+                          any:
+                            - kind: object
+                            - kind: array
+                            - kind: call_expression
+                            - kind: await_expression
+                            - kind: ternary_expression
+                            - kind: binary_expression
+                            - kind: unary_expression
+                            - kind: member_expression
+                            - kind: as_expression
+                            - kind: new_expression
+                            - kind: non_null_expression
+                            - kind: subscript_expression
+                            - kind: sequence_expression
+                            - kind: template_string
+                            - kind: assignment_expression
+                            - kind: class
+                            - kind: function_expression
+                            - kind: generator_function
+                            - kind: yield_expression
+                          stopBy: end
                 stopBy: end
         - all:
             - any:
