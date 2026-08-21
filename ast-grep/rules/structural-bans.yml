@@ -543,6 +543,120 @@ rule:
         - all:
             - kind: satisfies_expression
             - inside:
+                any:
+                  - all:
+                      - pattern: $VALUE => $$$BODY
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: ($VALUE) => $$$BODY
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "($VALUE: $PARAMTYPE) => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "($VALUE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: async $VALUE => $$$BODY
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async ($VALUE) => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async ($VALUE: $PARAMTYPE) => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async ($VALUE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "<$$$TYPEPARAMS>($VALUE) => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "<$$$TYPEPARAMS>($VALUE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async <$$$TYPEPARAMS>($VALUE) => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async <$$$TYPEPARAMS>($VALUE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                  - all:
+                      - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
+                      - has:
+                          pattern: $VALUE satisfies $TYPE
+                          stopBy: end
+                stopBy: end
+            - not:
+                inside:
+                  any:
+                    - kind: object
+                    - kind: array
+                    - kind: call_expression
+                    - kind: statement_block
+                    - kind: await_expression
+                    - kind: ternary_expression
+                    - kind: binary_expression
+                    - kind: unary_expression
+                    - kind: member_expression
+                    - kind: as_expression
+                    - kind: new_expression
+                    - kind: non_null_expression
+                    - kind: subscript_expression
+                    - kind: sequence_expression
+                    - kind: template_string
+                  stopBy: end
+        - all:
+            - kind: satisfies_expression
+            - inside:
                 kind: return_statement
                 stopBy: end
             - not:
@@ -557,6 +671,7 @@ rule:
                     - kind: unary_expression
                     - kind: member_expression
                     - kind: as_expression
+                    - kind: new_expression
                     - kind: non_null_expression
                     - kind: subscript_expression
                     - kind: sequence_expression
