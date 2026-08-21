@@ -199,6 +199,8 @@ valid:
   - "value => other satisfies Result"
   - "return JSON.parse(raw).foo satisfies Result"
   - "return Reflect.get(value, \"foo\") satisfies Result"
+  - "return function (value) { value satisfies Result; }"
+  - "return function (value) { const result = value satisfies Result; return result; }"
   - "vi.mock(\"module\", (value) => value satisfies Result)"
 invalid:
   - "return value satisfies Result"
@@ -224,3 +226,4 @@ invalid:
   - "async <T>(value: T): Promise<Result> => value satisfies Result"
   - "async (value): Promise<Result> => ((value satisfies Result))"
   - "(value): Result => value satisfies Result"
+  - "return function (value) { return value satisfies Result; }"
