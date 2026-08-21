@@ -731,6 +731,27 @@ rule:
                     - inside:
                         pattern: await $VALUE satisfies $TYPE
                         stopBy: end
+                - all:
+                    - kind: satisfies_expression
+                    - inside:
+                        all:
+                          - kind: return_statement
+                          - has:
+                              any:
+                                - kind: function_expression
+                                - kind: generator_function
+                              stopBy: end
+                        stopBy: end
+                    - inside:
+                        kind: arrow_function
+                        stopBy: end
+                    - not:
+                        inside:
+                          any:
+                            - kind: function_expression
+                            - kind: generator_function
+                            - kind: yield_expression
+                          stopBy: end
             - not:
                 inside:
                   any:

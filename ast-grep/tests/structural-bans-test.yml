@@ -244,3 +244,8 @@ invalid:
   - "async (value): Promise<Result> => ((value satisfies Result))"
   - "(value): Result => value satisfies Result"
   - "return function (value) { return value satisfies Result; }"
+  - "return (function (value) {}) satisfies Result"
+  - "return (function* (value) {}) satisfies Result"
+  - "return (async function (value) {}) satisfies Result"
+  - "const create = () => { return (function (value) {}) satisfies Result; }"
+  - "const createGenerator = () => { return (function* (value) {}) satisfies Result; }"
