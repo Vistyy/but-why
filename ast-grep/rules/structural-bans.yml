@@ -746,6 +746,7 @@ rule:
                     - kind: function_expression
                     - kind: generator_function
                     - kind: yield_expression
+                    - kind: arrow_function
                   stopBy: end
             - not:
                 has:
@@ -771,6 +772,7 @@ rule:
                       - kind: function_expression
                       - kind: generator_function
                       - kind: yield_expression
+                      - kind: arrow_function
                     stopBy: end
     - not:
         pattern: return JSON.parse($$$ARGS) satisfies $TYPE
