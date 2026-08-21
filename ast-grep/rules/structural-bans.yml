@@ -540,242 +540,72 @@ ignores:
 rule:
   all:
     - any:
-        - all:
-            - kind: satisfies_expression
-            - inside:
-                all:
-                  - any:
-                    - all:
-                        - pattern: $VALUE => $$$BODY
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: ($VALUE) => $$$BODY
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "($VALUE: $PARAMTYPE) => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "($VALUE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: async $VALUE => $$$BODY
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async ($VALUE) => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async ($VALUE: $PARAMTYPE) => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async ($VALUE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "<$$$TYPEPARAMS>($VALUE) => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "<$$$TYPEPARAMS>($VALUE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async <$$$TYPEPARAMS>($VALUE) => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async <$$$TYPEPARAMS>($VALUE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                    - all:
-                        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => $$$BODY"
-                        - has:
-                            pattern: $VALUE satisfies $TYPE
-                            stopBy: end
-                  - not:
-                      has:
-                        kind: arrow_function
-                        stopBy: end
-                  - not:
-                      has:
-                        field: body
-                        kind: statement_block
-                  - not:
-                      has:
-                        field: body
-                        has:
-                          any:
-                            - kind: object
-                            - kind: array
-                            - kind: call_expression
-                            - kind: await_expression
-                            - kind: ternary_expression
-                            - kind: binary_expression
-                            - kind: unary_expression
-                            - kind: member_expression
-                            - kind: as_expression
-                            - kind: new_expression
-                            - kind: non_null_expression
-                            - kind: subscript_expression
-                            - kind: sequence_expression
-                            - kind: template_string
-                            - kind: assignment_expression
-                            - kind: class
-                            - kind: function_expression
-                            - kind: generator_function
-                            - kind: yield_expression
-                          stopBy: end
-                stopBy: end
-        - all:
-            - any:
-                - all:
-                    - kind: satisfies_expression
-                    - inside:
-                        all:
-                          - kind: return_statement
-                          - has:
-                              any:
-                                - kind: function_expression
-                                - kind: generator_function
-                                - kind: yield_expression
-                                - kind: arrow_function
-                              stopBy: end
-                        stopBy: end
-                    - not:
-                        inside:
-                          any:
-                            - kind: object
-                            - kind: array
-                            - kind: call_expression
-                            - kind: await_expression
-                            - kind: ternary_expression
-                            - kind: binary_expression
-                            - kind: unary_expression
-                            - kind: member_expression
-                            - kind: as_expression
-                            - kind: new_expression
-                            - kind: non_null_expression
-                            - kind: subscript_expression
-                            - kind: sequence_expression
-                            - kind: template_string
-                            - kind: assignment_expression
-                            - kind: class
-                            - kind: function_expression
-                            - kind: generator_function
-                            - kind: yield_expression
-                            - kind: arrow_function
-                          stopBy: end
-                - all:
-                    - kind: satisfies_expression
-                    - inside:
-                        all:
-                          - kind: return_statement
-                          - not:
-                              has:
-                                any:
-                                  - kind: function_expression
-                                  - kind: generator_function
-                                  - kind: yield_expression
-                                  - kind: arrow_function
-                                stopBy: end
-                        stopBy: end
-                    - not:
-                        inside:
-                          kind: await_expression
-                          stopBy: end
-                - all:
-                    - kind: satisfies_expression
-                    - inside:
-                        pattern: await $VALUE satisfies $TYPE
-                        stopBy: end
-                - all:
-                    - kind: satisfies_expression
-                    - inside:
-                        all:
-                          - kind: return_statement
-                          - has:
-                              any:
-                                - kind: function_expression
-                                - kind: generator_function
-                              stopBy: end
-                        stopBy: end
-                    - inside:
-                        kind: arrow_function
-                        stopBy: end
-                    - not:
-                        inside:
-                          any:
-                            - kind: function_expression
-                            - kind: generator_function
-                            - kind: yield_expression
-                          stopBy: end
-            - not:
-                inside:
-                  any:
-                    - kind: object
-                    - kind: array
-                    - kind: call_expression
-                    - kind: ternary_expression
-                    - kind: binary_expression
-                    - kind: unary_expression
-                    - kind: member_expression
-                    - kind: as_expression
-                    - kind: new_expression
-                    - kind: non_null_expression
-                    - kind: subscript_expression
-                    - kind: sequence_expression
-                    - kind: template_string
-                    - kind: assignment_expression
-                    - kind: class
-                  stopBy: end
-
-    - not:
-        inside:
-          pattern: await ($VALUE satisfies $TYPE)
-          stopBy: end
+        - pattern: return $VALUE satisfies $TYPE
+        - pattern: return await $VALUE satisfies $TYPE
+        - pattern: return ($VALUE satisfies $TYPE)
+        - pattern: return (await $VALUE satisfies $TYPE)
+        - pattern: return ((await $VALUE satisfies $TYPE))
+        - pattern: return (((await $VALUE satisfies $TYPE)))
+        - pattern: return ((((await $VALUE satisfies $TYPE))))
+        - pattern: return (((((await $VALUE satisfies $TYPE)))))
+        - pattern: return (await $VALUE) satisfies $TYPE
+        - pattern: return ((await $VALUE) satisfies $TYPE)
+        - pattern: return (((await $VALUE) satisfies $TYPE))
+        - pattern: return ((((await $VALUE) satisfies $TYPE)))
+        - pattern: return (((((await $VALUE) satisfies $TYPE))))
+        - pattern: return ((($VALUE satisfies $TYPE)))
+        - pattern: return (((( $VALUE satisfies $TYPE))))
+        - pattern: return ((((( $VALUE satisfies $TYPE)))))
+        - pattern: $VALUE => $VALUE satisfies $TYPE
+        - pattern: $VALUE => ($VALUE satisfies $TYPE)
+        - pattern: $VALUE => (($VALUE satisfies $TYPE))
+        - pattern: $VALUE => ((($VALUE satisfies $TYPE)))
+        - pattern: async $VALUE => $VALUE satisfies $TYPE
+        - pattern: async $VALUE => (($VALUE satisfies $TYPE))
+        - pattern: async $VALUE => ((($VALUE satisfies $TYPE)))
+        - pattern: async $VALUE => ($VALUE satisfies $TYPE)
+        - pattern: ($VALUE) => $VALUE satisfies $TYPE
+        - pattern: ($VALUE) => ($VALUE satisfies $TYPE)
+        - pattern: ($VALUE) => (($VALUE satisfies $TYPE))
+        - pattern: ($VALUE) => ((($VALUE satisfies $TYPE)))
+        - pattern: async ($VALUE) => $VALUE satisfies $TYPE
+        - pattern: async ($VALUE) => (($VALUE satisfies $TYPE))
+        - pattern: async ($VALUE) => ((($VALUE satisfies $TYPE)))
+        - pattern: async ($VALUE) => ($VALUE satisfies $TYPE)
+        - pattern: "($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
+        - pattern: "($VALUE: $PARAMTYPE) => (($VALUE satisfies $TYPE))"
+        - pattern: "($VALUE: $PARAMTYPE) => ((($VALUE satisfies $TYPE)))"
+        - pattern: "async ($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "async ($VALUE: $PARAMTYPE) => (($VALUE satisfies $TYPE))"
+        - pattern: "async ($VALUE: $PARAMTYPE) => ((($VALUE satisfies $TYPE)))"
+        - pattern: "async ($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
+        - pattern: "($VALUE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "($VALUE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "async ($VALUE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "async ($VALUE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "async ($VALUE): $RETURNTYPE => (($VALUE satisfies $TYPE))"
+        - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "async ($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "<$$$TYPEPARAMS>($VALUE) => $VALUE satisfies $TYPE"
+        - pattern: "<$$$TYPEPARAMS>($VALUE) => ($VALUE satisfies $TYPE)"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE) => $VALUE satisfies $TYPE"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE) => ($VALUE satisfies $TYPE)"
+        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => $VALUE satisfies $TYPE"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE) => ($VALUE satisfies $TYPE)"
+        - pattern: "<$$$TYPEPARAMS>($VALUE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "<$$$TYPEPARAMS>($VALUE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "<$$$TYPEPARAMS>($VALUE): $RETURNTYPE => (($VALUE satisfies $TYPE))"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "<$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => $VALUE satisfies $TYPE"
+        - pattern: "async <$$$TYPEPARAMS>($VALUE: $PARAMTYPE): $RETURNTYPE => ($VALUE satisfies $TYPE)"
     - not:
         pattern: return JSON.parse($$$ARGS) satisfies $TYPE
     - not:
