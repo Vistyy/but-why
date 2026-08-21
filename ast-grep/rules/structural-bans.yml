@@ -662,12 +662,60 @@ rule:
                     - kind: class
                   stopBy: end
         - all:
-            - kind: return_statement
-            - has:
-                kind: satisfies_expression
-                stopBy: end
+            - any:
+                - all:
+                    - kind: satisfies_expression
+                    - inside:
+                        all:
+                          - kind: return_statement
+                          - has:
+                              any:
+                                - kind: function_expression
+                                - kind: generator_function
+                                - kind: yield_expression
+                                - kind: arrow_function
+                              stopBy: end
+                        stopBy: end
+                    - not:
+                        inside:
+                          any:
+                            - kind: object
+                            - kind: array
+                            - kind: call_expression
+                            - kind: await_expression
+                            - kind: ternary_expression
+                            - kind: binary_expression
+                            - kind: unary_expression
+                            - kind: member_expression
+                            - kind: as_expression
+                            - kind: new_expression
+                            - kind: non_null_expression
+                            - kind: subscript_expression
+                            - kind: sequence_expression
+                            - kind: template_string
+                            - kind: assignment_expression
+                            - kind: class
+                            - kind: function_expression
+                            - kind: generator_function
+                            - kind: yield_expression
+                            - kind: arrow_function
+                          stopBy: end
+                - all:
+                    - kind: satisfies_expression
+                    - inside:
+                        all:
+                          - kind: return_statement
+                          - not:
+                              has:
+                                any:
+                                  - kind: function_expression
+                                  - kind: generator_function
+                                  - kind: yield_expression
+                                  - kind: arrow_function
+                                stopBy: end
+                        stopBy: end
             - not:
-                has:
+                inside:
                   any:
                     - kind: object
                     - kind: array
@@ -684,10 +732,6 @@ rule:
                     - kind: template_string
                     - kind: assignment_expression
                     - kind: class
-                    - kind: function_expression
-                    - kind: generator_function
-                    - kind: yield_expression
-                    - kind: arrow_function
                   stopBy: end
 
     - not:
