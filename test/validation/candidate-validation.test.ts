@@ -39,113 +39,6 @@ import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { withTestRepository } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const dispatchConflictAgentPersistence = (
-  invocationId: number,
-  settleInvocation: AgentSessionPersistence["settleInvocation"] = () => Effect.void,
-): AgentSessionPersistence => ({
-  beginInvocation: () =>
-    Effect.succeed({
-      ok: false as const,
-      code: "concurrent_unsettled_invocation" as const,
-      invocationId,
-    }),
-  settleInvocation,
-  readInvocationHistory: () => Effect.succeed([]),
-});
-
-const retryDispatchFixture = (mainCheckout: string, changeId: string) =>
-  Effect.gen(function* () {
-    yield* withTestRepository(
-      mainCheckout,
-      Effect.gen(function* () {
-        const agents = yield* openSqliteAgentSessionPersistence();
-        const started = yield* agents.beginInvocation({
-          configuration: { harness: "pi" as const, model: "acceptance-model" },
-          createdAt: "2026-08-14T12:00:00.000Z",
-          linkInvocation: () => Effect.void,
-        });
-        if (!started.ok) throw new Error(`Agent Session setup failed: ${started.code}`);
-        yield* agents.settleInvocation({
-          invocationId: started.dispatch.invocation.id,
-          continuationId: started.dispatch.continuation.id,
-          settlement: {
-            settledAt: "2026-08-14T12:00:01.000Z",
-            kind: "returned",
-            transcriptPath: "session.jsonl",
-          },
-        });
-        const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "assign acceptance Agent Session fixture",
-          (sql) => sql`
-            INSERT INTO change_agent_sessions (change_id, producer, agent_session_id)
-            VALUES (${internalChangeId(changeId, repository.idPrefix)}, 'acceptance', ${started.dispatch.agentSessionId})
-          `,
-        );
-      }),
-    );
-    const state: {
-      dispatchCount: number;
-      firstReviewerInvocationId: number | undefined;
-      blockingInvocationId: number | undefined;
-    } = {
-      dispatchCount: 0,
-      firstReviewerInvocationId: undefined,
-      blockingInvocationId: undefined,
-    };
-    const withAgents = <A>(
-      use: (agents: AgentSessionPersistence) => Effect.Effect<A, RepositoryStorageError>,
-    ) => withTestRepository(mainCheckout, Effect.flatMap(openSqliteAgentSessionPersistence(), use));
-    const agentPersistence: AgentSessionPersistence = {
-      beginInvocation: (input) =>
-        withAgents((agents) =>
-          Effect.gen(function* () {
-            state.dispatchCount += 1;
-            if (state.dispatchCount === 2) {
-              if (input.agentSessionId === undefined) {
-                return yield* Effect.die("Acceptance Agent Session was not assigned");
-              }
-              const blocker = yield* agents.beginInvocation({
-                agentSessionId: input.agentSessionId,
-                configuration: input.configuration,
-                createdAt: input.createdAt,
-                linkInvocation: () => Effect.void,
-              });
-              if (!blocker.ok) {
-                return yield* Effect.die(`Could not create blocking Invocation: ${blocker.code}`);
-              }
-              state.blockingInvocationId = blocker.dispatch.invocation.id;
-            }
-            const dispatched = yield* agents.beginInvocation(input);
-            if (state.dispatchCount === 1 && dispatched.ok) {
-              state.firstReviewerInvocationId = dispatched.dispatch.invocation.id;
-            }
-            return dispatched;
-          }),
-        ),
-      settleInvocation: (input) => withAgents((agents) => agents.settleInvocation(input)),
-      readInvocationHistory: (agentSessionId) =>
-        withAgents((agents) => agents.readInvocationHistory(agentSessionId)),
-    };
-    const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-      Effect.succeed({
-        ok: false as const,
-        failure: new ReviewerExecutionFailed({
-          kind: "output_contract",
-          operationName: "decode_reviewer_output",
-          message: "Acceptance output was invalid.",
-          correctionPrompt: "Retry the Acceptance Review.",
-          sessionReference: "retry-session",
-        }),
-        sessionUsability: "unknown" as const,
-        attempts: 1,
-        stdout: "invalid reviewer output",
-        sessionReference: "retry-session",
-      }),
-    );
-    return { state, agentPersistence, review };
-  });
-
 describe("Candidate validation", () => {
   it.scoped(
     "persists a Candidate-integrity Tooling Failure and preserves the Candidate",
@@ -333,9 +226,99 @@ describe("Candidate validation", () => {
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         if (!captured.ok) throw new Error(captured.code);
         yield* installAcceptanceContext(mainCheckout, captured.changeId);
-        const { state, agentPersistence, review } = yield* retryDispatchFixture(
+        yield* withTestRepository(
           mainCheckout,
-          captured.changeId,
+          Effect.gen(function* () {
+            const agents = yield* openSqliteAgentSessionPersistence();
+            const started = yield* agents.beginInvocation({
+              configuration: { harness: "pi" as const, model: "acceptance-model" },
+              createdAt: "2026-08-14T12:00:00.000Z",
+              linkInvocation: () => Effect.void,
+            });
+            if (!started.ok) throw new Error(`Agent Session setup failed: ${started.code}`);
+            yield* agents.settleInvocation({
+              invocationId: started.dispatch.invocation.id,
+              continuationId: started.dispatch.continuation.id,
+              settlement: {
+                settledAt: "2026-08-14T12:00:01.000Z",
+                kind: "returned",
+                transcriptPath: "session.jsonl",
+              },
+            });
+            const repository = yield* RepositorySql;
+            yield* repository.operation(
+              "assign acceptance Agent Session fixture",
+              (sql) => sql`
+                INSERT INTO change_agent_sessions (change_id, producer, agent_session_id)
+                VALUES (${internalChangeId(captured.changeId, repository.idPrefix)}, 'acceptance', ${started.dispatch.agentSessionId})
+              `,
+            );
+          }),
+        );
+        const state: {
+          dispatchCount: number;
+          firstReviewerInvocationId: number | undefined;
+          blockingInvocationId: number | undefined;
+        } = {
+          dispatchCount: 0,
+          firstReviewerInvocationId: undefined,
+          blockingInvocationId: undefined,
+        };
+        const withAgents = <A>(
+          use: (agents: AgentSessionPersistence) => Effect.Effect<A, RepositoryStorageError>,
+        ) =>
+          withTestRepository(
+            mainCheckout,
+            Effect.flatMap(openSqliteAgentSessionPersistence(), use),
+          );
+        const agentPersistence: AgentSessionPersistence = {
+          beginInvocation: (input) =>
+            withAgents((agents) =>
+              Effect.gen(function* () {
+                state.dispatchCount += 1;
+                if (state.dispatchCount === 2) {
+                  if (input.agentSessionId === undefined) {
+                    return yield* Effect.die("Acceptance Agent Session was not assigned");
+                  }
+                  const blocker = yield* agents.beginInvocation({
+                    agentSessionId: input.agentSessionId,
+                    configuration: input.configuration,
+                    createdAt: input.createdAt,
+                    linkInvocation: () => Effect.void,
+                  });
+                  if (!blocker.ok) {
+                    return yield* Effect.die(
+                      `Could not create blocking Invocation: ${blocker.code}`,
+                    );
+                  }
+                  state.blockingInvocationId = blocker.dispatch.invocation.id;
+                }
+                const dispatched = yield* agents.beginInvocation(input);
+                if (state.dispatchCount === 1 && dispatched.ok) {
+                  state.firstReviewerInvocationId = dispatched.dispatch.invocation.id;
+                }
+                return dispatched;
+              }),
+            ),
+          settleInvocation: (input) => withAgents((agents) => agents.settleInvocation(input)),
+          readInvocationHistory: (agentSessionId) =>
+            withAgents((agents) => agents.readInvocationHistory(agentSessionId)),
+        };
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed({
+            ok: false as const,
+            failure: new ReviewerExecutionFailed({
+              kind: "output_contract",
+              operationName: "decode_reviewer_output",
+              message: "Acceptance output was invalid.",
+              correctionPrompt: "Retry the Acceptance Review.",
+              sessionReference: "retry-session",
+            }),
+            sessionUsability: "unknown" as const,
+            attempts: 1,
+            stdout: "invalid reviewer output",
+            sessionReference: "retry-session",
+          }),
         );
         const validation = candidateValidationForTest({
           localRepositoryRoot: mainCheckout,
@@ -422,9 +405,16 @@ describe("Candidate validation", () => {
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         if (!captured.ok) throw new Error(captured.code);
         yield* installAcceptanceContext(mainCheckout, captured.changeId);
-        const agentPersistence = dispatchConflictAgentPersistence(73, () =>
-          Effect.die("Dispatch failure must not settle an Invocation"),
-        );
+        const agentPersistence: AgentSessionPersistence = {
+          beginInvocation: () =>
+            Effect.succeed({
+              ok: false as const,
+              code: "concurrent_unsettled_invocation" as const,
+              invocationId: 73,
+            }),
+          settleInvocation: () => Effect.die("Dispatch failure must not settle an Invocation"),
+          readInvocationHistory: () => Effect.succeed([]),
+        };
         const cleanupFailureRunner = ((workspaceInput) =>
           Effect.gen(function* () {
             if (workspaceInput.runInWorkspace !== undefined) {
