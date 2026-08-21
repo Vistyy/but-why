@@ -39,6 +39,20 @@ import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { withTestRepository } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
+const dispatchConflictAgentPersistence = (
+  invocationId: number,
+  settleInvocation: AgentSessionPersistence["settleInvocation"] = () => Effect.void,
+): AgentSessionPersistence => ({
+  beginInvocation: () =>
+    Effect.succeed({
+      ok: false as const,
+      code: "concurrent_unsettled_invocation" as const,
+      invocationId,
+    }),
+  settleInvocation,
+  readInvocationHistory: () => Effect.succeed([]),
+});
+
 describe("Candidate validation", () => {
   it.scoped(
     "persists a Candidate-integrity Tooling Failure and preserves the Candidate",
@@ -226,16 +240,7 @@ describe("Candidate validation", () => {
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         if (!captured.ok) throw new Error(captured.code);
         yield* installAcceptanceContext(mainCheckout, captured.changeId);
-        const agentPersistence: AgentSessionPersistence = {
-          beginInvocation: () =>
-            Effect.succeed({
-              ok: false as const,
-              code: "concurrent_unsettled_invocation" as const,
-              invocationId: 73,
-            }),
-          settleInvocation: () => Effect.void,
-          readInvocationHistory: () => Effect.succeed([]),
-        };
+        const agentPersistence = dispatchConflictAgentPersistence(73);
         const validation = candidateValidationForTest({
           localRepositoryRoot: mainCheckout,
           artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
@@ -463,16 +468,9 @@ describe("Candidate validation", () => {
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         if (!captured.ok) throw new Error(captured.code);
         yield* installAcceptanceContext(mainCheckout, captured.changeId);
-        const agentPersistence: AgentSessionPersistence = {
-          beginInvocation: () =>
-            Effect.succeed({
-              ok: false as const,
-              code: "concurrent_unsettled_invocation" as const,
-              invocationId: 73,
-            }),
-          settleInvocation: () => Effect.die("Dispatch failure must not settle an Invocation"),
-          readInvocationHistory: () => Effect.succeed([]),
-        };
+        const agentPersistence = dispatchConflictAgentPersistence(73, () =>
+          Effect.die("Dispatch failure must not settle an Invocation"),
+        );
         const cleanupFailureRunner = ((workspaceInput) =>
           Effect.gen(function* () {
             if (workspaceInput.runInWorkspace !== undefined) {
