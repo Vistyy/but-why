@@ -272,6 +272,11 @@ ignores:
 rule:
   all:
     - any:
+        - all:
+            - kind: as_expression
+            - has:
+                pattern: $VALUE as unknown
+                stopBy: end
         - pattern: $VALUE as unknown as $TYPE
         - pattern: ($VALUE as unknown) as $TYPE
     - not:
@@ -315,6 +320,11 @@ files:
 rule:
   all:
     - any:
+        - all:
+            - kind: as_expression
+            - has:
+                pattern: $VALUE as unknown
+                stopBy: end
         - pattern: $VALUE as unknown as $TYPE
         - pattern: ($VALUE as unknown) as $TYPE
     - not:
@@ -352,6 +362,11 @@ files:
 rule:
   all:
     - any:
+        - all:
+            - kind: as_expression
+            - has:
+                pattern: $VALUE as unknown
+                stopBy: end
         - pattern: $VALUE as unknown as $TYPE
         - pattern: ($VALUE as unknown) as $TYPE
     - not:
@@ -536,11 +551,15 @@ rule:
                     - kind: object
                     - kind: array
                     - kind: call_expression
+                    - kind: await_expression
+                    - kind: ternary_expression
                   stopBy: end
         - pattern: return $VALUE satisfies $TYPE
         - pattern: return await $VALUE satisfies $TYPE
         - pattern: return ($VALUE satisfies $TYPE)
         - pattern: return (await $VALUE satisfies $TYPE)
+        - pattern: return ((await $VALUE satisfies $TYPE))
+        - pattern: return (((await $VALUE satisfies $TYPE)))
         - pattern: return (await $VALUE) satisfies $TYPE
         - pattern: $VALUE => $VALUE satisfies $TYPE
         - pattern: $VALUE => ($VALUE satisfies $TYPE)
