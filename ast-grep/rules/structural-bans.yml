@@ -672,7 +672,6 @@ rule:
                     - kind: object
                     - kind: array
                     - kind: call_expression
-                    - kind: await_expression
                     - kind: ternary_expression
                     - kind: binary_expression
                     - kind: unary_expression
@@ -688,11 +687,7 @@ rule:
                     - kind: function_expression
                     - kind: arrow_function
                   stopBy: end
-        - pattern: return await $VALUE satisfies $TYPE
-        - pattern: return (await $VALUE satisfies $TYPE)
-        - pattern: return ((await $VALUE satisfies $TYPE))
-        - pattern: return (((await $VALUE satisfies $TYPE)))
-        - pattern: return (await $VALUE) satisfies $TYPE
+
     - not:
         pattern: return JSON.parse($$$ARGS) satisfies $TYPE
     - not:
