@@ -3,8 +3,8 @@ import {
   completeTask,
   editTaskDependencies,
   getTaskById,
-  getTaskDependenciesForChangeStart,
-  getTaskForChangeStart,
+  getTaskContextAndStateById,
+  getTaskDependencyFacts,
   renameTask,
   reviseTask,
   validateTaskDependencyEditTarget,
@@ -39,6 +39,6 @@ export const taskChangeCancellationOperations: TaskChangeCancellationOperations 
 };
 
 export const taskChangeStartTaskOperations: TaskChangeStartTaskOperations = {
-  getTaskDependenciesForChangeStart,
-  getTaskForChangeStart,
+  getTaskContextAndStateById,
+  getTaskDependencyFacts,
 };

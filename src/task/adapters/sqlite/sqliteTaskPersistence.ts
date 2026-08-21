@@ -276,7 +276,7 @@ export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPr
     return yield* rowToStoredTaskRecord(sql, decoded, "read Task", idPrefix);
   });
 
-export const getTaskForChangeStart = (
+export const getTaskContextAndStateById = (
   sql: SqlClient.SqlClient,
   taskId: PublicTaskId,
   idPrefix: string,
@@ -293,7 +293,7 @@ export const getTaskForChangeStart = (
     }));
   });
 
-export const getTaskDependenciesForChangeStart = (
+export const getTaskDependencyFacts = (
   sql: SqlClient.SqlClient,
   taskId: PublicTaskId,
   idPrefix: string,

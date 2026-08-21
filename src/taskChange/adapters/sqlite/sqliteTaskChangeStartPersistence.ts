@@ -22,7 +22,7 @@ import type {
 } from "../../taskChangeStart.js";
 
 export type TaskChangeStartTaskOperations = {
-  readonly getTaskForChangeStart: (
+  readonly getTaskContextAndStateById: (
     sql: SqlClient.SqlClient,
     taskId: PublicTaskId,
     idPrefix: string,
@@ -30,7 +30,7 @@ export type TaskChangeStartTaskOperations = {
     (TaskContext & { readonly state: TaskState }) | undefined,
     SqlError | RepositoryPersistedDataInvalid
   >;
-  readonly getTaskDependenciesForChangeStart: (
+  readonly getTaskDependencyFacts: (
     sql: SqlClient.SqlClient,
     taskId: PublicTaskId,
     idPrefix: string,
@@ -80,14 +80,18 @@ const prepareTask = (
   taskOperations: TaskChangeStartTaskOperations,
 ) =>
   Effect.gen(function* () {
-    const task = yield* taskOperations.getTaskForChangeStart(sql, publicTaskId(taskId), idPrefix);
+    const task = yield* taskOperations.getTaskContextAndStateById(
+      sql,
+      publicTaskId(taskId),
+      idPrefix,
+    );
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
     const existing = yield* readExistingByTaskId(sql, taskId, idPrefix);
     if (existing !== undefined) return { ok: true as const, existing, task };
-    const blockedBy = (yield* taskOperations.getTaskDependenciesForChangeStart(
+    const blockedBy = (yield* taskOperations.getTaskDependencyFacts(
       sql,
       publicTaskId(taskId),
       idPrefix,
