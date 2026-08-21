@@ -11,7 +11,7 @@ import {
   readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
-import type { TaskReviewBase, TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
 import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
@@ -24,17 +24,6 @@ import {
 } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
-
-const dispatchConflictAgentPersistence = (): AgentSessionPersistence => ({
-  beginInvocation: () =>
-    Effect.succeed({
-      ok: false as const,
-      code: "concurrent_unsettled_invocation" as const,
-      invocationId: 29,
-    }),
-  settleInvocation: () => Effect.die("Dispatch failure must not settle an Invocation"),
-  readInvocationHistory: () => Effect.succeed([]),
-});
 
 const defaultAgentPersistence = (): AgentSessionPersistence => ({
   beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
@@ -228,10 +217,23 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
       }),
       persistence,
       agentSessionStorageRoot: "/sessions",
-      agentPersistence: dispatchConflictAgentPersistence(),
+      agentPersistence: {
+        beginInvocation: () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "concurrent_unsettled_invocation" as const,
+            invocationId: 29,
+          }),
+        settleInvocation: () => Effect.die("Dispatch failure must not settle an Invocation"),
+        readInvocationHistory: () => Effect.succeed([]),
+      },
       reviewerRuntime: { review: () => Effect.die("Reviewer must not run") },
       reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
-      readReviewBase: () => Effect.succeed({ ok: true as const, base: reviewBase(review) }),
+      readReviewBase: () =>
+        Effect.succeed({
+          ok: true as const,
+          base: { ref: review.baseRef, commit: review.baseCommit },
+        }),
       verifyReviewBase: () => Effect.succeed({ ok: true as const }),
       runWorkspace: (workspaceInput) =>
         workspaceInput.runInWorkspace === undefined
@@ -271,11 +273,6 @@ it.effect("records a dispatch Tooling Failure before completing a Task Review", 
     ]);
   }),
 );
-
-const reviewBase = (review: TaskReviewRecord): TaskReviewBase => ({
-  ref: review.baseRef,
-  commit: review.baseCommit,
-});
 
 it.effect("restores Task Review state before an output-correction retry", () =>
   Effect.gen(function* () {
