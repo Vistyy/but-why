@@ -714,6 +714,15 @@ rule:
                                   - kind: arrow_function
                                 stopBy: end
                         stopBy: end
+                    - not:
+                        inside:
+                          kind: await_expression
+                          stopBy: end
+                - all:
+                    - kind: satisfies_expression
+                    - inside:
+                        pattern: await $VALUE satisfies $TYPE
+                        stopBy: end
             - not:
                 inside:
                   any:
