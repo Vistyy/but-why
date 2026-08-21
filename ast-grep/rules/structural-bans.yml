@@ -553,6 +553,9 @@ rule:
                     - kind: call_expression
                     - kind: await_expression
                     - kind: ternary_expression
+                    - kind: binary_expression
+                    - kind: unary_expression
+                    - kind: member_expression
                   stopBy: end
         - pattern: return $VALUE satisfies $TYPE
         - pattern: return await $VALUE satisfies $TYPE
