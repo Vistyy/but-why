@@ -653,6 +653,8 @@ rule:
                     - kind: subscript_expression
                     - kind: sequence_expression
                     - kind: template_string
+                    - kind: assignment_expression
+                    - kind: class
                   stopBy: end
         - all:
             - kind: satisfies_expression
@@ -676,6 +678,8 @@ rule:
                     - kind: subscript_expression
                     - kind: sequence_expression
                     - kind: template_string
+                    - kind: assignment_expression
+                    - kind: class
                   stopBy: end
         - pattern: return $VALUE satisfies $TYPE
         - pattern: return await $VALUE satisfies $TYPE
