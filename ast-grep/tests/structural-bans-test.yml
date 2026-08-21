@@ -204,6 +204,7 @@ valid:
   - "const k = (value: string) => { return wrap(value satisfies Result); }"
   - "const l = (value: string) => { return [value satisfies Result]; }"
   - "return await (value satisfies Result)"
+  - "const o = (value: string) => { return (await (value satisfies Result)); }"
   - "return (await (value satisfies Result))"
   - "return ((((await (value satisfies Result)))))"
   - "return function* (value) { value satisfies Result; }"

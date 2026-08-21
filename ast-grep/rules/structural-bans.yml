@@ -773,6 +773,10 @@ rule:
                   stopBy: end
 
     - not:
+        inside:
+          pattern: await ($VALUE satisfies $TYPE)
+          stopBy: end
+    - not:
         pattern: return JSON.parse($$$ARGS) satisfies $TYPE
     - not:
         pattern: return (JSON.parse($$$ARGS) satisfies $TYPE)
