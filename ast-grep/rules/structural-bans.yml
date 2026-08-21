@@ -634,7 +634,7 @@ rule:
                       - has:
                           pattern: $VALUE satisfies $TYPE
                           stopBy: end
-                stopBy: end
+                stopBy: neighbor
             - not:
                 inside:
                   any:
@@ -680,10 +680,14 @@ rule:
                     - kind: template_string
                     - kind: assignment_expression
                     - kind: class
+                    - kind: arrow_function
                   stopBy: end
         - pattern: return $VALUE satisfies $TYPE
         - pattern: return await $VALUE satisfies $TYPE
         - pattern: return ($VALUE satisfies $TYPE)
+        - pattern: return (($VALUE satisfies $TYPE))
+        - pattern: return ((($VALUE satisfies $TYPE)))
+        - pattern: return (((($VALUE satisfies $TYPE))))
         - pattern: return (await $VALUE satisfies $TYPE)
         - pattern: return ((await $VALUE satisfies $TYPE))
         - pattern: return (((await $VALUE satisfies $TYPE)))
