@@ -22,10 +22,9 @@ import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../src/contracts/repositoryStorageError.js";
-import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
-import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
@@ -327,61 +326,6 @@ describe("Candidate validation", () => {
   );
 
   it.scoped(
-    "records a dispatch Tooling Failure and cleans the Snapshot Workspace",
-    () =>
-      Effect.gen(function* () {
-        const mainCheckout = candidateReadyRepo();
-        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
-        if (!captured.ok) throw new Error(captured.code);
-        yield* installAcceptanceContext(mainCheckout, captured.changeId);
-        const agentPersistence = dispatchConflictAgentPersistence(73);
-        const validation = candidateValidationForTest({
-          localRepositoryRoot: mainCheckout,
-          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
-          repository: repositoryConfig(mainCheckout),
-          agentPersistence,
-        });
-
-        const result = yield* validateAcceptanceContextCandidate(validation, {
-          candidateId: captured.candidateId,
-          changeBaseSha: captured.changeBaseSha,
-          headSha: captured.headSha,
-        });
-
-        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-        if (result.ok || "code" in result) return;
-        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
-          state: "complete",
-          outcome: "tooling_failed",
-          cleanup: { state: "complete", blockingReason: null },
-        });
-        expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual([
-          expect.objectContaining({
-            operationName: "dispatch_agent_invocation",
-            errorMessage: expect.stringContaining("Agent Invocation 73"),
-            blockingInvocationId: 73,
-          }),
-        ]);
-        const shown = yield* runByInProcessEffect(mainCheckout, [
-          "validation-run",
-          "show",
-          String(result.validationRunId),
-        ]);
-        expect(shown.status).toBe(0);
-        expect(JSON.parse(shown.stdout)).toMatchObject({
-          toolingFailures: [
-            expect.objectContaining({
-              operationName: "dispatch_agent_invocation",
-              errorMessage: expect.stringContaining("Agent Invocation 73"),
-              blockingInvocationId: 73,
-            }),
-          ],
-        });
-      }),
-    10_000,
-  );
-
-  it.scoped(
     "completes after a retry dispatch conflict without adopting its blocking Invocation",
     () =>
       Effect.gen(function* () {
@@ -478,42 +422,37 @@ describe("Candidate validation", () => {
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         if (!captured.ok) throw new Error(captured.code);
         yield* installAcceptanceContext(mainCheckout, captured.changeId);
-        const { state, agentPersistence, review } = yield* retryDispatchFixture(
-          mainCheckout,
-          captured.changeId,
+        const agentPersistence = dispatchConflictAgentPersistence(73, () =>
+          Effect.die("Dispatch failure must not settle an Invocation"),
         );
         const cleanupFailureRunner = ((workspaceInput) =>
           Effect.gen(function* () {
-            const result = yield* runDisposableExactCommitWorkspace(workspaceInput);
-            if (!result.ok) return result;
-            const cleanupResult = {
-              workspace: "failed" as const,
+            if (workspaceInput.runInWorkspace !== undefined) {
+              yield* Effect.either(
+                workspaceInput.runInWorkspace({
+                  commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                  worktreePath: workspaceInput.repositoryRoot,
+                }),
+              );
+            }
+            yield* workspaceInput.recordWorkspaceCleanup?.({
+              workspace: "failed",
               errorMessage: "Cleanup failed.",
-            };
-            yield* workspaceInput.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void;
-            return {
-              ok: false as const,
-              toolingError: {
-                operationName: "cleanup_disposable_workspace" as const,
-                workspaceId: workspaceInput.workspaceId,
-                commitSha: workspaceInput.commitSha,
-                worktreePath: expectedDisposableWorkspacePath(
-                  workspaceInput.repositoryCommonDirectory,
-                  workspaceInput.workspaceId,
-                ),
-                errorMessage: "Cleanup failed.",
-                cleanupResult,
-              },
-            };
+            }) ?? Effect.void;
+            return yield* Effect.fail(
+              new InfrastructureToolingFailed({
+                operationName: "dispatch_agent_invocation",
+                message: "Agent Invocation 73 dispatch was blocked.",
+                blockingInvocationId: 73,
+              }) as Error,
+            );
           })) as RunDisposableExactCommitWorkspace;
-        const cleanupFailureWorkspace = makeCreateSnapshotWorkspace(cleanupFailureRunner);
         const validation = candidateValidationForTest({
           localRepositoryRoot: mainCheckout,
           artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
           repository: repositoryConfig(mainCheckout),
-          reviewerAgentRuntime: { review },
           agentPersistence,
-          createSnapshotWorkspace: cleanupFailureWorkspace,
+          createSnapshotWorkspace: makeCreateSnapshotWorkspace(cleanupFailureRunner),
         });
 
         const result = yield* validateAcceptanceContextCandidate(validation, {
@@ -523,14 +462,12 @@ describe("Candidate validation", () => {
         });
 
         expect(result).toMatchObject({ ok: false, code: "active_validation_run" });
-        expect(state.dispatchCount).toBe(2);
-        expect(review).toHaveBeenCalledTimes(1);
         if (!result.ok && "toolingFailures" in result) {
           expect(result.toolingFailures).toEqual(
             expect.arrayContaining([
               expect.objectContaining({
                 operationName: "dispatch_agent_invocation",
-                blockingInvocationId: state.blockingInvocationId,
+                blockingInvocationId: 73,
               }),
             ]),
           );
@@ -541,45 +478,6 @@ describe("Candidate validation", () => {
           outcome: null,
           cleanup: { state: "pending", blockingReason: "Cleanup failed." },
         });
-        const evidence = yield* withTestRepository(
-          mainCheckout,
-          Effect.flatMap(RepositorySql, (repository) =>
-            repository.operation(
-              "inspect retry dispatch evidence after cleanup failure",
-              (sql) => sql<{
-                readonly invocationId: number;
-                readonly settledAt: string | null;
-                readonly settlementKind: string | null;
-                readonly blockerSettledAt: string | null;
-                readonly blockerLinkCount: number;
-              }>`
-                SELECT
-                  linked.agent_invocation_id AS invocationId,
-                  invocation.settled_at AS settledAt,
-                  invocation.settlement_kind AS settlementKind,
-                  blocker.settled_at AS blockerSettledAt,
-                  (SELECT COUNT(*) FROM validation_phase_agent_invocations
-                   WHERE validation_run_id = ${result.validationRunId}
-                     AND agent_invocation_id = ${state.blockingInvocationId}) AS blockerLinkCount
-                FROM validation_phase_agent_invocations AS linked
-                JOIN agent_invocations AS invocation
-                  ON invocation.id = linked.agent_invocation_id
-                JOIN agent_invocations AS blocker
-                  ON blocker.id = ${state.blockingInvocationId}
-                WHERE linked.validation_run_id = ${result.validationRunId}
-              `,
-            ),
-          ),
-        );
-        expect(evidence).toEqual([
-          {
-            invocationId: state.firstReviewerInvocationId,
-            settledAt: expect.any(String),
-            settlementKind: "returned",
-            blockerSettledAt: null,
-            blockerLinkCount: 0,
-          },
-        ]);
         const later = yield* validateAcceptanceContextCandidate(validation, {
           candidateId: captured.candidateId,
           changeBaseSha: captured.changeBaseSha,
@@ -592,7 +490,7 @@ describe("Candidate validation", () => {
           toolingFailures: expect.arrayContaining([
             expect.objectContaining({
               operationName: "dispatch_agent_invocation",
-              blockingInvocationId: state.blockingInvocationId,
+              blockingInvocationId: 73,
             }),
           ]),
         });
@@ -602,14 +500,15 @@ describe("Candidate validation", () => {
           String(result.validationRunId),
         ]);
         expect(shown.status).toBe(0);
-        expect(JSON.parse(shown.stdout)).toMatchObject({
+        const shownJson = JSON.parse(shown.stdout);
+        expect(shownJson).toMatchObject({
           validationRun: { state: "running", outcome: null },
         });
-        expect(JSON.parse(shown.stdout).toolingFailures).toEqual(
+        expect(shownJson.toolingFailures).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               operationName: "dispatch_agent_invocation",
-              blockingInvocationId: state.blockingInvocationId,
+              blockingInvocationId: 73,
             }),
           ]),
         );

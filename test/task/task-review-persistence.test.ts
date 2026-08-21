@@ -73,64 +73,101 @@ const admitTaskReviewWithCleanup = () =>
     };
   });
 
-it.effect("persists dispatch identity through Task Review inspection and CLI output", () =>
-  Effect.gen(function* () {
-    const root = createGitRepo();
-    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
-    expect(initialized.status, initialized.stdout).toBe(0);
-    const loaded = openRepositoryRuntime(root);
-    if (!loaded.ok) throw new Error(`Could not open repository: ${loaded.error.code}`);
-    yield* loaded.runtime.provide(
-      Effect.gen(function* () {
-        const { reviews, taskId, review } = yield* admitTaskReviewWithCleanup();
-        const failure = dispatchFailure(29);
-        yield* reviews.recordActiveFailure(review.id, failure, now);
-        const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "change Task Review proposal during dispatch failure",
-          (sql) => sql`
+it.effect(
+  "preserves the blocking Invocation identity through Task Review completion and inspection",
+  () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+      expect(initialized.status, initialized.stdout).toBe(0);
+      const loaded = openRepositoryRuntime(root);
+      if (!loaded.ok) throw new Error(`Could not open repository: ${loaded.error.code}`);
+      let blockingInvocationId: number | undefined;
+      yield* loaded.runtime.provide(
+        Effect.gen(function* () {
+          const { reviews, taskId, review, admittedPolicy } = yield* admitTaskReviewWithCleanup();
+          const agents = yield* openSqliteAgentSessionPersistence();
+          const configuration = { harness: "pi" as const, model: "test-model" };
+          const first = yield* agents.beginInvocation({
+            configuration,
+            createdAt: now,
+            linkInvocation: () => Effect.void,
+          });
+          if (!first.ok) throw new Error(`Agent Invocation setup failed: ${first.code}`);
+          let linkCalls = 0;
+          const link = reviews.linkAgentInvocation({
+            taskId,
+            reviewId: review.id,
+            admittedPolicy,
+          });
+          const blocked = yield* agents.beginInvocation({
+            agentSessionId: first.dispatch.agentSessionId,
+            configuration,
+            createdAt: later,
+            linkInvocation: (sql, invocationId) =>
+              Effect.sync(() => {
+                linkCalls += 1;
+              }).pipe(Effect.zipRight(link(sql, invocationId))),
+          });
+          expect(blocked).toEqual({
+            ok: false,
+            code: "concurrent_unsettled_invocation",
+            invocationId: first.dispatch.invocation.id,
+          });
+          expect(linkCalls).toBe(0);
+          expect(yield* agents.readInvocationHistory(first.dispatch.agentSessionId)).toHaveLength(
+            1,
+          );
+
+          blockingInvocationId = first.dispatch.invocation.id;
+          const failure = dispatchFailure(blockingInvocationId);
+          yield* reviews.recordActiveFailure(review.id, failure, later);
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "change Task Review proposal during dispatch failure",
+            (sql) => sql`
             UPDATE tasks SET title = 'Changed after admission'
             WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
           `,
-        );
-        const completed = yield* reviews.complete({
-          reviewId: review.id,
-          findings: [],
-          toolingFailure: failure,
-          now,
-        });
-        expect(completed).toMatchObject({
-          ok: true,
-          outcome: "tooling_failed",
-          review: { toolingFailure: failure },
-        });
-      }),
-    );
+          );
+          const completed = yield* reviews.complete({
+            reviewId: review.id,
+            findings: [],
+            toolingFailure: failure,
+            now: later,
+          });
+          expect(completed).toMatchObject({
+            ok: true,
+            outcome: "tooling_failed",
+            review: { toolingFailure: failure },
+          });
+        }),
+      );
 
-    const reviewShown = yield* runByInProcessEffect(root, ["task", "review", "show", "1"]);
-    expect(reviewShown.status, reviewShown.stdout).toBe(0);
-    expect(JSON.parse(reviewShown.stdout)).toMatchObject({
-      review: {
-        toolingFailure: {
-          operation: "dispatch_agent_invocation",
-          blockingInvocationId: 29,
-        },
-        agentSession: { invocations: [] },
-      },
-    });
-    const taskShown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
-    expect(taskShown.status, taskShown.stdout).toBe(0);
-    expect(JSON.parse(taskShown.stdout)).toMatchObject({
-      task: {
+      const reviewShown = yield* runByInProcessEffect(root, ["task", "review", "show", "1"]);
+      expect(reviewShown.status, reviewShown.stdout).toBe(0);
+      expect(JSON.parse(reviewShown.stdout)).toMatchObject({
         review: {
           toolingFailure: {
             operation: "dispatch_agent_invocation",
-            blockingInvocationId: 29,
+            blockingInvocationId,
+          },
+          agentSession: { invocations: [] },
+        },
+      });
+      const taskShown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+      expect(taskShown.status, taskShown.stdout).toBe(0);
+      expect(JSON.parse(taskShown.stdout)).toMatchObject({
+        task: {
+          review: {
+            toolingFailure: {
+              operation: "dispatch_agent_invocation",
+              blockingInvocationId,
+            },
           },
         },
-      },
-    });
-  }),
+      });
+    }),
 );
 
 it.scoped("preserves dispatch evidence when Task Review cleanup fails", () =>
@@ -162,57 +199,6 @@ it.scoped("preserves dispatch evidence when Task Review cleanup fails", () =>
       expect(yield* reviews.getById(review.id)).toMatchObject({
         state: "running",
         toolingFailure: failure,
-      });
-    }),
-  ),
-);
-
-it.scoped("does not adopt the blocking Agent Invocation during dispatch", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const { reviews, taskId, review, admittedPolicy } = yield* admitTaskReviewWithCleanup();
-      const agents = yield* openSqliteAgentSessionPersistence();
-      const configuration = { harness: "pi" as const, model: "test-model" };
-      const first = yield* agents.beginInvocation({
-        configuration,
-        createdAt: now,
-        linkInvocation: () => Effect.void,
-      });
-      if (!first.ok) throw new Error(`Agent Invocation setup failed: ${first.code}`);
-      let linkCalls = 0;
-      const link = reviews.linkAgentInvocation({
-        taskId,
-        reviewId: review.id,
-        admittedPolicy,
-      });
-      const blocked = yield* agents.beginInvocation({
-        agentSessionId: first.dispatch.agentSessionId,
-        configuration,
-        createdAt: later,
-        linkInvocation: (sql, invocationId) =>
-          Effect.sync(() => {
-            linkCalls += 1;
-          }).pipe(Effect.zipRight(link(sql, invocationId))),
-      });
-      expect(blocked).toEqual({
-        ok: false,
-        code: "concurrent_unsettled_invocation",
-        invocationId: first.dispatch.invocation.id,
-      });
-      expect(linkCalls).toBe(0);
-      expect(yield* agents.readInvocationHistory(first.dispatch.agentSessionId)).toHaveLength(1);
-      const failure = dispatchFailure(first.dispatch.invocation.id);
-      yield* reviews.recordActiveFailure(review.id, failure, later);
-      const completed = yield* reviews.complete({
-        reviewId: review.id,
-        findings: [],
-        toolingFailure: failure,
-        now: later,
-      });
-      expect(completed).toMatchObject({
-        ok: true,
-        outcome: "tooling_failed",
-        review: { toolingFailure: failure },
       });
     }),
   ),

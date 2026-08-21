@@ -15,30 +15,32 @@ const validationDispatchFailure = {
 };
 
 describe("dispatch Tooling Failure evidence", () => {
-  it("requires the blocking Invocation ID at the Task Review boundary", () => {
-    expect(() => decodeTaskReviewToolingFailure(dispatchFailure)).toThrow(
-      "requires a blocking Invocation ID",
-    );
-    expect(() =>
-      decodeTaskReviewToolingFailure({
-        operation: "cleanup_task_review_workspace",
-        message: "Cleanup failed.",
-        blockingInvocationId: 1,
-      }),
-    ).toThrow("no other operation may provide");
-  });
+  it("requires the blocking Invocation ID only for dispatch failures", () => {
+    const missingIdCases = [
+      () => decodeTaskReviewToolingFailure(dispatchFailure),
+      () => assertValidationToolingFailureEvidence(validationDispatchFailure),
+    ];
+    for (const check of missingIdCases) {
+      expect(check).toThrow("requires a blocking Invocation ID");
+    }
 
-  it("requires the blocking Invocation ID at the Change Validation boundary", () => {
-    expect(() => assertValidationToolingFailureEvidence(validationDispatchFailure)).toThrow(
-      "requires a blocking Invocation ID",
-    );
-    expect(() =>
-      assertValidationToolingFailureEvidence({
-        errorKind: "infrastructure_tooling_failed",
-        operationName: "cleanup_snapshot_workspace",
-        errorMessage: "Cleanup failed.",
-        blockingInvocationId: 1,
-      }),
-    ).toThrow("no other operation may provide");
+    const invalidIdCases = [
+      () =>
+        decodeTaskReviewToolingFailure({
+          operation: "cleanup_task_review_workspace",
+          message: "Cleanup failed.",
+          blockingInvocationId: 1,
+        }),
+      () =>
+        assertValidationToolingFailureEvidence({
+          errorKind: "infrastructure_tooling_failed",
+          operationName: "cleanup_snapshot_workspace",
+          errorMessage: "Cleanup failed.",
+          blockingInvocationId: 1,
+        }),
+    ];
+    for (const check of invalidIdCases) {
+      expect(check).toThrow("no other operation may provide");
+    }
   });
 });
