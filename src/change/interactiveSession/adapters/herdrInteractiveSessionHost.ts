@@ -289,13 +289,6 @@ const openStandaloneWorkspace = async (
         launchIndeterminate("Herdr did not provide trustworthy workspace pane provenance."),
       );
     }
-    if (observation.kind === "ambiguous") {
-      return phaseStopped(
-        launchIndeterminate(
-          "Herdr reported ambiguous workspace provenance for this Managed Worktree.",
-        ),
-      );
-    }
     if (observation.kind === "match") matchingWorkspaces.push(observation.workspace);
   }
   if (matchingWorkspaces.length > 1) {
@@ -347,7 +340,6 @@ const openStandaloneWorkspace = async (
 
 type WorkspaceAtCwdObservation =
   | { readonly kind: "absent" }
-  | { readonly kind: "ambiguous" }
   | { readonly kind: "match"; readonly workspace: OpenedWorkspace };
 
 const observeWorkspaceAtCwd = async (
@@ -766,12 +758,10 @@ const decodeWorkspaceAtCwd = (
   const response = decodeHerdrJson(source, herdrPaneListResponseSchema);
   if (response === undefined || response.result.panes.length === 0) return undefined;
   if (response.result.panes.some((pane) => pane.workspace_id !== workspaceId)) return undefined;
-  const matches = response.result.panes.filter((pane) => pane.cwd === expectedCwd);
-  if (matches.length === 0) return { kind: "absent" };
-  const pane = matches[0];
-  return response.result.panes.length === 1 && pane !== undefined
-    ? { kind: "match", workspace: { workspaceId, rootPaneId: pane.pane_id } }
-    : { kind: "ambiguous" };
+  const pane = response.result.panes.find((candidate) => candidate.cwd === expectedCwd);
+  return pane === undefined
+    ? { kind: "absent" }
+    : { kind: "match", workspace: { workspaceId, rootPaneId: pane.pane_id } };
 };
 
 const decodeAgentStarted = (source: string): { readonly terminalId: string } | undefined => {
