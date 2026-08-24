@@ -123,26 +123,10 @@ const expectedColumns = {
   ],
   stall_detections: [
     "id:INTEGER:0:1",
-    "change_id:INTEGER:1:0",
     "validation_run_id:INTEGER:1:0",
     "agent_session_id:INTEGER:1:0",
     "decision:TEXT:1:0",
     "reason:TEXT:1:0",
-    "configuration:TEXT:1:0",
-    "input_snapshot:TEXT:1:0",
-    "created_at:TEXT:1:0",
-  ],
-  stall_detection_attempts: [
-    "id:INTEGER:0:1",
-    "change_id:INTEGER:1:0",
-    "validation_run_id:INTEGER:1:0",
-    "agent_session_id:INTEGER:1:0",
-    "diagnostic:TEXT:1:0",
-    "created_at:TEXT:1:0",
-  ],
-  stall_detection_run_invocations: [
-    "validation_run_id:INTEGER:1:1",
-    "agent_invocation_id:INTEGER:1:2",
   ],
   github_publications: [
     "change_id:INTEGER:0:1",
@@ -184,16 +168,6 @@ const expectedForeignKeys = {
   ],
   stall_detections: [
     "agent_session_id->agent_sessions.id",
-    "change_id->changes.id",
-    "validation_run_id->validation_runs.id",
-  ],
-  stall_detection_attempts: [
-    "agent_session_id->agent_sessions.id",
-    "change_id->changes.id",
-    "validation_run_id->validation_runs.id",
-  ],
-  stall_detection_run_invocations: [
-    "agent_invocation_id->agent_invocations.id",
     "validation_run_id->validation_runs.id",
   ],
 } as const;
@@ -256,12 +230,6 @@ const expectedIndexes = {
     keys: ["source_id:ASC"],
     predicate: "WHERE source_type = 'stall_detection'",
   },
-  stall_detections_change_id_idx: {
-    table: "stall_detections",
-    unique: 0,
-    partial: 0,
-    keys: ["change_id:ASC", "id:ASC"],
-  },
   task_dependencies_prerequisite_idx: {
     table: "task_dependencies",
     unique: 0,
@@ -322,11 +290,6 @@ const expectedImplicitUniqueIndexes = {
   ],
   validation_phase_results: ["pk:validation_run_id,phase,producer"],
   stall_detections: ["u:validation_run_id"],
-  stall_detection_attempts: ["u:validation_run_id"],
-  stall_detection_run_invocations: [
-    "pk:validation_run_id,agent_invocation_id",
-    "u:agent_invocation_id",
-  ],
 } as const;
 
 const expectStatementRejected = (
@@ -356,7 +319,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       const tables = objects.filter((object) => object.type === "table");
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
-      expect(tables).toHaveLength(21);
+      expect(tables).toHaveLength(19);
 
       const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
         sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),
@@ -489,10 +452,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       expect(
         tables
           .filter(
-            (table) =>
-              table.name !== "agent_invocations" &&
-              table.name !== "stall_detections" &&
-              table.name !== "stall_detection_attempts",
+            (table) => table.name !== "agent_invocations" && table.name !== "stall_detections",
           )
           .every((table) => !table.sql?.match(/created_at|updated_at|closed_at|round_number/)),
       ).toBe(true);

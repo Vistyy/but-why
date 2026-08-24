@@ -1,4 +1,3 @@
-import type * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import type { ResolvedReviewerPiAgentProfile } from "../../src/agent/agentProfiles.js";
@@ -32,16 +31,10 @@ const profile: ResolvedReviewerPiAgentProfile = {
 };
 
 const assessmentInput: StallDetectionAssessmentInput = {
-  changeId: "BY-C1",
-  triggeringValidationRunId: 3,
   acceptanceContext: { version: 1, title: "Intent", description: "Deliver it." },
-  qualifyingRuns: [1, 2, 3].map((validationRunId) => ({
-    validationRunId,
-    acceptanceContext: { version: 1, title: "Intent", description: "Deliver it." },
-    resolutionPrefix: [],
+  qualifyingRuns: [1, 2, 3].map(() => ({
     findings: [
       {
-        validationRunId,
         phase: "acceptance_review",
         producer: "acceptance",
         title: "Finding",
@@ -52,7 +45,6 @@ const assessmentInput: StallDetectionAssessmentInput = {
       },
     ],
   })),
-  blockerHistory: { blockers: [], resolutions: [], active: null },
 };
 
 const invocation = {
@@ -66,62 +58,45 @@ const invocation = {
 
 it.effect("runs a bounded serialized Stall Detection with a fresh restricted Pi session", () =>
   Effect.gen(function* () {
-    let linkedInvocation = 0;
     let observedInput: StallDetectionAssessmentInput | undefined;
     let observedProfile: ResolvedReviewerPiAgentProfile | undefined;
     const agentPersistence: AgentSessionPersistence = {
       beginInvocation: (input) =>
-        Effect.gen(function* () {
-          yield* input
-            .linkInvocation(null as unknown as SqlClient.SqlClient, invocation.id)
-            .pipe(Effect.catchAll(() => Effect.void));
-          return {
-            ok: true,
-            dispatch: {
+        Effect.succeed({
+          ok: true,
+          dispatch: {
+            agentSessionId: 19,
+            continuation: {
+              id: invocation.continuationId,
               agentSessionId: 19,
-              continuation: {
-                id: invocation.continuationId,
-                agentSessionId: 19,
-                harness: "pi",
-                provider: null,
-                model: input.configuration.model,
-                thinking: input.configuration.thinking ?? null,
-                transcriptPath: null,
-                unusableReason: null,
-              },
-              invocation,
-              resumed: false,
-              piSessionId: "fresh-session",
+              harness: "pi",
+              provider: null,
+              model: input.configuration.model,
+              thinking: input.configuration.thinking ?? null,
+              transcriptPath: null,
+              unusableReason: null,
             },
-          } satisfies AgentDispatchResult;
-        }),
+            invocation,
+            resumed: false,
+            piSessionId: "fresh-session",
+          },
+        } satisfies AgentDispatchResult),
       settleInvocation: () => Effect.void,
       readInvocationHistory: () => Effect.succeed([]),
     };
     const persistence: StallDetectionPersistence = {
-      linkInvocation: () => () => Effect.void,
-      recoverDispatchedInvocations: () => Effect.void,
-      getAttemptByValidationRun: () => Effect.succeed(undefined),
       getAssessmentInput: () => Effect.succeed(assessmentInput),
       getByValidationRun: () => Effect.succeed(undefined),
-      recordAttempt: () =>
-        Effect.die("A completed Stall Detection should not record an unavailable attempt."),
       listForChange: () => Effect.succeed([]),
       record: (input) => {
-        linkedInvocation = input.invocationIds[0] ?? 0;
-        observedInput = input.assessmentInput;
+        observedInput = assessmentInput;
         return Effect.succeed({
           id: 1,
-          changeId: input.assessmentInput.changeId,
-          validationRunId: input.assessmentInput.triggeringValidationRunId,
+          validationRunId: input.validationRunId,
           agentSessionId: input.agentSessionId,
           decision: input.assessment.decision,
           reason: input.assessment.reason,
-          configuration: input.configuration,
-          input: input.assessmentInput,
-          invocations: [invocation],
           blockerId: null,
-          createdAt: input.now,
         } satisfies StallDetectionRecord);
       },
     };
@@ -137,7 +112,9 @@ it.effect("runs a bounded serialized Stall Detection with a fresh restricted Pi 
         expect(restrictedProfile.profile.runtimeConfig.tools).toEqual([]);
         expect(restrictedProfile.profile.runtimeConfig.contextFileDiscovery).toBe(false);
         expect(input.systemPrompt).toContain("Stall Detector");
-        expect(input.prompt).toContain("serialized evidence");
+        expect(input.prompt).toContain("Acceptance Context and Findings trajectory");
+        expect(input.prompt).not.toContain("validationRunId");
+        expect(input.prompt).not.toContain("agentProfile");
         return Effect.succeed({
           stdout:
             '<reviewer-output>{"decision":"continue","reason":"Ambiguous."}</reviewer-output>',
@@ -153,14 +130,13 @@ it.effect("runs a bounded serialized Stall Detection with a fresh restricted Pi 
     });
 
     const result = yield* service.assess({
-      changeId: assessmentInput.changeId,
-      validationRunId: assessmentInput.triggeringValidationRunId,
+      changeId: "BY-C1",
+      validationRunId: 3,
       configuration: profile,
-      now: "2026-06-30T12:00:00.000Z",
+      newlyCompleted: true,
     });
 
     expect(result).toMatchObject({ attempted: true, record: { decision: "continue" } });
-    expect(linkedInvocation).toBe(invocation.id);
     expect(observedInput).toEqual(assessmentInput);
     expect(observedProfile?.profile.runtimeConfig.extensions).toEqual([]);
   }),

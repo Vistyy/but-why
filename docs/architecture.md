@@ -58,7 +58,7 @@ Candidate content is the Validation subject and never selects its own judgment p
 Reconciliation observes publication and merge facts before coordination completes a Change and its linked Task atomically.
 
 The fixed Validation Gate and project-owned execution boundary are defined by [ADR 0001](adr/0001-use-fixed-validation-gate-with-project-owned-execution.md).
-Stall Detection receives only serialized Acceptance Context, Validation Run Finding evidence, exact input identities, and non-authoritative blocker history, and its Pi profile is restricted to the configured model and thinking level.
+Stall Detection receives only the current authoritative Acceptance Context and chronologically ordered reviewer Findings grouped into qualifying Runs since the latest full Validation Gate pass, and its Pi profile is restricted to the configured model and thinking level.
 Exact Candidate provenance is defined by [ADR 0008](adr/0008-preserve-exact-candidate-provenance-through-submission.md).
 Managed Worktree placement and recovery constraints are defined by [ADR 0007](adr/0007-place-managed-worktrees-in-a-visible-sibling-directory.md).
 
@@ -68,7 +68,7 @@ Shared Repository State is resolved through the Git Common Directory and shared 
 The globally installed `by` executable is the only supported CLI that opens or mutates live Shared Repository State.
 Repo Config remains tracked at `.but-why/config.json`, while Global Config remains user-local.
 Release-ready Shared Repository State starts with `0001_baseline` and applies the immutable ordered migration chain defined by [ADR 0009](adr/0009-use-forward-schema-migrations-before-release.md).
-The ordered migration chain stores current Task, Change, validation, publication, Stall Detection, and Agent Session facts, with public Task and Change IDs derived from the repository ID Prefix and SQLite integer identities.
+The ordered migration chain stores current Task, Change, validation, publication, Stall Detection, and Agent Session facts, with completed Stall Detection records limited to their triggering Validation Run, Agent Session, decision, reason, and sourced Blocker identity.
 
 The public configuration contract is documented in [But Why Config](public/config.md).
 Cross-command serialization policy is documented in [CLI Output](cli-output.md) and constrained by [ADR 0011](adr/0011-use-json-as-the-only-cli-result-format.md).

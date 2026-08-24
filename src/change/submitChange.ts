@@ -443,7 +443,7 @@ const validateAndPublish = (
       return yield* blockedValidationResult(dependencies, validation, change, candidate, {
         validationRunId: validationResult.validationRunId,
         outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
-        now,
+        reused: "reused" in validationResult ? validationResult.reused : false,
       });
     }
 
@@ -477,7 +477,7 @@ const blockedValidationResult = (
   validation: {
     readonly outcome: "blocked" | "tooling_failed";
     readonly validationRunId: number;
-    readonly now: string;
+    readonly reused: boolean;
   },
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -494,7 +494,7 @@ const blockedValidationResult = (
         changeId: change.id,
         validationRunId: validation.validationRunId,
         configuration: profile,
-        now: validation.now,
+        newlyCompleted: !validation.reused,
       });
       if (detected.attempted && "record" in detected && detected.record.decision === "stop") {
         return { ok: false, code: "change_blocked" } as const;

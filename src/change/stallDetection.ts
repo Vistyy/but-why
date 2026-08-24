@@ -1,29 +1,19 @@
 import type { Effect } from "effect";
-import type { ResolvedReviewerPiAgentProfile } from "../agent/agentProfiles.js";
-import type {
-  AgentInvocationRecord,
-  AgentSessionSqlLink,
-} from "../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 import type { ValidationRunFindingRecord } from "./validationRun/validationRun.js";
 
 export type StallDetectionDecision = "continue" | "stop";
 
+export type StallDetectionFinding = Omit<ValidationRunFindingRecord, "validationRunId">;
+
 export type StallDetectionRunInput = {
-  readonly validationRunId: number;
-  readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly resolutionPrefix: readonly string[];
-  readonly findings: readonly ValidationRunFindingRecord[];
+  readonly findings: readonly StallDetectionFinding[];
 };
 
 export type StallDetectionAssessmentInput = {
-  readonly changeId: string;
-  readonly triggeringValidationRunId: number;
   readonly acceptanceContext: AcceptanceContextSnapshotV1;
   readonly qualifyingRuns: readonly StallDetectionRunInput[];
-  readonly blockerHistory: ImplementationBlockerHistory;
 };
 
 export type StallDetectionAssessment = {
@@ -33,16 +23,11 @@ export type StallDetectionAssessment = {
 
 export type StallDetectionRecord = {
   readonly id: number;
-  readonly changeId: string;
   readonly validationRunId: number;
   readonly agentSessionId: number;
   readonly decision: StallDetectionDecision;
   readonly reason: string;
-  readonly configuration: ResolvedReviewerPiAgentProfile;
-  readonly input: StallDetectionAssessmentInput;
-  readonly invocations: readonly AgentInvocationRecord[];
   readonly blockerId: number | null;
-  readonly createdAt: string;
 };
 
 export type StallDetectionDiagnostic = {
@@ -51,14 +36,6 @@ export type StallDetectionDiagnostic = {
 };
 
 export type StallDetectionPersistence = {
-  readonly linkInvocation: (validationRunId: number) => AgentSessionSqlLink;
-  readonly recoverDispatchedInvocations: (
-    validationRunId: number,
-    now: string,
-  ) => EffectResult<void>;
-  readonly getAttemptByValidationRun: (
-    validationRunId: number,
-  ) => EffectResult<StallDetectionDiagnostic | undefined>;
   readonly getAssessmentInput: (
     changeId: string,
     validationRunId: number,
@@ -66,21 +43,11 @@ export type StallDetectionPersistence = {
   readonly getByValidationRun: (
     validationRunId: number,
   ) => EffectResult<StallDetectionRecord | undefined>;
-  readonly recordAttempt: (input: {
-    readonly assessmentInput: StallDetectionAssessmentInput;
-    readonly diagnostic: StallDetectionDiagnostic;
-    readonly agentSessionId: number;
-    readonly invocationIds: readonly number[];
-    readonly now: string;
-  }) => EffectResult<StallDetectionDiagnostic>;
   readonly listForChange: (changeId: string) => EffectResult<readonly StallDetectionRecord[]>;
   readonly record: (input: {
-    readonly assessment: StallDetectionAssessment;
-    readonly assessmentInput: StallDetectionAssessmentInput;
-    readonly configuration: ResolvedReviewerPiAgentProfile;
+    readonly validationRunId: number;
     readonly agentSessionId: number;
-    readonly invocationIds: readonly number[];
-    readonly now: string;
+    readonly assessment: StallDetectionAssessment;
   }) => EffectResult<StallDetectionRecord>;
 };
 

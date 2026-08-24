@@ -145,9 +145,9 @@ _Avoid_: Change Policy, Candidate-controlled policy, raw config hash, retroactiv
 
 **Stall Detection**:
 A Change-owned qualitative assessment that runs after the third and later qualifying Findings-blocked Validation Run when the frozen Change Policy explicitly enables it.
-It receives only serialized Acceptance Context, exact Validation Run input identities, ordered reviewer Findings, and separately identified non-authoritative blocker history.
+It receives only the current authoritative Acceptance Context and chronologically ordered reviewer Findings grouped into qualifying Runs since the latest full Validation Gate pass.
 It records `continue` or `stop` without changing the Validation Run outcome.
-A stop atomically creates a Stall-Detector-sourced Implementation Blocker, while an unavailable assessment remains a visible nonblocking diagnostic.
+A stop atomically creates a Stall-Detector-sourced Implementation Blocker whose report is the assessor reason, while an unavailable assessment remains a visible nonblocking diagnostic and is not persisted.
 _Avoid_: Validation Phase, deterministic Finding classifier, Candidate analysis, transcript analysis, background worker
 
 **Agent Session**:
@@ -165,7 +165,7 @@ _Avoid_: Agent Session, reviewer policy, transcript copy
 **Agent Invocation**:
 One dispatched host call in an Agent Continuation.
 An Invocation is settled exactly once as returned, launch_failed, failed, or return_unknown and records token evidence when available.
-Task Review, Change Validation, and Change-owned Stall Detection link each Invocation to their own domain evidence.
+Generic Agent Session persistence owns Invocations, continuations, transcripts, configuration, and token evidence for Task Review, Change Validation, and Change-owned Stall Detection.
 _Avoid_: reviewer attempt, cumulative session usage, reviewer outcome
 
 **Agent Session Configuration**:

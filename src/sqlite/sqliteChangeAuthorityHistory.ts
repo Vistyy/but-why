@@ -34,9 +34,12 @@ export const implementationBlockerReadColumns = `
   id, change_id AS changeId, content, source_type AS sourceType,
   source_id AS sourceId, resolution_content AS resolutionContent,
   EXISTS (
-    SELECT 1 FROM stall_detections AS detection
+    SELECT 1
+    FROM stall_detections AS detection
+    JOIN validation_runs AS run ON run.id = detection.validation_run_id
+    JOIN candidates AS candidate ON candidate.id = run.candidate_id
     WHERE detection.id = implementation_blockers.source_id
-      AND detection.change_id = implementation_blockers.change_id
+      AND candidate.change_id = implementation_blockers.change_id
       AND detection.decision = 'stop'
   ) AS stallDetectionExists
 `;

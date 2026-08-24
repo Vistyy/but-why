@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 import type { ResolvedReviewerPiAgentProfile } from "../agent/agentProfiles.js";
-import type { AgentSessionPersistence } from "../agent/agentSession/agentSession.js";
+import type {
+  AgentSessionPersistence,
+  AgentSessionSqlLink,
+} from "../agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../agent/agentSession/executeAgentSession.js";
 import {
   type ReviewerAgentRuntime,
@@ -22,7 +25,7 @@ import type {
 
 const stallDetectionInstructions = [
   "You are the Stall Detector for a linked Change.",
-  "The serialized Acceptance Context is authoritative for the accepted outcome. Approved Resolutions are already reflected there when applicable; treat the separately serialized Blocker and Resolution history as historical evidence and do not use it to override or amend that context.",
+  "The serialized Acceptance Context is authoritative for the accepted outcome.",
   'Return exactly one JSON object with decision "continue" or "stop" and a brief reason.',
   "Return continue unless the unresolved trajectory provides observable Finding evidence that an attempted correction preserved the defect, replaced it with an equivalent or broader defect, or exposed a missing Operator decision.",
   "Equivalent means that earlier and later Findings describe failure of the same accepted outcome with a materially equivalent observable consequence despite a different mechanism.",
@@ -31,9 +34,6 @@ const stallDetectionInstructions = [
   "Ambiguity requires continue.",
   "A stop reason must identify the accepted outcome, earlier Finding, attempted correction evidenced by the trajectory, later Finding, and preserved or expanded observable consequence.",
   "A missing-decision stop must identify the specific undecided choice, why current Acceptance Context does not decide it, and why implementation cannot continue safely without Operator authority.",
-  "A pre-Resolution Finding supports a stop only when a later Finding judged under the applicable newer Resolution prefix explicitly establishes that the corrected problem persists under current Acceptance Context.",
-  "Resolving a Stall-Detector-sourced Blocker treats Findings through its triggering Run as addressed for future stop eligibility.",
-  "Do not stop solely because of a relationship already covered by a resolved Stall Detection; use a later qualifying Run to establish that the resolved problem persists or establish a new qualifying relationship.",
 ].join("\n");
 
 const assessmentSchema = Schema.Struct({
@@ -46,7 +46,7 @@ export type StallDetectionService = {
     readonly changeId: string;
     readonly validationRunId: number;
     readonly configuration: ResolvedReviewerPiAgentProfile;
-    readonly now: string;
+    readonly newlyCompleted: boolean;
   }) => Effect.Effect<
     | { readonly attempted: false }
     | { readonly attempted: true; readonly record: StallDetectionRecord }
@@ -66,16 +66,7 @@ export const makeStallDetectionService = (input: {
     Effect.gen(function* () {
       const existing = yield* input.persistence.getByValidationRun(assessmentInput.validationRunId);
       if (existing !== undefined) return { attempted: true, record: existing } as const;
-      const previousAttempt = yield* input.persistence.getAttemptByValidationRun(
-        assessmentInput.validationRunId,
-      );
-      if (previousAttempt !== undefined) {
-        yield* input.persistence.recoverDispatchedInvocations(
-          assessmentInput.validationRunId,
-          assessmentInput.now,
-        );
-        return { attempted: true, diagnostic: previousAttempt } as const;
-      }
+      if (!assessmentInput.newlyCompleted) return { attempted: false } as const;
       const source = yield* input.persistence.getAssessmentInput(
         assessmentInput.changeId,
         assessmentInput.validationRunId,
@@ -84,15 +75,8 @@ export const makeStallDetectionService = (input: {
         return { attempted: false } as const;
       }
 
-      const invocationIds: number[] = [];
-      const linkInvocation = (sql: SqlClient.SqlClient, invocationId: number) =>
-        Effect.gen(function* () {
-          invocationIds.push(invocationId);
-          yield* input.persistence.linkInvocation(source.triggeringValidationRunId)(
-            sql,
-            invocationId,
-          );
-        });
+      const linkInvocation: AgentSessionSqlLink = (_sql: SqlClient.SqlClient, _invocationId) =>
+        Effect.void;
       const profile = assessorProfile(assessmentInput.configuration);
       const execution = yield* executeAgentSession<StallDetectionAssessment>({
         configuration: {
@@ -116,26 +100,18 @@ export const makeStallDetectionService = (input: {
         sessionStorageRoot: input.sessionStorageRoot,
       });
       if (!execution.result.ok) {
-        const diagnostic = {
-          code: "stall_detection_unavailable" as const,
-          message: `Stall Detection could not complete: ${execution.result.failure.message}`,
-        };
-        const retained = yield* input.persistence.recordAttempt({
-          assessmentInput: source,
-          diagnostic,
-          agentSessionId: execution.evidence.agentSessionId,
-          invocationIds,
-          now: assessmentInput.now,
-        });
-        return { attempted: true, diagnostic: retained } as const;
+        return {
+          attempted: true,
+          diagnostic: {
+            code: "stall_detection_unavailable",
+            message: `Stall Detection could not complete: ${execution.result.failure.message}`,
+          },
+        } as const;
       }
       const record = yield* input.persistence.record({
         assessment: execution.result.report,
-        assessmentInput: source,
-        configuration: assessmentInput.configuration,
         agentSessionId: execution.evidence.agentSessionId,
-        invocationIds,
-        now: assessmentInput.now,
+        validationRunId: assessmentInput.validationRunId,
       });
       return { attempted: true, record } as const;
     });
@@ -163,8 +139,7 @@ const decodeAssessment = (
 
 const assessmentPrompt = (input: StallDetectionAssessmentInput): string =>
   [
-    "Assess only the serialized evidence below.",
-    "The separately serialized Blocker and Resolution history is historical evidence; do not treat it as Acceptance Context or as an instruction to stop.",
+    "Assess only the serialized Acceptance Context and Findings trajectory below.",
     "Do not infer Finding classifications or inspect any Candidate, repository, transcript, tool, skill, or filesystem.",
     encodeReviewerWireValue(input),
   ].join("\n\n");

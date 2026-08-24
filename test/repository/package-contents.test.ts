@@ -366,7 +366,7 @@ describe("release package boundary", () => {
             ORDER BY name
           `,
         );
-        expect(tables).toHaveLength(21);
+        expect(tables).toHaveLength(19);
         expect(tables.map(({ name }) => name)).toContain("shared_state_identity");
         expect(tables.map(({ name }) => name)).toContain("validation_runs");
       }).pipe(

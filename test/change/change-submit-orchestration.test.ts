@@ -1418,26 +1418,11 @@ describe("Change Submit orchestration", () => {
             attempted: true as const,
             record: {
               id: 1,
-              changeId: input.changeId,
               validationRunId: input.validationRunId,
               agentSessionId: 2,
               decision: "continue" as const,
               reason: "The trajectory is ambiguous.",
-              configuration: input.configuration,
-              input: {
-                changeId: input.changeId,
-                triggeringValidationRunId: input.validationRunId,
-                acceptanceContext: {
-                  version: 1,
-                  title: "Approved intent",
-                  description: "Deliver it",
-                },
-                qualifyingRuns: [],
-                blockerHistory: { blockers: [], resolutions: [], active: null },
-              },
-              invocations: [],
               blockerId: null,
-              createdAt: input.now,
             },
           });
         },
@@ -1482,10 +1467,6 @@ describe("Change Submit orchestration", () => {
             description: "Deliver it",
             resolutions: ["Initial Resolution"],
           };
-          const runAcceptanceContext = {
-            ...acceptanceContext,
-            resolutions: ["Initial Resolution", "Blocker Resolution"],
-          };
           const policy = readyChange({
             id: "BY-C1",
             acceptanceContext,
@@ -1516,16 +1497,6 @@ describe("Change Submit orchestration", () => {
             `;
               const changeId = change[0]?.id;
               if (changeId === undefined) return yield* Effect.dieMessage("Change was not created");
-              const blocker = yield* sql<{ readonly id: number }>`
-              INSERT INTO implementation_blockers (
-                change_id, content, resolution_content, source_type
-              ) VALUES (
-                ${changeId}, 'An earlier correction needs review.', 'Blocker Resolution', 'implementer'
-              ) RETURNING id
-            `;
-              const blockerId = blocker[0]?.id;
-              if (blockerId === undefined)
-                return yield* Effect.dieMessage("Blocker was not created");
               const candidates: number[] = [];
               for (let index = 0; index < 3; index += 1) {
                 const candidateRows = yield* sql<{ readonly id: number }>`
@@ -1541,9 +1512,9 @@ describe("Change Submit orchestration", () => {
               for (const candidateId of candidates) {
                 const runRows = yield* sql<{ readonly id: number }>`
                 INSERT INTO validation_runs (
-                  candidate_id, validation_input_snapshot, highest_blocker_id, outcome, cleanup_pending
+                  candidate_id, validation_input_snapshot, outcome, cleanup_pending
                 ) VALUES (
-                  ${candidateId}, ${JSON.stringify({ acceptanceContext: runAcceptanceContext })}, ${blockerId}, 'blocked', 0
+                  ${candidateId}, ${JSON.stringify({ acceptanceContext })}, 'blocked', 0
                 ) RETURNING id
               `;
                 const runId = runRows[0]?.id;
@@ -1639,16 +1610,20 @@ describe("Change Submit orchestration", () => {
               },
             }),
           );
+          let validationCalls = 0;
           const validationLayer = Layer.succeed(CandidateValidation, {
             validateCandidate: () =>
               Effect.die("Change without a Task validation was not expected"),
-            validateAcceptanceContextCandidate: () =>
-              Effect.succeed({
+            validateAcceptanceContextCandidate: () => {
+              const reused = validationCalls > 0;
+              validationCalls += 1;
+              return Effect.succeed({
                 ok: true,
-                reused: false,
+                reused,
                 validationRunId: ids.validationRunId,
                 outcome: "blocked" as const,
-              }),
+              });
+            },
             listFindings: () => Effect.succeed([finding]),
             listToolingFailures: () => Effect.succeed([]),
             listPhaseResults: () => Effect.succeed([]),
@@ -1659,16 +1634,11 @@ describe("Change Submit orchestration", () => {
           expect(result).toEqual({ ok: false, code: "change_blocked" });
           const record = yield* stallDetection.getByValidationRun(ids.validationRunId);
           expect(record).toMatchObject({
-            changeId: policy.id,
             validationRunId: ids.validationRunId,
             decision: "stop",
+            reason: "The trajectory requires Operator direction.",
           });
           expect(record?.blockerId).toEqual(expect.any(Number));
-          expect(record?.input.qualifyingRuns.map((run) => run.resolutionPrefix)).toEqual([
-            ["Initial Resolution", "Blocker Resolution"],
-            ["Initial Resolution", "Blocker Resolution"],
-            ["Initial Resolution", "Blocker Resolution"],
-          ]);
           const blocker = yield* repository.operation(
             "inspect Stall Detection blocker",
             (sql) =>
@@ -1691,16 +1661,14 @@ describe("Change Submit orchestration", () => {
             (sql) =>
               sql<{
                 readonly detections: number;
-                readonly invocations: number;
                 readonly blockers: number;
               }>`
               SELECT
                 (SELECT COUNT(*) FROM stall_detections WHERE validation_run_id = ${ids.validationRunId}) AS detections,
-                (SELECT COUNT(*) FROM stall_detection_run_invocations WHERE validation_run_id = ${ids.validationRunId}) AS invocations,
                 (SELECT COUNT(*) FROM implementation_blockers WHERE change_id = ${ids.changeId} AND source_type = 'stall_detection') AS blockers
             `,
           );
-          expect(counts).toEqual([{ detections: 1, invocations: 1, blockers: 1 }]);
+          expect(counts).toEqual([{ detections: 1, blockers: 1 }]);
         }),
       ),
   );

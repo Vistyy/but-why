@@ -25,36 +25,11 @@ export const stallDetectionMigration = Effect.gen(function* () {
   yield* sql.unsafe(`
     CREATE TABLE stall_detections (
       id INTEGER PRIMARY KEY CHECK (id BETWEEN 1 AND ${safeIntegerMaximum}),
-      change_id INTEGER NOT NULL REFERENCES changes(id),
       validation_run_id INTEGER NOT NULL UNIQUE REFERENCES validation_runs(id),
       agent_session_id INTEGER NOT NULL REFERENCES agent_sessions(id),
       decision TEXT NOT NULL CHECK (decision IN ('continue', 'stop')),
       reason TEXT NOT NULL,
-      configuration TEXT NOT NULL,
-      input_snapshot TEXT NOT NULL,
-      created_at TEXT NOT NULL,
       CHECK (length(trim(reason)) > 0)
-    ) STRICT
-  `);
-  yield* sql.unsafe(`
-    CREATE INDEX stall_detections_change_id_idx ON stall_detections (change_id, id)
-  `);
-  yield* sql.unsafe(`
-    CREATE TABLE stall_detection_run_invocations (
-      validation_run_id INTEGER NOT NULL REFERENCES validation_runs(id),
-      agent_invocation_id INTEGER NOT NULL UNIQUE REFERENCES agent_invocations(id),
-      PRIMARY KEY (validation_run_id, agent_invocation_id)
-    ) STRICT
-  `);
-  yield* sql.unsafe(`
-    CREATE TABLE stall_detection_attempts (
-      id INTEGER PRIMARY KEY CHECK (id BETWEEN 1 AND ${safeIntegerMaximum}),
-      change_id INTEGER NOT NULL REFERENCES changes(id),
-      validation_run_id INTEGER NOT NULL UNIQUE REFERENCES validation_runs(id),
-      agent_session_id INTEGER NOT NULL REFERENCES agent_sessions(id),
-      diagnostic TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      CHECK (length(trim(diagnostic)) > 0)
     ) STRICT
   `);
   yield* sql.unsafe(`
