@@ -68,7 +68,7 @@ Shared Repository State is resolved through the Git Common Directory and shared 
 The globally installed `by` executable is the only supported CLI that opens or mutates live Shared Repository State.
 Repo Config remains tracked at `.but-why/config.json`, while Global Config remains user-local.
 Release-ready Shared Repository State starts with `0001_baseline` and applies the immutable ordered migration chain defined by [ADR 0009](adr/0009-use-forward-schema-migrations-before-release.md).
-The baseline stores only current Task, Change, validation, publication, Stall Detection, and Agent Session facts, with public Task and Change IDs derived from the repository ID Prefix and SQLite integer identities.
+The ordered migration chain stores current Task, Change, validation, publication, Stall Detection, and Agent Session facts, with public Task and Change IDs derived from the repository ID Prefix and SQLite integer identities.
 
 The public configuration contract is documented in [But Why Config](public/config.md).
 Cross-command serialization policy is documented in [CLI Output](cli-output.md) and constrained by [ADR 0011](adr/0011-use-json-as-the-only-cli-result-format.md).
