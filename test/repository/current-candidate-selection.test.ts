@@ -20,11 +20,11 @@ describe("Current Candidate selection", () => {
           (sql) => sql`
           INSERT INTO changes (
             branch_ref, base_ref, base_remote_url, worktree_path,
-            reviewer_configuration, checks_definition, cleanup_pending
+            reviewer_configuration, stall_detection_definition, checks_definition, cleanup_pending
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
             'https://example.com/acme/repo.git', '/tmp/feature',
-            '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
+            '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
           )
         `,
         );

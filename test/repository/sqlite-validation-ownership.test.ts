@@ -76,11 +76,11 @@ const createRun = (
       (sql) => sql`
         INSERT INTO changes (
           branch_ref, base_ref, base_remote_url, worktree_path,
-          reviewer_configuration, checks_definition, cleanup_pending
+          reviewer_configuration, stall_detection_definition, checks_definition, cleanup_pending
         ) VALUES (
           ${`refs/heads/${branch}`}, 'refs/remotes/origin/main',
           'https://example.com/acme/repo.git', ${`/tmp/${branch}`},
-          ${JSON.stringify(configuredReviewers)}, ${JSON.stringify(checks)},
+          ${JSON.stringify(configuredReviewers)}, '{"enabled":false,"profile":null}', ${JSON.stringify(checks)},
           0
         )
       `,

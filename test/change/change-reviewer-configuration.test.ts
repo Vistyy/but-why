@@ -266,11 +266,11 @@ it.scoped("rejects invalid persisted Change Policy on read", () =>
             yield* sql`
               INSERT INTO changes (
                 id, branch_ref, base_ref, base_remote_url, worktree_path,
-                reviewer_configuration, prepare_definition, checks_definition, cleanup_pending
+                reviewer_configuration, stall_detection_definition, prepare_definition, checks_definition, cleanup_pending
               ) VALUES (
                 1, 'refs/heads/invalid-policy', 'refs/remotes/origin/main',
                 'https://example.com/acme/repo.git', '/tmp/invalid-policy',
-                '{"acceptanceReview":null,"specialistReviews":[]}',
+                '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}',
                 ${prepareDefinition}, ${checksDefinition}, 0
               )
             `;

@@ -41,14 +41,14 @@ const createCandidateOwningChange = () =>
       (sql) => sql`
       INSERT INTO changes (
         branch_ref, base_ref, base_remote_url, worktree_path,
-        initial_acceptance_context, reviewer_configuration,
+        initial_acceptance_context, reviewer_configuration, stall_detection_definition,
         prepare_definition, checks_definition, cleanup_pending
       ) VALUES (
         'refs/heads/feature', 'refs/remotes/origin/main',
         'https://example.com/acme/repo.git', '/tmp/feature',
         ${encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
-        ${JSON.stringify(reviewerConfiguration)}, ${JSON.stringify(prepare)},
-        ${JSON.stringify(checks)}, 0
+        ${JSON.stringify(reviewerConfiguration)}, '{"enabled":false,"profile":null}',
+        ${JSON.stringify(prepare)}, ${JSON.stringify(checks)}, 0
       )
     `,
     );

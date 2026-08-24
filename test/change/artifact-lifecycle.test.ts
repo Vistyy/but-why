@@ -210,11 +210,11 @@ const withArtifactLifecycleFixture = <A, E>(
             (sql) => sql`
             INSERT INTO changes (
               branch_ref, base_ref, base_remote_url, worktree_path,
-              reviewer_configuration, checks_definition, cleanup_pending
+              reviewer_configuration, stall_detection_definition, checks_definition, cleanup_pending
             ) VALUES (
               ${branchRef}, 'refs/remotes/origin/main',
               'https://example.com/acme/repo.git', ${`/tmp/${marker}`},
-              '{"acceptanceReview":null,"specialistReviews":[]}',
+              '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}',
               '[{"id":"check","command":"true","timeoutSeconds":10}]', 0
             )
           `,

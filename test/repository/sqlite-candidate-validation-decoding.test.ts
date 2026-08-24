@@ -25,11 +25,11 @@ const createCandidateOwningChange = (branchRef: string) =>
       (sql) => sql<{ readonly id: number }>`
         INSERT INTO changes (
           branch_ref, base_ref, base_remote_url, worktree_path,
-          reviewer_configuration, prepare_definition, checks_definition, cleanup_pending
+          reviewer_configuration, stall_detection_definition, prepare_definition, checks_definition, cleanup_pending
         ) VALUES (
           ${branchRef}, 'refs/remotes/origin/main',
           'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
-          '{"acceptanceReview":null,"specialistReviews":[]}',
+          '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}',
           ${JSON.stringify(policy.prepare)}, ${JSON.stringify(policy.checks)}, 0
         )
         RETURNING id

@@ -129,12 +129,13 @@ it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", (
         "create linked Change fixture",
         (sql) => sql`INSERT INTO changes (
           id, branch_ref, base_ref, base_remote_url, worktree_path,
-          initial_acceptance_context, reviewer_configuration, checks_definition, cleanup_pending
+          initial_acceptance_context, reviewer_configuration, stall_detection_definition,
+          checks_definition, cleanup_pending
         ) VALUES (
           1, 'refs/heads/change-linked', 'refs/remotes/origin/main',
           'https://example.test/repo.git', '/repo-worktrees/change-linked',
           '{"version":1,"title":"Linked","description":"Linked"}',
-          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
+          '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
         )`,
       );
       yield* repository.operation(
