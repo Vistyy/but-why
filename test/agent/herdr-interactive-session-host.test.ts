@@ -271,7 +271,7 @@ describe("Herdr Interactive Session Host", () => {
     );
   });
 
-  it("recovers one newly created labeled workspace after an uncertain response", async () => {
+  it("recovers one newly created workspace by stable identifier and cwd after an uncertain response", async () => {
     const commands: string[][] = [];
     let workspaceObservations = 0;
     const execute: HerdrCommandExecutor = async (args) => {
@@ -283,7 +283,8 @@ describe("Herdr Interactive Session Host", () => {
           ? emptyWorkspaces()
           : {
               ok: true,
-              stdout: `{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-1","label":"${input.hostSessionName}","future_field":true}]}}`,
+              stdout:
+                '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-1","label":"renamed-before-observation","future_field":true}]}}',
             };
       }
       if (args[0] === "workspace" && args[1] === "create") {
@@ -316,7 +317,7 @@ describe("Herdr Interactive Session Host", () => {
     expect(commands).toContainEqual(["pane", "list", "--workspace", "workspace-1"]);
   });
 
-  it("reuses one existing labeled workspace instead of creating a duplicate", async () => {
+  it("reuses an existing workspace at the Managed Worktree after its label is renamed", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
@@ -324,7 +325,8 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "workspace" && args[1] === "list") {
         return {
           ok: true,
-          stdout: `{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-1","label":"${input.hostSessionName}"}]}}`,
+          stdout:
+            '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-1","label":"renamed-session"}]}}',
         };
       }
       if (args[0] === "pane" && args[1] === "list") {
@@ -369,6 +371,45 @@ describe("Herdr Interactive Session Host", () => {
             '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-other","workspace_id":"workspace-other","cwd":"/workspace/other"}]}}',
         };
       }
+      if (args[0] === "workspace" && args[1] === "create") return createdWorkspace();
+      if (args[0] === "agent" && args[1] === "start") {
+        return {
+          ok: true,
+          stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
+        };
+      }
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toEqual({
+      ok: true,
+      host: "herdr",
+      status: "started",
+    });
+    expect(commands.filter((args) => args[0] === "workspace" && args[1] === "create")).toHaveLength(
+      1,
+    );
+  });
+
+  it("does not guess when a workspace has ambiguous Managed Worktree pane provenance", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "workspace" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-1"}]}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-1","workspace_id":"workspace-1","cwd":"/workspace/change-123"},{"pane_id":"pane-2","workspace_id":"workspace-1","cwd":"/workspace/other"}]}}',
+        };
+      }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
 
@@ -379,7 +420,7 @@ describe("Herdr Interactive Session Host", () => {
     expect(commands.some((args) => args[0] === "workspace" && args[1] === "create")).toBe(false);
   });
 
-  it("does not guess after an uncertain create produces ambiguous labeled workspaces", async () => {
+  it("does not guess after an uncertain create produces multiple new workspaces", async () => {
     let workspaceObservations = 0;
     const execute: HerdrCommandExecutor = async (args) => {
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
@@ -392,7 +433,8 @@ describe("Herdr Interactive Session Host", () => {
           ? emptyWorkspaces()
           : {
               ok: true,
-              stdout: `{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-1","label":"${input.hostSessionName}"},{"workspace_id":"workspace-2","label":"${input.hostSessionName}"}]}}`,
+              stdout:
+                '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-1","label":"first"},{"workspace_id":"workspace-2","label":"second"}]}}',
             };
       }
       return { ok: false, message: "unexpected observation" };
@@ -545,6 +587,35 @@ describe("Herdr Interactive Session Host", () => {
         text: input.initialPrompt,
       }),
     ]);
+  });
+
+  it("recognizes the supported agent identity alias when it is bound to the Managed Worktree", async () => {
+    const commands: string[][] = [];
+    let promptAttempts = 0;
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      return listedAgents([
+        {
+          agent: input.hostSessionName,
+          cwd: input.worktreePath,
+          workspace_id: "workspace-1",
+          pane_id: "pane-1",
+          agent_status: "done",
+        },
+      ]);
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: true };
+        },
+      }).launch(input),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+
+    expect(commands).toEqual([["agent", "list"]]);
+    expect(promptAttempts).toBe(1);
   });
 
   it("prompts a matching done session observed after creating the workspace", async () => {
