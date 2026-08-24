@@ -81,10 +81,14 @@ export const makeStallDetectionService = (input: {
       }
 
       const invocationIds: number[] = [];
-      const linkInvocation = (_sql: SqlClient.SqlClient, invocationId: number) => {
-        invocationIds.push(invocationId);
-        return Effect.succeed(undefined);
-      };
+      const linkInvocation = (sql: SqlClient.SqlClient, invocationId: number) =>
+        Effect.gen(function* () {
+          invocationIds.push(invocationId);
+          yield* input.persistence.linkInvocation(source.triggeringValidationRunId)(
+            sql,
+            invocationId,
+          );
+        });
       const profile = assessorProfile(assessmentInput.configuration);
       const execution = yield* executeAgentSession<StallDetectionAssessment>({
         configuration: {

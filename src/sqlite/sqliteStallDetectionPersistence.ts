@@ -30,6 +30,11 @@ export const openSqliteStallDetectionPersistence = () =>
   Effect.map(
     RepositorySql,
     (repository): StallDetectionPersistence => ({
+      linkInvocation: (validationRunId) => (sql, invocationId) =>
+        sql`
+          INSERT INTO stall_detection_run_invocations (validation_run_id, agent_invocation_id)
+          VALUES (${validationRunId}, ${invocationId})
+        `.pipe(Effect.asVoid),
       getAttemptByValidationRun: (validationRunId) =>
         repository.transaction("read Stall Detection attempt", (sql) =>
           getAttemptByValidationRun(sql, validationRunId),
@@ -392,10 +397,10 @@ const readStallDetection = (sql: SqlClient.SqlClient, validationRunId: number, i
         invocation.input_tokens AS inputTokens, invocation.cached_input_tokens AS cachedInputTokens,
         invocation.cache_write_tokens AS cacheWriteTokens, invocation.output_tokens AS outputTokens,
         invocation.total_tokens AS totalTokens
-      FROM stall_detection_agent_invocations AS link
+      FROM stall_detection_run_invocations AS link
       JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
       JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE link.stall_detection_id = ${row.id} ORDER BY invocation.id
+      WHERE link.validation_run_id = ${row.validationRunId} ORDER BY invocation.id
     `;
     return yield* decodePersisted("read Stall Detection", () => {
       if (publicChangeId(idPrefix, row.changeId) === "") throw new Error("Invalid Change identity");

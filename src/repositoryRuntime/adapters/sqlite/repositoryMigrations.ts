@@ -2,10 +2,12 @@ import * as Migrator from "@effect/sql/Migrator";
 
 import { baselineMigration as baseline } from "./migrations/0001_baseline.js";
 import { stallDetectionMigration } from "./migrations/0002_stall_detection.js";
+import { stallDetectionRunInvocationsMigration } from "./migrations/0003_stall_detection_run_invocations.js";
 
 const migrations = {
   "0001_baseline": baseline,
   "0002_stall_detection": stallDetectionMigration,
+  "0003_stall_detection_run_invocations": stallDetectionRunInvocationsMigration,
 } as const;
 
 export const migrateRepositoryState = Migrator.make({})({

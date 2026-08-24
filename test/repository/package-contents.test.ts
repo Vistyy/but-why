@@ -353,7 +353,7 @@ describe("release package boundary", () => {
             ORDER BY migration_id
           `,
         );
-        expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
+        expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
 
         const tables = yield* repository.operation(
           "inspect installed product tables",
@@ -366,7 +366,7 @@ describe("release package boundary", () => {
             ORDER BY name
           `,
         );
-        expect(tables).toHaveLength(22);
+        expect(tables).toHaveLength(23);
         expect(tables.map(({ name }) => name)).toContain("shared_state_identity");
         expect(tables.map(({ name }) => name)).toContain("validation_runs");
       }).pipe(

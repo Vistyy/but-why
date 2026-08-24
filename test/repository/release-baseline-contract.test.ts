@@ -150,6 +150,10 @@ const expectedColumns = {
     "validation_run_id:INTEGER:1:0",
     "agent_invocation_id:INTEGER:1:2",
   ],
+  stall_detection_run_invocations: [
+    "validation_run_id:INTEGER:1:1",
+    "agent_invocation_id:INTEGER:1:2",
+  ],
   github_publications: [
     "change_id:INTEGER:0:1",
     "candidate_id:INTEGER:1:0",
@@ -206,6 +210,10 @@ const expectedForeignKeys = {
   stall_detection_attempt_invocations: [
     "agent_invocation_id->agent_invocations.id",
     "stall_detection_attempt_id->stall_detection_attempts.id",
+    "validation_run_id->validation_runs.id",
+  ],
+  stall_detection_run_invocations: [
+    "agent_invocation_id->agent_invocations.id",
     "validation_run_id->validation_runs.id",
   ],
 } as const;
@@ -343,6 +351,7 @@ const expectedImplicitUniqueIndexes = {
     "pk:stall_detection_attempt_id,agent_invocation_id",
     "u:agent_invocation_id",
   ],
+  stall_detection_run_invocations: ["pk:validation_run_id,agent_invocation_id"],
 } as const;
 
 const expectStatementRejected = (
@@ -372,7 +381,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       const tables = objects.filter((object) => object.type === "table");
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
-      expect(tables).toHaveLength(22);
+      expect(tables).toHaveLength(23);
 
       const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
         sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),
@@ -754,7 +763,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
           SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id
         `,
       );
-      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
+      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
     }),
   ),
 );

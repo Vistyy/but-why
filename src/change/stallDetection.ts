@@ -1,6 +1,9 @@
 import type { Effect } from "effect";
 import type { ResolvedReviewerPiAgentProfile } from "../agent/agentProfiles.js";
-import type { AgentInvocationRecord } from "../agent/agentSession/agentSession.js";
+import type {
+  AgentInvocationRecord,
+  AgentSessionSqlLink,
+} from "../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
@@ -48,6 +51,7 @@ export type StallDetectionDiagnostic = {
 };
 
 export type StallDetectionPersistence = {
+  readonly linkInvocation: (validationRunId: number) => AgentSessionSqlLink;
   readonly getAttemptByValidationRun: (
     validationRunId: number,
   ) => EffectResult<StallDetectionDiagnostic | undefined>;

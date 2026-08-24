@@ -157,7 +157,7 @@ describe("shared repository state", () => {
         ),
       );
 
-      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
+      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
     }),
   );
 
@@ -167,17 +167,17 @@ describe("shared repository state", () => {
         {
           corrupt: (sql: SqlClient.SqlClient) =>
             sql`DELETE FROM effect_sql_migrations WHERE migration_id = 1`,
-          expected: [2],
+          expected: [2, 3],
         },
         {
           corrupt: (sql: SqlClient.SqlClient) =>
             sql`UPDATE effect_sql_migrations SET migration_id = 0 WHERE migration_id = 1`,
-          expected: [0, 2],
+          expected: [0, 2, 3],
         },
         {
           corrupt: (sql: SqlClient.SqlClient) =>
             sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (99, 'unknown')`,
-          expected: [1, 2, 99],
+          expected: [1, 2, 3, 99],
         },
       ] as const;
       for (const scenario of cases) {
