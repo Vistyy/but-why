@@ -212,7 +212,7 @@ describe("Herdr Interactive Session Host", () => {
     ).resolves.toMatchObject({
       ok: false,
       code: "pane_not_ready",
-      message: expect.stringContaining("pane shell did not become ready"),
+      message: expect.stringContaining("pane shells did not become ready"),
     });
     expect(
       commands.filter((args) => args[0] === "agent" && args[1] === "start").length,
@@ -391,7 +391,7 @@ describe("Herdr Interactive Session Host", () => {
     );
   });
 
-  it("reuses a matching pane in a multi-pane Managed Worktree workspace", async () => {
+  it("tries each matching pane in a multi-pane Managed Worktree workspace until one is available", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
@@ -407,14 +407,19 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-1","workspace_id":"workspace-1","cwd":"/workspace/change-123"},{"pane_id":"pane-2","workspace_id":"workspace-1","cwd":"/workspace/other"}]}}',
+            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-1","workspace_id":"workspace-1","cwd":"/workspace/change-123"},{"pane_id":"pane-2","workspace_id":"workspace-1","cwd":"/workspace/change-123"}]}}',
         };
       }
       if (args[0] === "agent" && args[1] === "start") {
-        return {
-          ok: true,
-          stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
-        };
+        return args.includes("pane-1")
+          ? {
+              ok: false,
+              message: '{"error":{"code":"agent_pane_busy","message":"pane unavailable"}}',
+            }
+          : {
+              ok: true,
+              stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
+            };
       }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
@@ -425,9 +430,10 @@ describe("Herdr Interactive Session Host", () => {
       status: "started",
     });
     expect(commands.some((args) => args[0] === "workspace" && args[1] === "create")).toBe(false);
-    expect(commands.find((args) => args[0] === "agent" && args[1] === "start")).toEqual(
-      expect.arrayContaining(["--pane", "pane-1"]),
-    );
+    const starts = commands.filter((args) => args[0] === "agent" && args[1] === "start");
+    expect(starts).toHaveLength(2);
+    expect(starts[0]).toEqual(expect.arrayContaining(["--pane", "pane-1"]));
+    expect(starts[1]).toEqual(expect.arrayContaining(["--pane", "pane-2"]));
   });
 
   it("does not guess after an uncertain create produces multiple new workspaces", async () => {

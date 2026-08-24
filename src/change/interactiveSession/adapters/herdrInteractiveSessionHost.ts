@@ -332,7 +332,7 @@ const openStandaloneWorkspace = async (
   return recovered?.kind !== "match"
     ? phaseStopped(
         launchIndeterminate(
-          `Herdr created a workspace but did not identify its root pane: ${created.message}`,
+          `Herdr created a workspace but did not identify a target pane: ${created.message}`,
         ),
       )
     : phaseComplete(recovered.workspace);
@@ -400,14 +400,14 @@ const startNativeAgent = async (
     return phaseComplete(undefined);
   }
 
-  const startArgs = [
+  const startArgs = (targetPaneId: string): readonly string[] => [
     "agent",
     "start",
     sessionName,
     "--kind",
     "pi",
     "--pane",
-    opened.rootPaneId,
+    targetPaneId,
     "--timeout",
     String(options.readinessTimeoutMs),
     "--",
@@ -415,6 +415,7 @@ const startNativeAgent = async (
   ];
   const started = await startAgentWhenPaneReady(
     execute,
+    opened.targetPaneIds,
     startArgs,
     signal,
     options.commandTimeoutMs,
@@ -474,25 +475,34 @@ type NativeAgentStart = {
 
 const startAgentWhenPaneReady = async (
   execute: HerdrCommandExecutor,
-  args: readonly string[],
+  targetPaneIds: readonly [string, ...string[]],
+  argsForPane: (targetPaneId: string) => readonly string[],
   signal: AbortSignal | undefined,
   commandTimeoutMs: number,
   readinessTimeoutMs: number,
 ): Promise<NativeAgentStart> => {
   const deadline = performance.now() + readinessTimeoutMs;
+  const targetPaneIdAt = (index: number): string => targetPaneIds[index] ?? targetPaneIds[0];
+  let targetIndex = 0;
   let result = await boundedExecutor(execute, Math.max(commandTimeoutMs, readinessTimeoutMs))(
-    args,
+    argsForPane(targetPaneIdAt(targetIndex)),
     signal,
   );
   while (!result.ok && isAgentPaneBusyFailure(result.message)) {
     const remainingMs = deadline - performance.now();
     if (remainingMs <= 0) return { result, paneReadinessTimedOut: true };
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, Math.min(agentPaneBusyRetryIntervalMs, remainingMs));
-    });
+    targetIndex = (targetIndex + 1) % targetPaneIds.length;
+    if (targetIndex === 0) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, Math.min(agentPaneBusyRetryIntervalMs, remainingMs));
+      });
+    }
     const nextAttemptTimeoutMs = deadline - performance.now();
     if (nextAttemptTimeoutMs <= 0) return { result, paneReadinessTimedOut: true };
-    result = await boundedExecutor(execute, nextAttemptTimeoutMs)(args, signal);
+    result = await boundedExecutor(execute, nextAttemptTimeoutMs)(
+      argsForPane(targetPaneIdAt(targetIndex)),
+      signal,
+    );
   }
   return { result, paneReadinessTimedOut: false };
 };
@@ -576,7 +586,7 @@ const launchIndeterminate = (message: string): InteractiveSessionLaunchResult =>
 const paneNotReady = (readinessTimeoutMs: number): InteractiveSessionLaunchResult => ({
   ok: false,
   code: "pane_not_ready",
-  message: `The Herdr Managed Worktree pane shell did not become ready for native Pi startup within ${readinessTimeoutMs} ms. Wait for shell startup to finish, then retry Change Implement.`,
+  message: `The Herdr Managed Worktree pane shells did not become ready for native Pi startup within ${readinessTimeoutMs} ms. Wait for shell startup to finish, then retry Change Implement.`,
 });
 
 const isConfirmedAgentStart = (source: string): boolean => decodeAgentStarted(source) !== undefined;
@@ -701,7 +711,10 @@ const herdrErrorResponseSchema = Schema.Struct({
 
 type HerdrAgentStatus = Schema.Schema.Type<typeof herdrAgentStatusSchema>;
 type HerdrAgent = Schema.Schema.Type<typeof herdrAgentSchema>;
-type OpenedWorkspace = { readonly workspaceId: string; readonly rootPaneId: string };
+type OpenedWorkspace = {
+  readonly workspaceId: string;
+  readonly targetPaneIds: readonly [string, ...string[]];
+};
 
 const decodeHerdrJson = <A, I>(source: string, schema: Schema.Schema<A, I>): A | undefined => {
   let input: unknown;
@@ -746,7 +759,7 @@ const decodeCreatedWorkspace = (
     rootPane.workspace_id === workspace.workspace_id &&
     rootPane.tab_id === tab.tab_id &&
     rootPane.cwd === expectedCwd
-    ? { workspaceId: workspace.workspace_id, rootPaneId: rootPane.pane_id }
+    ? { workspaceId: workspace.workspace_id, targetPaneIds: [rootPane.pane_id] }
     : undefined;
 };
 
@@ -758,10 +771,20 @@ const decodeWorkspaceAtCwd = (
   const response = decodeHerdrJson(source, herdrPaneListResponseSchema);
   if (response === undefined || response.result.panes.length === 0) return undefined;
   if (response.result.panes.some((pane) => pane.workspace_id !== workspaceId)) return undefined;
-  const pane = response.result.panes.find((candidate) => candidate.cwd === expectedCwd);
-  return pane === undefined
+  const matchingPaneIds = response.result.panes
+    .filter((pane) => pane.cwd === expectedCwd)
+    .map((pane) => pane.pane_id)
+    .sort();
+  const [targetPaneId, ...otherTargetPaneIds] = matchingPaneIds;
+  return targetPaneId === undefined
     ? { kind: "absent" }
-    : { kind: "match", workspace: { workspaceId, rootPaneId: pane.pane_id } };
+    : {
+        kind: "match",
+        workspace: {
+          workspaceId,
+          targetPaneIds: [targetPaneId, ...otherTargetPaneIds],
+        },
+      };
 };
 
 const decodeAgentStarted = (source: string): { readonly terminalId: string } | undefined => {
