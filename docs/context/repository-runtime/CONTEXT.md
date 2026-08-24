@@ -28,9 +28,9 @@ Source and Candidate executables must not open live Shared Repository State.
 _Avoid_: Candidate CLI, source checkout command, per-worktree executable
 
 **Release Baseline Migration Artifact**:
-The single `0001_baseline` source artifact that defines all Shared Repository State supported by the release-ready prerelease executable.
-It excludes prerelease conversion and compatibility behavior.
-After publication makes a migration durable, later schema changes add immutable ordered Migration Artifacts.
+The `0001_baseline` source artifact that defines the initial Shared Repository State for the release-ready executable.
+The release applies it and every subsequent immutable ordered Migration Artifact shipped with the executable.
+The chain excludes unsupported prerelease conversion and compatibility behavior.
 _Avoid_: prerelease migration chain, conversion script, compatibility schema
 
 **Agent Environment**:

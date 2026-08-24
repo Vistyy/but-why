@@ -42,7 +42,7 @@ Change Submit uses that stored policy and treats Candidate Repo Config as Candid
 
 ### Prerelease release-baseline cutover
 
-The release-ready runtime supports only `0001_baseline` and does not open prerelease Shared Repository State.
+The release-ready runtime applies `0001_baseline` and every immutable ordered migration shipped with it, and does not open unsupported prerelease Shared Repository State.
 Use this minimum procedure for the one-time live cutover.
 
 1. Keep the pre-merge source commit and build or retain its old executable before the baseline Change is merged.
@@ -50,7 +50,7 @@ Use this minimum procedure for the one-time live cutover.
 3. Invoke the old executable directly from the target checkout only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID.
 4. Install the exact merged package tarball globally as `by`.
 5. Rename the old Git Common Directory But Why state directory as a dated low-value backup.
-6. Initialize fresh Shared Repository State from `0001_baseline` with installed `by` and the unchanged `idPrefix`.
+6. Initialize fresh Shared Repository State from the installed migration chain beginning at `0001_baseline` with installed `by` and the unchanged `idPrefix`.
    Do not import or convert old rows.
 7. Run basic `init` and `task list` smoke checks, then resume work.
 
