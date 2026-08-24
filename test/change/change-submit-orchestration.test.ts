@@ -1480,6 +1480,11 @@ describe("Change Submit orchestration", () => {
             version: 1 as const,
             title: "Approved intent",
             description: "Deliver it",
+            resolutions: ["Initial Resolution"],
+          };
+          const runAcceptanceContext = {
+            ...acceptanceContext,
+            resolutions: ["Initial Resolution", "Blocker Resolution"],
           };
           const policy = readyChange({
             id: "BY-C1",
@@ -1511,6 +1516,16 @@ describe("Change Submit orchestration", () => {
             `;
               const changeId = change[0]?.id;
               if (changeId === undefined) return yield* Effect.dieMessage("Change was not created");
+              const blocker = yield* sql<{ readonly id: number }>`
+              INSERT INTO implementation_blockers (
+                change_id, content, resolution_content, source_type
+              ) VALUES (
+                ${changeId}, 'An earlier correction needs review.', 'Blocker Resolution', 'implementer'
+              ) RETURNING id
+            `;
+              const blockerId = blocker[0]?.id;
+              if (blockerId === undefined)
+                return yield* Effect.dieMessage("Blocker was not created");
               const candidates: number[] = [];
               for (let index = 0; index < 3; index += 1) {
                 const candidateRows = yield* sql<{ readonly id: number }>`
@@ -1526,9 +1541,9 @@ describe("Change Submit orchestration", () => {
               for (const candidateId of candidates) {
                 const runRows = yield* sql<{ readonly id: number }>`
                 INSERT INTO validation_runs (
-                  candidate_id, validation_input_snapshot, outcome, cleanup_pending
+                  candidate_id, validation_input_snapshot, highest_blocker_id, outcome, cleanup_pending
                 ) VALUES (
-                  ${candidateId}, ${JSON.stringify({ acceptanceContext })}, 'blocked', 0
+                  ${candidateId}, ${JSON.stringify({ acceptanceContext: runAcceptanceContext })}, ${blockerId}, 'blocked', 0
                 ) RETURNING id
               `;
                 const runId = runRows[0]?.id;
@@ -1649,6 +1664,11 @@ describe("Change Submit orchestration", () => {
             decision: "stop",
           });
           expect(record?.blockerId).toEqual(expect.any(Number));
+          expect(record?.input.qualifyingRuns.map((run) => run.resolutionPrefix)).toEqual([
+            ["Initial Resolution", "Blocker Resolution"],
+            ["Initial Resolution", "Blocker Resolution"],
+            ["Initial Resolution", "Blocker Resolution"],
+          ]);
           const blocker = yield* repository.operation(
             "inspect Stall Detection blocker",
             (sql) =>
@@ -1658,7 +1678,10 @@ describe("Change Submit orchestration", () => {
               WHERE change_id = ${ids.changeId}
             `,
           );
-          expect(blocker).toEqual([{ sourceType: "stall_detection", sourceId: record?.id }]);
+          expect(blocker).toContainEqual({
+            sourceType: "stall_detection",
+            sourceId: record?.id,
+          });
           const retry = yield* submit
             .submit({ changeId: policy.id, now })
             .pipe(Effect.provide(validationLayer));
