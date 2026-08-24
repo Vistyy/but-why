@@ -9,6 +9,7 @@ import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime
 import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../sqlite/sqliteChangeValidationReadPersistence.js";
+import { openSqliteStallDetectionPersistence } from "../../sqlite/sqliteStallDetectionPersistence.js";
 import type {
   ChangeAuthorityPort,
   ChangeReadPort,
@@ -78,8 +79,9 @@ const loadChangeDetailOperation = <A>(
           changes: openSqliteChangeReadPort(),
           authority: openSqliteChangeAuthorityPort(),
           validation: openSqliteChangeValidationReadPort(),
+          stallDetection: openSqliteStallDetectionPersistence(),
         }).pipe(
-          Effect.flatMap(({ changes, authority, validation }) =>
+          Effect.flatMap(({ changes, authority, validation, stallDetection }) =>
             query(
               {
                 getChangeById: changes.getChangeById,
@@ -88,6 +90,7 @@ const loadChangeDetailOperation = <A>(
                 getRunById: validation.getRunById,
                 listFindings: validation.listFindings,
                 listToolingFailures: validation.listToolingFailures,
+                listStallDetections: stallDetection.listForChange,
               },
               changeId,
             ),

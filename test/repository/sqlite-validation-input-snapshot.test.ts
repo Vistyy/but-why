@@ -87,6 +87,7 @@ describe("SQLite Validation Input Snapshot", () => {
 
         expect(started.authority.changePolicy).toEqual({
           reviewerConfiguration,
+          stallDetection: { enabled: false, profile: null },
           prepare,
           checks,
         });

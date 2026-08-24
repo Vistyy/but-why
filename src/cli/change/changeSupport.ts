@@ -42,7 +42,12 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,
   acceptanceContext: change.acceptanceContext,
-  policy: structuredValue(change.policy),
+  policy: structuredValue({
+    ...change.policy,
+    ...(change.policy.stallDetection?.enabled === true
+      ? { stallDetection: change.policy.stallDetection }
+      : { stallDetection: undefined }),
+  }),
   ...(change.prepareFailure === null
     ? {}
     : { prepareFailure: prepareFailureView(change.prepareFailure) }),

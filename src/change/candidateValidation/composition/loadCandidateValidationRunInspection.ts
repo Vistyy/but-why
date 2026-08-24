@@ -4,6 +4,7 @@ import type { ResolveLocalRepositoryError } from "../../../repositoryRuntime/rep
 import { openRepositoryRuntime } from "../../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteChangeReadPort } from "../../../sqlite/sqliteChangeInspectionPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../../sqlite/sqliteChangeValidationReadPersistence.js";
+import { openSqliteStallDetectionPersistence } from "../../../sqlite/sqliteStallDetectionPersistence.js";
 import {
   type CandidateValidationRunInspectionUseCases,
   openCandidateValidationRunInspection,
@@ -26,12 +27,14 @@ export const loadCandidateValidationRunInspection = (input: {
   const inspectionFor = Effect.all({
     persistence: openSqliteChangeValidationReadPort(),
     changePersistence: openSqliteChangeReadPort(),
+    stallDetection: openSqliteStallDetectionPersistence(),
   }).pipe(
-    Effect.map(({ persistence, changePersistence }) =>
+    Effect.map(({ persistence, changePersistence, stallDetection }) =>
       openCandidateValidationRunInspection({
         persistence,
         changePersistence,
         artifactsRoot: context.paths.artifactsPath,
+        getStallDetection: (validationRunId) => stallDetection.getByValidationRun(validationRunId),
       }),
     ),
   );

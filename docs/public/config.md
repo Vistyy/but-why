@@ -188,7 +188,7 @@ The Agent Environment does not alter Repository Preparation or Checks.
 
 ### Global review settings
 
-Global Config may define Task Review, Acceptance Review, and Specialist settings:
+Global Config may define Task Review, Acceptance Review, Specialist, and Stall Detection settings:
 
 ```json
 {
@@ -217,6 +217,12 @@ Global Config may define Task Review, Acceptance Review, and Specialist settings
 `review.acceptance.agentProfile` selects the Global Acceptance Review profile.
 `review.acceptance.instructionsFile` selects Global Acceptance Review instructions relative to the Global Config directory.
 `review.specialists` is the ordered Global Specialist list.
+
+`review.stallDetection.enabled` explicitly enables or disables Stall Detection for linked Changes.
+When Repo Config defines `review.stallDetection`, it overrides the Global Config value, including explicit disablement.
+When neither source defines it, Stall Detection is disabled.
+When enabled, `review.stallDetection.agentProfile` selects the Stall Detector profile using Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Stall Detection has no supplemental instructions file or repository guidance.
 `reviewers` maps Specialist names to definitions.
 Each Global definition requires `instructionsFile` relative to the Global Config directory and may select an Agent Profile.
 Each Agent Profile reference resolves only within its declared scope.
@@ -272,7 +278,8 @@ Reviewer operations require `runtimeConfig.model`.
 
 Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
-Change Start resolves Acceptance Review and Specialist profile selections from its Change Base Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Change Start resolves Acceptance Review, Specialist, and enabled Stall Detector profile selections from its Change Base Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Change Start freezes Stall Detection enablement and its resolved Pi model and thinking level in the Change Policy.
 In a published target repository, Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists for user-configured resources.

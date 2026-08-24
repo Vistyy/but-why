@@ -170,10 +170,12 @@ export const readValidationExecutionAuthorityById = (
     if (run === undefined) return undefined;
     const rows = yield* sql<{
       readonly reviewerConfiguration: string;
+      readonly stallDetection: string | null;
       readonly prepareDefinition: string | null;
       readonly checksDefinition: string;
     }>`
       SELECT change_row.reviewer_configuration AS reviewerConfiguration,
+        change_row.stall_detection_definition AS stallDetection,
         change_row.prepare_definition AS prepareDefinition,
         change_row.checks_definition AS checksDefinition
       FROM validation_runs AS validation_run
@@ -184,7 +186,12 @@ export const readValidationExecutionAuthorityById = (
     return yield* decodePersisted(operationName, () => {
       const row = rows[0];
       if (row === undefined) throw new Error("Validation Run owning Change was not selected");
-      const changePolicy = decodeSqliteChangePolicy(row);
+      const changePolicy = decodeSqliteChangePolicy({
+        reviewerConfiguration: row.reviewerConfiguration,
+        ...(row.stallDetection === null ? {} : { stallDetection: row.stallDetection }),
+        prepareDefinition: row.prepareDefinition,
+        checksDefinition: row.checksDefinition,
+      });
       return { run, changePolicy } satisfies ValidationExecutionAuthority;
     });
   });

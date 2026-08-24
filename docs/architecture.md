@@ -53,10 +53,12 @@ Change Start creates one Change and its Managed Worktree, optionally linked to a
 It directly reads Repo Config and repository reviewer instructions from the exact starting Change Base and stores one complete immutable Change policy.
 Submission returns without validation when there is no changed Candidate.
 Otherwise it selects an exact Candidate, uses only the stored Change policy, runs the fixed Validation Gate, and publishes the Candidate only with eligible evidence.
+When the linked Change policy explicitly enables Stall Detection, Change Submit runs its Change-owned assessor after a qualifying Findings-blocked Validation Run without adding a Validation Phase or workspace access.
 Candidate content is the Validation subject and never selects its own judgment policy.
 Reconciliation observes publication and merge facts before coordination completes a Change and its linked Task atomically.
 
 The fixed Validation Gate and project-owned execution boundary are defined by [ADR 0001](adr/0001-use-fixed-validation-gate-with-project-owned-execution.md).
+Stall Detection receives only serialized Acceptance Context, Validation Run Finding evidence, exact input identities, and non-authoritative blocker history, and its Pi profile is restricted to the configured model and thinking level.
 Exact Candidate provenance is defined by [ADR 0008](adr/0008-preserve-exact-candidate-provenance-through-submission.md).
 Managed Worktree placement and recovery constraints are defined by [ADR 0007](adr/0007-place-managed-worktrees-in-a-visible-sibling-directory.md).
 

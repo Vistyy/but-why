@@ -87,7 +87,8 @@ Change Submit must pass before the same owned open pull request is updated.
 ## 3. Submit the Candidate
 
 Run `<but-why> change submit <change-id>`.
-Change Submit owns Acceptance Review, configured Specialists, the Validation Gate, and eligible publication.
+Change Submit owns Acceptance Review, configured Specialists, the fixed Validation Gate, Stall Detection when explicitly enabled in the frozen Change Policy, and eligible publication.
+Stall Detection runs synchronously after the third and later qualifying Findings-blocked Validation Run and does not alter the Validation Run outcome.
 Change Submit is a long-running command, as classified by its CLI help.
 Run it without a caller timeout when the execution harness supports that behavior.
 When the execution harness requires a finite timeout, allow at least 30 minutes.
@@ -104,6 +105,8 @@ Validation Run Abandonment does not inspect process state or stop processes.
 Retry Change Submit only after abandonment reports success.
 
 When Change Submit returns Findings, run `<but-why> change findings <change-id>`.
+When Stall Detection stops the unresolved trajectory, Change Submit returns `change_blocked`; inspect `by change blocker list <change-id>` and wait for Operator direction.
+A Stall Detection execution failure remains nonblocking and is reported alongside the ordinary Findings.
 Fix every applicable Finding in the Managed Worktree.
 Commit the fixes and run Change Submit again.
 Repeat this loop until the exact Candidate publishes or a return condition applies.

@@ -31,13 +31,16 @@ export const decodeImplementationDecisions = (
     .sort((left, right) => left.id - right.id);
 
 export const implementationBlockerReadColumns = `
-  id, change_id AS changeId, content, resolution_content AS resolutionContent
+  id, change_id AS changeId, content, source_type AS sourceType,
+  source_id AS sourceId, resolution_content AS resolutionContent
 `;
 
 export type StoredImplementationBlockerRow = {
   readonly id: number;
   readonly changeId: number;
   readonly content: string;
+  readonly sourceType: string | null;
+  readonly sourceId: number | null;
   readonly resolutionContent: string | null;
 };
 
@@ -52,10 +55,19 @@ export const decodeImplementationBlockerHistory = (
       if (storedChangeId !== changeId) {
         throw new Error("Implementation Blocker belongs to another Change");
       }
+      const source =
+        (row.sourceType === null || row.sourceType === "implementer") && row.sourceId === null
+          ? { type: "implementer" as const }
+          : row.sourceType === "stall_detection" && row.sourceId !== null
+            ? { type: "stall_detection" as const, stallDetectionId: row.sourceId }
+            : (() => {
+                throw new Error("Implementation Blocker source is invalid");
+              })();
       return {
         id: row.id,
         changeId: storedChangeId,
         content: row.content,
+        source,
         resolution:
           row.resolutionContent === null
             ? null

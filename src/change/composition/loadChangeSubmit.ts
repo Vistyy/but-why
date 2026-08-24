@@ -1,7 +1,9 @@
 import { Effect } from "effect";
+import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
 import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
+import { piReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
@@ -12,6 +14,7 @@ import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidate
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../sqlite/sqliteChangeAgentSessionPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
+import { openSqliteStallDetectionPersistence } from "../../sqlite/sqliteStallDetectionPersistence.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { refreshRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
@@ -31,6 +34,8 @@ import type {
 } from "../changePorts.js";
 import { localCandidatePublicationGit } from "../publication/adapters/localCandidatePublicationGit.js";
 import { openCandidatePublication } from "../publication/candidatePublication.js";
+import { makeStallDetectionService } from "../runStallDetection.js";
+import type { StallDetectionAssessment, StallDetectionPersistence } from "../stallDetection.js";
 import { type ChangeSubmit, type ChangeSubmitResult, openChangeSubmit } from "../submitChange.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 
@@ -54,6 +59,8 @@ export const loadChangeSubmit = (input: {
     submissionOwner: ChangeSubmissionPort,
     submissionCompletion: ChangeSubmissionPort["completeMergedChange"],
     publication: CandidatePublicationPort,
+    stallDetection: StallDetectionPersistence,
+    agentPersistence: AgentSessionPersistence,
   ) => {
     const submission: ChangeSubmissionPort = {
       getChangeById: submissionOwner.getChangeById,
@@ -82,6 +89,14 @@ export const loadChangeSubmit = (input: {
         git: localCandidateCaptureGit,
       }).capture,
       executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
+      stallDetection: makeStallDetectionService({
+        persistence: stallDetection,
+        agentPersistence,
+        runtime: (input.reviewerAgentRuntime ??
+          piReviewerAgentRuntime) as unknown as ReviewerAgentRuntime<StallDetectionAssessment>,
+        reviewerExecutor: piReviewerProcessExecutor,
+        sessionStorageRoot: context.paths.agentSessionsPath,
+      }),
     });
   };
   const layerFor = (
@@ -117,6 +132,7 @@ export const loadChangeSubmit = (input: {
           agentSessions: openSqliteChangeAgentSessionPort(),
           agentPersistence: openSqliteAgentSessionPersistence(),
           publication: openSqliteCandidatePublicationPort(),
+          stallDetection: openSqliteStallDetectionPersistence(),
         }).pipe(
           Effect.flatMap(
             ({
@@ -127,8 +143,16 @@ export const loadChangeSubmit = (input: {
               agentSessions,
               agentPersistence,
               publication,
+              stallDetection,
             }) =>
-              programFor(capture, submissionOwner, submissionCompletion, publication)
+              programFor(
+                capture,
+                submissionOwner,
+                submissionCompletion,
+                publication,
+                stallDetection,
+                agentPersistence,
+              )
                 .submit(submitInput)
                 .pipe(Effect.provide(layerFor(validation, agentSessions, agentPersistence))),
           ),

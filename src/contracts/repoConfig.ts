@@ -71,10 +71,16 @@ const configurableReviewRoleSchema = Schema.Struct({
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
+const stallDetectionConfigSchema = Schema.Struct({
+  enabled: Schema.Boolean,
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
+});
+
 const repoReviewConfigSchema = Schema.Struct({
   task: Schema.optional(configurableReviewRoleSchema),
   acceptance: Schema.optional(configurableReviewRoleSchema),
   specialists: Schema.optional(Schema.Array(configNameSchema)),
+  stallDetection: Schema.optional(stallDetectionConfigSchema),
 });
 
 const repoConfigSchema = Schema.Struct({

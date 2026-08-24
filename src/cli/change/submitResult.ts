@@ -141,6 +141,7 @@ const renderValidationFailure = (result: SubmitFailureResult): CliResult | undef
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
         findings: result.findings,
+        ...(result.stallDetection === undefined ? {} : { stallDetection: result.stallDetection }),
         recovery: submitRecovery(
           result.changeId,
           "fix_validation_findings",

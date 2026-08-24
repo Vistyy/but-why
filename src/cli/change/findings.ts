@@ -26,6 +26,7 @@ export const runFindings = (
               validationRun: structuredValue(result.validationRun),
               findings: result.findings,
               toolingFailures: result.toolingFailures,
+              stallDetections: structuredValue(result.stallDetections),
               count: result.findings.length,
             }),
       ),

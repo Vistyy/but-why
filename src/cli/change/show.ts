@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import { loadChangeDetail } from "../../change/composition/loadChangeInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
+import { structuredValue } from "../../output/structuredValue.js";
 import * as support from "./changeSupport.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 
@@ -48,6 +49,9 @@ export const runShow = (
                   }),
               pullRequest: detail.change.publication?.pullRequest ?? null,
               cleanup: detail.change.cleanup,
+              ...(detail.stallDetections.length === 0
+                ? {}
+                : { stallDetections: structuredValue(detail.stallDetections) }),
             }),
       ),
       support.inspectionFailure,

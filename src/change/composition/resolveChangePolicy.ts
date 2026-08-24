@@ -12,6 +12,7 @@ import {
 } from "../changePolicy.js";
 import { validateChangeReviewerConfigurationResources } from "../changeReviewerConfiguration.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
+import { resolveStallDetectionConfig } from "../stallDetectionConfig.js";
 
 const invalidChangePolicy = (message: string): ChangePolicyResolutionFailure => ({
   ok: false,
@@ -77,6 +78,12 @@ export const resolveChangePolicyAtCommit = (input: {
             message: `Could not read reviewer instructions ${path} from Change Base ${input.commit}.`,
           };
     };
+    const stallDetection = resolveStallDetectionConfig({
+      repoConfig: decoded.config,
+      globalConfig: global.config,
+      globalConfigPath: input.globalConfigPath,
+    });
+    if (!stallDetection.ok) return invalidChangePolicy(stallDetection.message);
     const specialist = resolveSpecialistReviewPolicies({
       repoConfig: decoded.config,
       globalConfig: global.config,
@@ -119,6 +126,7 @@ export const resolveChangePolicyAtCommit = (input: {
       ok: true,
       policy: {
         reviewerConfiguration,
+        stallDetection: stallDetection.config,
         prepare: definitions.definitions.prepare,
         checks: definitions.definitions.checks,
       },

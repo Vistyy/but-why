@@ -132,7 +132,7 @@ _Avoid_: Mutable current report
 
 **Change Policy**:
 The complete immutable policy that Change Start resolves from the exact starting Change Base, current Global Config, and installed-package resources.
-It owns Repository Preparation, Agent Environment, ordered Checks and timeouts, Acceptance and Specialist roster, reviewer instruction text, resolved Agent Profiles, and permitted resource selections.
+It owns Repository Preparation, Agent Environment, ordered Checks and timeouts, Acceptance and Specialist roster, reviewer instruction text, resolved Agent Profiles, permitted resource selections, and explicitly resolved Stall Detection enablement and Pi model and thinking level.
 Change Submit uses only this stored policy.
 Later configuration changes do not alter it.
 _Avoid_: Mutable current config, Candidate-controlled policy, Validation Run snapshot, policy correction
@@ -142,6 +142,13 @@ The immutable Run-specific input stored for one Validation Run.
 It contains the current Acceptance Context when one applies and does not duplicate Change Policy.
 Approved Blocker Resolutions can change the Acceptance Context selected for a later Run without changing Change Policy.
 _Avoid_: Change Policy, Candidate-controlled policy, raw config hash, retroactive policy
+
+**Stall Detection**:
+A Change-owned qualitative assessment that runs after the third and later qualifying Findings-blocked Validation Run when the frozen Change Policy explicitly enables it.
+It receives only serialized Acceptance Context, exact Validation Run input identities, ordered reviewer Findings, and separately identified non-authoritative blocker history.
+It records `continue` or `stop` without changing the Validation Run outcome.
+A stop atomically creates a Stall-Detector-sourced Implementation Blocker, while an unavailable assessment remains a visible nonblocking diagnostic.
+_Avoid_: Validation Phase, deterministic Finding classifier, Candidate analysis, transcript analysis, background worker
 
 **Agent Session**:
 The durable conversation owner for one Task Reviewer or one Change reviewer producer.
@@ -273,7 +280,7 @@ Implementation Decisions are non-authoritative rationale supplied separately fro
 _Avoid_: Acceptance Context amendment, ADR, Finding
 
 **Implementation Blocker**:
-An immutable Implementer-authored problem report for one Open Change when implementation cannot safely continue under the accepted intent without an external decision or action.
+An immutable Implementer or Stall-Detector-sourced problem report for one Open Change when implementation cannot safely continue under the accepted intent without an external decision or action.
 At most one unresolved Implementation Blocker may exist for an open Change.
 The unresolved Blocker row is the active authority for blocked Change activity and remains available after publication or an earlier passing Candidate.
 Blocker operations do not write or depend on blocked Change or Task lifecycle state.

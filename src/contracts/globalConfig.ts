@@ -14,6 +14,11 @@ const globalConfigurableReviewRoleSchema = Schema.Struct({
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
+const stallDetectionConfigSchema = Schema.Struct({
+  enabled: Schema.Boolean,
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
+});
+
 const globalReviewerSchema = Schema.Struct({
   agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: repoRelativePathSchema,
@@ -42,6 +47,7 @@ const globalConfigSchema = Schema.Struct({
       task: Schema.optional(globalConfigurableReviewRoleSchema),
       acceptance: Schema.optional(globalConfigurableReviewRoleSchema),
       specialists: Schema.optional(Schema.Array(configNameSchema)),
+      stallDetection: Schema.optional(stallDetectionConfigSchema),
     }),
   ),
   reviewers: Schema.optional(

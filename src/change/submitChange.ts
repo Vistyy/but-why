@@ -37,6 +37,7 @@ import type {
   PublishCandidateResult,
 } from "./publication/candidatePublication.js";
 import type { ReconciledChange } from "./reconcileChange.js";
+import type { StallDetectionService } from "./runStallDetection.js";
 
 export type ChangeSubmitResult =
   | {
@@ -65,6 +66,10 @@ export type ChangeSubmitResult =
       readonly candidateId: number;
       readonly validationRunId: number;
       readonly findings: readonly CandidateValidationFinding[];
+      readonly stallDetection?: {
+        readonly code: "stall_detection_unavailable";
+        readonly message: string;
+      };
     }
   | {
       readonly ok: false;
@@ -166,6 +171,7 @@ export const openChangeSubmit = (dependencies: {
   ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
   readonly executionLock: ExecutionLock;
+  readonly stallDetection?: StallDetectionService;
 }): CandidateValidationChangeSubmit => ({
   submit: (input) =>
     dependencies.executionLock
@@ -434,9 +440,10 @@ const validateAndPublish = (
       } as const;
     }
     if (validationResult.outcome !== "passed") {
-      return yield* blockedValidationResult(validation, change, candidate, {
+      return yield* blockedValidationResult(dependencies, validation, change, candidate, {
         validationRunId: validationResult.validationRunId,
         outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
+        now,
       });
     }
 
@@ -463,15 +470,47 @@ const validateAndPublish = (
   });
 
 const blockedValidationResult = (
+  dependencies: Parameters<typeof openChangeSubmit>[0],
   candidateValidation: CandidateValidationService,
   change: OpenChangeWithWorktree,
   candidate: CapturedCandidate,
   validation: {
     readonly outcome: "blocked" | "tooling_failed";
     readonly validationRunId: number;
+    readonly now: string;
   },
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
+    if (
+      validation.outcome === "blocked" &&
+      change.acceptanceContext !== null &&
+      change.policy.stallDetection?.enabled
+    ) {
+      const profile = change.policy.stallDetection.profile;
+      if (profile !== null && dependencies.stallDetection !== undefined) {
+        const detected = yield* dependencies.stallDetection.assess({
+          changeId: change.id,
+          validationRunId: validation.validationRunId,
+          configuration: profile,
+          now: validation.now,
+        });
+        if (detected.attempted && "record" in detected && detected.record.decision === "stop") {
+          return { ok: false, code: "change_blocked" } as const;
+        }
+        const findings = yield* candidateValidation.listFindings(validation.validationRunId);
+        return {
+          ok: false,
+          code: "validation_findings",
+          changeId: change.id,
+          candidateId: candidate.candidateId,
+          validationRunId: validation.validationRunId,
+          findings,
+          ...(detected.attempted && "diagnostic" in detected
+            ? { stallDetection: detected.diagnostic }
+            : {}),
+        } as const;
+      }
+    }
     return validation.outcome === "blocked"
       ? {
           ok: false,

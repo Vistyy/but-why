@@ -78,7 +78,7 @@ const insertChangeRow = (
     const allocated = yield* sql<{ readonly id: number }>`
       INSERT INTO changes (
         branch_ref, base_ref, base_remote_url, worktree_path,
-        initial_acceptance_context, reviewer_configuration,
+        initial_acceptance_context, reviewer_configuration, stall_detection_definition,
         prepare_definition, checks_definition, prepare_failure, close_reason, cancel_reason,
         cleanup_pending, cleanup_blocking_reason
       ) VALUES (
@@ -87,6 +87,7 @@ const insertChangeRow = (
         'pending-worktree-' || lower(hex(randomblob(16))),
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         ${policy.reviewerConfiguration},
+        ${policy.stallDetection},
         ${policy.prepareDefinition},
         ${policy.checksDefinition},
         NULL, NULL, NULL, 0, NULL
@@ -142,6 +143,7 @@ const changeStartSelectionColumns = `
   change_row.base_remote_url AS baseRemoteUrl, change_row.worktree_path AS worktreePath,
   change_row.initial_acceptance_context AS acceptanceContext,
   change_row.reviewer_configuration AS reviewerConfiguration,
+  change_row.stall_detection_definition AS stallDetectionDefinition,
   change_row.prepare_definition AS prepareDefinition,
   change_row.checks_definition AS checksDefinition,
   change_row.prepare_failure AS prepareFailure,
@@ -157,6 +159,7 @@ type StoredChangeStartRow = {
   readonly worktreePath: unknown;
   readonly acceptanceContext: unknown;
   readonly reviewerConfiguration: unknown;
+  readonly stallDetectionDefinition: unknown;
   readonly prepareDefinition: unknown;
   readonly checksDefinition: unknown;
   readonly prepareFailure: unknown;
@@ -189,6 +192,10 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
     row.reviewerConfiguration,
     "Change Reviewer Configuration",
   );
+  const encodedStallDetection = decodeStoredNullableString(
+    row.stallDetectionDefinition,
+    "Change Stall Detection policy",
+  );
   const encodedPrepareDefinition = decodeStoredNullableString(
     row.prepareDefinition,
     "Change prepare definition",
@@ -203,6 +210,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
   );
   const policy = decodeSqliteChangePolicy({
     reviewerConfiguration: encodedReviewerConfiguration,
+    ...(encodedStallDetection === null ? {} : { stallDetection: encodedStallDetection }),
     prepareDefinition: encodedPrepareDefinition,
     checksDefinition: encodedChecksDefinition,
   });

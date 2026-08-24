@@ -22,6 +22,7 @@ export const changeReadColumns = [
   "changes.worktree_path AS worktreePath",
   "changes.initial_acceptance_context AS acceptanceContext",
   "changes.reviewer_configuration AS reviewerConfiguration",
+  "changes.stall_detection_definition AS stallDetectionDefinition",
   "changes.prepare_definition AS prepareDefinition",
   "changes.checks_definition AS checksDefinition",
   "changes.prepare_failure AS prepareFailure",
@@ -47,6 +48,7 @@ export type StoredChangeRow = {
   readonly worktreePath: unknown;
   readonly acceptanceContext: unknown;
   readonly reviewerConfiguration: unknown;
+  readonly stallDetectionDefinition: unknown;
   readonly prepareDefinition: unknown;
   readonly checksDefinition: unknown;
   readonly prepareFailure: unknown;
@@ -69,6 +71,10 @@ export const decodeChangeRow = (
     row.acceptanceContext,
     "Change Acceptance Context",
   );
+  const encodedStallDetection = decodeStoredNullableString(
+    row.stallDetectionDefinition,
+    "Change Stall Detection policy",
+  );
   const encodedPrepareDefinition = decodeStoredNullableString(
     row.prepareDefinition,
     "Change prepare definition",
@@ -82,6 +88,7 @@ export const decodeChangeRow = (
       row.reviewerConfiguration,
       "Change Reviewer Configuration",
     ),
+    ...(encodedStallDetection === null ? {} : { stallDetection: encodedStallDetection }),
     prepareDefinition: encodedPrepareDefinition,
     checksDefinition: encodedChecksDefinition,
   });

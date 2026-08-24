@@ -67,6 +67,7 @@ const expectedColumns = {
     "cancel_reason:TEXT:0:0",
     "cleanup_pending:INTEGER:1:0",
     "cleanup_blocking_reason:TEXT:0:0",
+    "stall_detection_definition:TEXT:0:0",
   ],
   task_change_links: ["task_id:INTEGER:0:1", "change_id:INTEGER:1:0"],
   implementation_decisions: [
@@ -80,6 +81,8 @@ const expectedColumns = {
     "change_id:INTEGER:1:0",
     "content:TEXT:1:0",
     "resolution_content:TEXT:0:0",
+    "source_type:TEXT:0:0",
+    "source_id:INTEGER:0:0",
   ],
   candidates: [
     "id:INTEGER:0:1",
@@ -118,6 +121,22 @@ const expectedColumns = {
     "producer:TEXT:1:2",
     "agent_session_id:INTEGER:1:0",
   ],
+  stall_detections: [
+    "id:INTEGER:0:1",
+    "change_id:INTEGER:1:0",
+    "validation_run_id:INTEGER:1:0",
+    "agent_session_id:INTEGER:1:0",
+    "decision:TEXT:1:0",
+    "reason:TEXT:1:0",
+    "configuration:TEXT:1:0",
+    "input_snapshot:TEXT:1:0",
+    "created_at:TEXT:1:0",
+  ],
+  stall_detection_agent_invocations: [
+    "stall_detection_id:INTEGER:1:1",
+    "validation_run_id:INTEGER:1:0",
+    "agent_invocation_id:INTEGER:1:2",
+  ],
   github_publications: [
     "change_id:INTEGER:0:1",
     "candidate_id:INTEGER:1:0",
@@ -154,6 +173,16 @@ const expectedForeignKeys = {
   github_publications: [
     "candidate_id->candidates.id",
     "change_id->changes.id",
+    "validation_run_id->validation_runs.id",
+  ],
+  stall_detections: [
+    "agent_session_id->agent_sessions.id",
+    "change_id->changes.id",
+    "validation_run_id->validation_runs.id",
+  ],
+  stall_detection_agent_invocations: [
+    "agent_invocation_id->agent_invocations.id",
+    "stall_detection_id->stall_detections.id",
     "validation_run_id->validation_runs.id",
   ],
 } as const;
@@ -205,6 +234,19 @@ const expectedIndexes = {
   },
   implementation_decisions_change_id_idx: {
     table: "implementation_decisions",
+    unique: 0,
+    partial: 0,
+    keys: ["change_id:ASC", "id:ASC"],
+  },
+  implementation_blockers_stall_source_idx: {
+    table: "implementation_blockers",
+    unique: 1,
+    partial: 1,
+    keys: ["source_id:ASC"],
+    predicate: "WHERE source_type = 'stall_detection'",
+  },
+  stall_detections_change_id_idx: {
+    table: "stall_detections",
     unique: 0,
     partial: 0,
     keys: ["change_id:ASC", "id:ASC"],
@@ -268,6 +310,11 @@ const expectedImplicitUniqueIndexes = {
     "u:agent_invocation_id",
   ],
   validation_phase_results: ["pk:validation_run_id,phase,producer"],
+  stall_detections: ["u:validation_run_id"],
+  stall_detection_agent_invocations: [
+    "pk:stall_detection_id,agent_invocation_id",
+    "u:agent_invocation_id",
+  ],
 } as const;
 
 const expectStatementRejected = (
@@ -297,7 +344,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       const tables = objects.filter((object) => object.type === "table");
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
-      expect(tables).toHaveLength(18);
+      expect(tables).toHaveLength(20);
 
       const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
         sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),
@@ -429,7 +476,9 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       expect(tables.every((table) => !table.sql?.includes("AUTOINCREMENT"))).toBe(true);
       expect(
         tables
-          .filter((table) => table.name !== "agent_invocations")
+          .filter(
+            (table) => table.name !== "agent_invocations" && table.name !== "stall_detections",
+          )
           .every((table) => !table.sql?.match(/created_at|updated_at|closed_at|round_number/)),
       ).toBe(true);
 
@@ -673,7 +722,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
           SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id
         `,
       );
-      expect(migrations).toEqual([{ migrationId: 1 }]);
+      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
     }),
   ),
 );

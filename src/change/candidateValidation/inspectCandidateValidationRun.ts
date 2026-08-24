@@ -4,6 +4,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type { ChangeRecord } from "../change.js";
 import type { ChangeReadPort } from "../changePorts.js";
+import type { StallDetectionRecord } from "../stallDetection.js";
 import type { ChangeValidationReadPort } from "../validation/changeValidationPorts.js";
 import { readValidationArtifactContent } from "../validationRun/artifactContent.js";
 import { validationPhase } from "../validationRun/validationRun.js";
@@ -32,6 +33,7 @@ export type CandidateValidationRunInspection = {
   readonly toolingFailures: readonly CandidateValidationToolingFailure[];
   readonly artifacts: readonly CandidateValidationArtifactInspection[];
   readonly agentInvocations: readonly CandidateValidationAgentInvocation[];
+  readonly stallDetection: StallDetectionRecord | null;
 };
 
 export type CandidateValidationArtifactInspection = CandidateValidationArtifact & {
@@ -72,6 +74,9 @@ export const openCandidateValidationRunInspection = (input: {
   readonly persistence: ChangeValidationReadPort;
   readonly changePersistence: ChangeReadPort;
   readonly artifactsRoot: string;
+  readonly getStallDetection: (
+    validationRunId: number,
+  ) => Effect.Effect<StallDetectionRecord | undefined, RepositoryStorageError>;
 }): CandidateValidationRunInspectionUseCases<FileSystem.FileSystem> => ({
   inspectRun: (validationRunId) => inspectRun(input, validationRunId),
   readArtifact: (validationRunId, artifactRef) => readArtifact(input, validationRunId, artifactRef),
@@ -82,6 +87,9 @@ const inspectRun = (
     readonly persistence: ChangeValidationReadPort;
     readonly changePersistence: ChangeReadPort;
     readonly artifactsRoot: string;
+    readonly getStallDetection: (
+      validationRunId: number,
+    ) => Effect.Effect<StallDetectionRecord | undefined, RepositoryStorageError>;
   },
   validationRunId: number,
 ): Effect.Effect<
@@ -102,6 +110,7 @@ const inspectRun = (
     const toolingFailures = yield* dependencies.persistence.listToolingFailures(validationRunId);
     const artifacts = yield* dependencies.persistence.listArtifacts(validationRunId);
     const agentInvocations = yield* dependencies.persistence.listAgentInvocations(validationRunId);
+    const stallDetection = (yield* dependencies.getStallDetection(validationRunId)) ?? null;
 
     const findingArtifactRefs = new Set(findings.flatMap((finding) => finding.artifactRefs));
     const includeAllAvailablePreviews = toolingFailures.length > 0;
@@ -132,6 +141,7 @@ const inspectRun = (
       toolingFailures,
       artifacts: inspectedArtifacts,
       agentInvocations,
+      stallDetection,
     };
   });
 

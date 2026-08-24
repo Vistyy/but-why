@@ -1,7 +1,12 @@
+export type ImplementationBlockerSource =
+  | { readonly type: "implementer" }
+  | { readonly type: "stall_detection"; readonly stallDetectionId: number };
+
 export type ImplementationBlocker = {
   readonly id: number;
   readonly changeId: string;
   readonly content: string;
+  readonly source?: ImplementationBlockerSource;
   readonly resolution: ImplementationBlockerResolution | null;
 };
 

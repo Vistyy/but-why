@@ -52,6 +52,8 @@ export const candidateValidationRunInspectionView = (
   toolingFailures: inspection.toolingFailures,
   agentInvocations: structuredValue(inspection.agentInvocations.map(agentInvocationView)),
   artifacts: inspection.artifacts.map(candidateValidationArtifactView),
+  stallDetection:
+    inspection.stallDetection === null ? null : structuredValue(inspection.stallDetection),
 });
 
 export const candidateValidationArtifactContentView = (

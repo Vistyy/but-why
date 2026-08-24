@@ -8,6 +8,7 @@ import type {
 } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ChangeRecord } from "./change.js";
 import type { ChangeAuthorityPort, ChangeReadPort } from "./changePorts.js";
+import type { StallDetectionRecord } from "./stallDetection.js";
 import type { ChangeValidationReadPort } from "./validation/changeValidationPorts.js";
 
 export type ChangeDetail = {
@@ -16,6 +17,7 @@ export type ChangeDetail = {
   readonly currentValidationRun: CandidateValidationRunRecord | null;
   readonly findings: readonly CandidateValidationFinding[];
   readonly toolingFailures: readonly CandidateValidationToolingFailure[];
+  readonly stallDetections: readonly StallDetectionRecord[];
 };
 
 export type ChangeFindings = {
@@ -24,6 +26,7 @@ export type ChangeFindings = {
   readonly validationRun: CandidateValidationRunRecord | null;
   readonly findings: readonly CandidateValidationFinding[];
   readonly toolingFailures: readonly CandidateValidationToolingFailure[];
+  readonly stallDetections: readonly StallDetectionRecord[];
 };
 
 export type ChangeValidationRunHistory = {
@@ -38,6 +41,9 @@ type ChangeDetailDependencies = {
   readonly getRunById: ChangeValidationReadPort["getRunById"];
   readonly listFindings: ChangeValidationReadPort["listFindings"];
   readonly listToolingFailures: ChangeValidationReadPort["listToolingFailures"];
+  readonly listStallDetections: (
+    changeId: string,
+  ) => Effect.Effect<readonly StallDetectionRecord[], RepositoryStorageError>;
 };
 
 export const queryChangeDetail = (
@@ -63,6 +69,7 @@ export const queryChangeDetail = (
       findings: validationRun === null ? [] : yield* dependencies.listFindings(validationRun.id),
       toolingFailures:
         validationRun === null ? [] : yield* dependencies.listToolingFailures(validationRun.id),
+      stallDetections: yield* dependencies.listStallDetections(changeId),
     };
   });
 
@@ -79,6 +86,7 @@ export const queryChangeFindings = (
           validationRun: detail.currentValidationRun,
           findings: detail.findings,
           toolingFailures: detail.toolingFailures,
+          stallDetections: detail.stallDetections,
         },
   );
 

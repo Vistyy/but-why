@@ -1,5 +1,9 @@
 import { Schema } from "effect";
 import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
+import {
+  type ResolvedReviewerPiAgentProfile,
+  resolvedReviewerPiAgentProfileSchema,
+} from "../agent/agentProfiles.js";
 import { nonBlankStringSchema } from "../contracts/agentConfig.js";
 import { checkIdSchema, type RepoConfig, timeoutSecondsSchema } from "../contracts/repoConfig.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReview/acceptanceReviewConfig.js";
@@ -28,8 +32,14 @@ export type ChangeCheck = {
 
 export type ChangeChecks = readonly [ChangeCheck, ...ChangeCheck[]];
 
+export type StallDetectionPolicy = {
+  readonly enabled: boolean;
+  readonly profile: ResolvedReviewerPiAgentProfile | null;
+};
+
 export type ChangePolicy = {
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
+  readonly stallDetection?: StallDetectionPolicy;
   readonly prepare: ChangePrepareDefinition | null;
   readonly checks: ChangeChecks;
 };
@@ -108,8 +118,14 @@ const changeChecksSchema = Schema.NonEmptyArray(
   }),
 );
 
+const stallDetectionPolicySchema = Schema.Struct({
+  enabled: Schema.Boolean,
+  profile: Schema.NullOr(Schema.Unknown),
+});
+
 const changePolicySchema = Schema.Struct({
   reviewerConfiguration: Schema.Unknown,
+  stallDetection: Schema.optional(stallDetectionPolicySchema),
   prepare: Schema.NullOr(changePrepareSchema),
   checks: changeChecksSchema,
 });
@@ -122,6 +138,18 @@ const decodeChangePolicy = (value: unknown): ChangePolicy => {
   const policy = decodePolicyShape(value);
   return {
     reviewerConfiguration: decodeChangeReviewerConfiguration(policy.reviewerConfiguration),
+    stallDetection:
+      policy.stallDetection === undefined
+        ? { enabled: false, profile: null }
+        : {
+            enabled: policy.stallDetection.enabled,
+            profile:
+              policy.stallDetection.profile === null
+                ? null
+                : Schema.decodeUnknownSync(resolvedReviewerPiAgentProfileSchema)(
+                    policy.stallDetection.profile,
+                  ),
+          },
     prepare: policy.prepare,
     checks: policy.checks,
   };
@@ -131,6 +159,7 @@ export const encodeSqliteChangePolicy = (policy: ChangePolicy) => {
   const decoded = decodeChangePolicy(policy);
   return {
     reviewerConfiguration: encodeSqliteChangeReviewerConfiguration(decoded.reviewerConfiguration),
+    stallDetection: JSON.stringify(decoded.stallDetection ?? { enabled: false, profile: null }),
     prepareDefinition: decoded.prepare === null ? null : JSON.stringify(decoded.prepare),
     checksDefinition: JSON.stringify(decoded.checks),
   };
@@ -138,6 +167,7 @@ export const encodeSqliteChangePolicy = (policy: ChangePolicy) => {
 
 export const decodeSqliteChangePolicy = (source: {
   readonly reviewerConfiguration: string;
+  readonly stallDetection?: string;
   readonly prepareDefinition: string | null;
   readonly checksDefinition: string;
 }): ChangePolicy =>
@@ -145,5 +175,9 @@ export const decodeSqliteChangePolicy = (source: {
     reviewerConfiguration: JSON.parse(source.reviewerConfiguration) as unknown,
     prepare:
       source.prepareDefinition === null ? null : (JSON.parse(source.prepareDefinition) as unknown),
+    stallDetection:
+      source.stallDetection === undefined
+        ? { enabled: false, profile: null }
+        : (JSON.parse(source.stallDetection) as unknown),
     checks: JSON.parse(source.checksDefinition) as unknown,
   });

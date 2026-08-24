@@ -77,7 +77,8 @@ Revisit this when real replacement work requires more than creating a new Task a
 
 ## Should But Why automate implementation and fixes?
 
-AFK Implementers, automatic Fixers, and orchestration-owned stops are deferred.
+AFK Implementers, automatic Fixers, and general orchestration-owned stops are deferred.
+The supported Stall Detector is a bounded synchronous Change Submit assessment that records a Stall-Detector-sourced Implementation Blocker and does not terminate an Interactive Session.
 Before adding them, define process ownership, cancellation, workspace fencing, cost protection, recovery, and security from observed interactive-session behavior.
 
 Before unattended implementation, define an Implementation Budget.
