@@ -32,7 +32,6 @@ export type ChangeImplementResult =
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" };
 
 export const launchInteractiveImplementer = (input: {
-  readonly repositoryPath: string;
   readonly repoConfig: RepoConfig;
   readonly change: ChangeStartRecord;
   readonly interactiveSessionHost: InteractiveSessionHost;
@@ -42,7 +41,6 @@ export const launchInteractiveImplementer = (input: {
 }): Effect.Effect<ChangeImplementResult, never> =>
   Effect.gen(function* () {
     const {
-      repositoryPath,
       repoConfig,
       change,
       interactiveSessionHost,
@@ -59,7 +57,6 @@ export const launchInteractiveImplementer = (input: {
           {
             changeId: change.id,
             hostSessionName: hostSessionNameForChange(change),
-            repositoryPath,
             worktreePath: change.worktreePath,
             systemPromptPaths: buildImplementerSystemPromptPaths(),
             initialPrompt: buildImplementerInitialPrompt({

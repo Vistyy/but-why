@@ -166,8 +166,14 @@ const launchHerdrSession = async (
     );
   }
 
-  const openedWorktree = await openManagedWorktree(command, input, sessionName, signal, options);
-  if (!openedWorktree.ok) return openedWorktree.result;
+  const openedWorkspace = await openStandaloneWorkspace(
+    command,
+    input,
+    sessionName,
+    signal,
+    options,
+  );
+  if (!openedWorkspace.ok) return openedWorkspace.result;
 
   const nativeAgent = await startNativeAgent(
     execute,
@@ -175,7 +181,7 @@ const launchHerdrSession = async (
     input,
     sessionName,
     preflight.value.continuationExtension,
-    openedWorktree.value,
+    openedWorkspace.value,
     signal,
     options,
   );
@@ -228,18 +234,18 @@ const observeExistingSession = async (
   if (existingAgents === undefined) {
     return phaseStopped(launchFailure("Herdr returned malformed agent-list output."));
   }
-  if (hasActiveSession(existingAgents, input, sessionName)) {
+  if (hasActiveSession(existingAgents, sessionName)) {
     return phaseStopped({ ok: true, host: "herdr", status: "already_active" });
   }
   if (
-    hasUnknownSession(existingAgents, input, sessionName) ||
+    hasUnknownSession(existingAgents, sessionName) ||
     hasUnknownAgentInWorktree(existingAgents, input)
   ) {
     return phaseStopped(
       launchIndeterminate("Herdr could not determine the existing session state."),
     );
   }
-  if (hasCompletedSession(existingAgents, input, sessionName)) {
+  if (hasCompletedSession(existingAgents, sessionName)) {
     if (hasActiveAgentInWorktree(existingAgents, input)) {
       return phaseStopped(
         launchFailure("Another Interactive Session is already active in this Managed Worktree."),
@@ -250,55 +256,95 @@ const observeExistingSession = async (
   return phaseComplete(undefined);
 };
 
-const openManagedWorktree = async (
+const openStandaloneWorkspace = async (
   command: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
   sessionName: string,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
-): Promise<LaunchPhaseResult<OpenedWorktree>> => {
-  const worktreeArgs = [
-    "worktree",
-    "open",
-    "--cwd",
-    input.repositoryPath,
-    "--path",
-    input.worktreePath,
-    "--label",
-    sessionName,
-    "--no-focus",
-  ] as const;
-  let openedResult = await command(worktreeArgs, signal);
-  if (!openedResult.ok && isUncertainMutationFailure(openedResult.message)) {
-    const worktreeState = await observe(
-      command,
-      ["worktree", "list", "--cwd", input.worktreePath, "--json"],
-      signal,
-      options.observationRetries,
-    );
-    const worktrees = worktreeState.ok ? decodeWorktreeList(worktreeState.stdout) : undefined;
-    if (worktrees === undefined || !worktreeMatchesTarget(worktrees, input.worktreePath)) {
-      return phaseStopped(
-        launchIndeterminate(
-          `Herdr did not confirm opening the Managed Worktree: ${openedResult.message}`,
-        ),
-      );
-    }
-    openedResult = await command(worktreeArgs, signal);
-  }
-  if (!openedResult.ok) {
+): Promise<LaunchPhaseResult<OpenedWorkspace>> => {
+  const before = await observe(command, ["workspace", "list"], signal, options.observationRetries);
+  const existingWorkspaces = before.ok ? decodeWorkspaceList(before.stdout) : undefined;
+  if (existingWorkspaces === undefined) {
     return phaseStopped(
-      isUncertainMutationFailure(openedResult.message)
-        ? launchIndeterminate(
-            `Herdr did not confirm opening the Managed Worktree: ${openedResult.message}`,
-          )
-        : launchFailure(openedResult.message),
+      launchIndeterminate("Herdr did not provide a trustworthy pre-creation workspace list."),
     );
   }
-  const opened = decodeOpenedWorktree(openedResult.stdout, input.worktreePath);
-  return opened === undefined
-    ? phaseStopped(launchIndeterminate("Herdr returned malformed worktree-open output."))
-    : phaseComplete(opened);
+  const matchingWorkspaces = existingWorkspaces.filter(
+    (workspace) => workspace.label === sessionName,
+  );
+  if (matchingWorkspaces.length > 1) {
+    return phaseStopped(
+      launchIndeterminate("Herdr reported multiple workspaces for this Interactive Session."),
+    );
+  }
+  const matchingWorkspace = matchingWorkspaces[0];
+  if (matchingWorkspace !== undefined) {
+    const recovered = await observeWorkspaceRootPane(
+      command,
+      matchingWorkspace.workspaceId,
+      signal,
+      options,
+    );
+    return recovered === undefined
+      ? phaseStopped(
+          launchIndeterminate(
+            "Herdr did not identify the existing Interactive Session workspace root pane.",
+          ),
+        )
+      : phaseComplete(recovered);
+  }
+
+  const created = await command(
+    ["workspace", "create", "--cwd", input.worktreePath, "--label", sessionName, "--no-focus"],
+    signal,
+  );
+  if (created.ok) {
+    const workspace = decodeCreatedWorkspace(created.stdout);
+    return workspace === undefined
+      ? phaseStopped(launchIndeterminate("Herdr returned malformed workspace-create output."))
+      : phaseComplete(workspace);
+  }
+  if (!isUncertainMutationFailure(created.message)) {
+    return phaseStopped(launchFailure(created.message));
+  }
+
+  const after = await observe(command, ["workspace", "list"], signal, options.observationRetries);
+  const recoveredWorkspaceId = after.ok
+    ? decodeNewWorkspaceId(
+        after.stdout,
+        existingWorkspaces.map((workspace) => workspace.workspaceId),
+        sessionName,
+      )
+    : undefined;
+  if (recoveredWorkspaceId === undefined) {
+    return phaseStopped(
+      launchIndeterminate(`Herdr did not confirm creating the workspace: ${created.message}`),
+    );
+  }
+  const recovered = await observeWorkspaceRootPane(command, recoveredWorkspaceId, signal, options);
+  return recovered === undefined
+    ? phaseStopped(
+        launchIndeterminate(
+          `Herdr created a workspace but did not identify its root pane: ${created.message}`,
+        ),
+      )
+    : phaseComplete(recovered);
+};
+
+const observeWorkspaceRootPane = async (
+  command: HerdrCommandExecutor,
+  workspaceId: string,
+  signal: AbortSignal | undefined,
+  options: ResolvedOptions,
+): Promise<OpenedWorkspace | undefined> => {
+  const panes = await observe(
+    command,
+    ["pane", "list", "--workspace", workspaceId],
+    signal,
+    options.observationRetries,
+  );
+  return panes.ok ? decodeSoleWorkspacePane(panes.stdout, workspaceId) : undefined;
 };
 
 const startNativeAgent = async (
@@ -307,7 +353,7 @@ const startNativeAgent = async (
   input: InteractiveSessionLaunchInput,
   sessionName: string,
   continuationExtension: string,
-  opened: OpenedWorktree,
+  opened: OpenedWorkspace,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
 ): Promise<LaunchPhaseResult<void>> => {
@@ -318,23 +364,23 @@ const startNativeAgent = async (
       launchIndeterminate("Herdr did not provide a trustworthy pre-start session observation."),
     );
   }
-  if (hasActiveSession(beforeStartAgents, input, sessionName)) {
+  if (hasActiveSession(beforeStartAgents, sessionName)) {
     return phaseStopped({ ok: true, host: "herdr", status: "already_active" });
   }
   if (
-    hasUnknownSession(beforeStartAgents, input, sessionName) ||
-    hasUnknownAgentInWorktree(beforeStartAgents, input)
+    hasUnknownSession(beforeStartAgents, sessionName) ||
+    hasUnknownAgentInWorktree(beforeStartAgents, input, opened.workspaceId)
   ) {
     return phaseStopped(
       launchIndeterminate("Herdr could not determine the existing session state."),
     );
   }
-  if (hasActiveAgentInWorktree(beforeStartAgents, input)) {
+  if (hasActiveAgentInWorktree(beforeStartAgents, input, opened.workspaceId)) {
     return phaseStopped(
       launchFailure("Another Interactive Session is already active in this Managed Worktree."),
     );
   }
-  if (hasCompletedSession(beforeStartAgents, input, sessionName)) {
+  if (hasCompletedSession(beforeStartAgents, sessionName)) {
     return phaseComplete(undefined);
   }
 
@@ -371,21 +417,21 @@ const startNativeAgent = async (
   const afterStart = await observe(command, ["agent", "list"], signal, options.observationRetries);
   const afterStartAgents = afterStart.ok ? decodeAgentList(afterStart.stdout) : undefined;
   if (afterStartAgents !== undefined) {
-    if (hasActiveSession(afterStartAgents, input, sessionName)) return phaseComplete(undefined);
+    if (hasActiveSession(afterStartAgents, sessionName)) return phaseComplete(undefined);
     if (
-      hasUnknownSession(afterStartAgents, input, sessionName) ||
-      hasUnknownAgentInWorktree(afterStartAgents, input)
+      hasUnknownSession(afterStartAgents, sessionName) ||
+      hasUnknownAgentInWorktree(afterStartAgents, input, opened.workspaceId)
     ) {
       return phaseStopped(
         launchIndeterminate("Herdr reported an unknown state after native agent start."),
       );
     }
-    if (hasActiveAgentInWorktree(afterStartAgents, input)) {
+    if (hasActiveAgentInWorktree(afterStartAgents, input, opened.workspaceId)) {
       return phaseStopped(
         launchFailure("Another Interactive Session is already active in this Managed Worktree."),
       );
     }
-    if (hasCompletedSession(afterStartAgents, input, sessionName)) {
+    if (hasCompletedSession(afterStartAgents, sessionName)) {
       return phaseComplete(undefined);
     }
   }
@@ -563,7 +609,8 @@ const nonBlankStringSchema = Schema.String.pipe(Schema.filter((value) => value.t
 
 const herdrAgentStatusSchema = Schema.Literal("idle", "working", "blocked", "unknown", "done");
 const herdrAgentSchema = Schema.Struct({
-  cwd: Schema.String,
+  cwd: Schema.optional(Schema.String),
+  workspace_id: Schema.optional(nonBlankStringSchema),
   agent_status: herdrAgentStatusSchema,
   pane_id: Schema.String,
   name: Schema.optional(Schema.String),
@@ -577,47 +624,43 @@ const herdrAgentListResponseSchema = Schema.Struct({
   }),
 });
 
-const herdrWorktreeSchema = Schema.Union(
-  Schema.Struct({
-    path: Schema.String,
-    worktree_path: Schema.optional(Schema.String),
-    branch: Schema.optional(Schema.NullOr(Schema.String)),
-  }),
-  Schema.Struct({
-    path: Schema.optional(Schema.String),
-    worktree_path: Schema.String,
-    branch: Schema.optional(Schema.NullOr(Schema.String)),
-  }),
-);
-
-const herdrWorktreeListResponseSchema = Schema.Struct({
+const herdrWorkspaceListResponseSchema = Schema.Struct({
   result: Schema.Struct({
-    type: Schema.Literal("worktree_list"),
-    worktrees: Schema.Array(herdrWorktreeSchema),
+    type: Schema.Literal("workspace_list"),
+    workspaces: Schema.Array(
+      Schema.Struct({
+        workspace_id: nonBlankStringSchema,
+        label: Schema.optional(Schema.String),
+      }),
+    ),
   }),
 });
 
-const herdrWorktreeOpenedResponseSchema = Schema.Struct({
+const herdrWorkspaceCreatedResponseSchema = Schema.Struct({
   result: Schema.Struct({
-    type: Schema.Literal("worktree_opened"),
-    worktree: Schema.Struct({
-      path: Schema.String,
-      open_workspace_id: nonBlankStringSchema,
-    }),
-    workspace: Schema.Struct({
-      workspace_id: nonBlankStringSchema,
-      worktree: Schema.Struct({ checkout_path: Schema.String }),
-    }),
+    type: Schema.Literal("workspace_created"),
+    workspace: Schema.Struct({ workspace_id: nonBlankStringSchema }),
     tab: Schema.Struct({
       tab_id: nonBlankStringSchema,
-      workspace_id: Schema.String,
+      workspace_id: nonBlankStringSchema,
     }),
     root_pane: Schema.Struct({
       pane_id: nonBlankStringSchema,
-      workspace_id: Schema.String,
-      tab_id: Schema.String,
+      workspace_id: nonBlankStringSchema,
+      tab_id: nonBlankStringSchema,
     }),
-    already_open: Schema.Boolean,
+  }),
+});
+
+const herdrPaneListResponseSchema = Schema.Struct({
+  result: Schema.Struct({
+    type: Schema.Literal("pane_list"),
+    panes: Schema.Array(
+      Schema.Struct({
+        pane_id: nonBlankStringSchema,
+        workspace_id: nonBlankStringSchema,
+      }),
+    ),
   }),
 });
 
@@ -634,8 +677,8 @@ const herdrErrorResponseSchema = Schema.Struct({
 
 type HerdrAgentStatus = Schema.Schema.Type<typeof herdrAgentStatusSchema>;
 type HerdrAgent = Schema.Schema.Type<typeof herdrAgentSchema>;
-type HerdrWorktree = { readonly paths: readonly string[] };
-type OpenedWorktree = { readonly rootPaneId: string };
+type HerdrWorkspaceSummary = { readonly workspaceId: string; readonly label?: string };
+type OpenedWorkspace = { readonly workspaceId: string; readonly rootPaneId: string };
 
 const decodeHerdrJson = <A, I>(source: string, schema: Schema.Schema<A, I>): A | undefined => {
   let input: unknown;
@@ -651,30 +694,45 @@ const decodeHerdrJson = <A, I>(source: string, schema: Schema.Schema<A, I>): A |
 const decodeAgentList = (source: string): readonly HerdrAgent[] | undefined =>
   decodeHerdrJson(source, herdrAgentListResponseSchema)?.result.agents;
 
-const decodeWorktreeList = (source: string): readonly HerdrWorktree[] | undefined => {
-  const response = decodeHerdrJson(source, herdrWorktreeListResponseSchema);
-  return response?.result.worktrees.map((worktree) => ({
-    paths: [worktree.path, worktree.worktree_path].filter(
-      (path): path is string => path !== undefined,
-    ),
+const decodeWorkspaceList = (source: string): readonly HerdrWorkspaceSummary[] | undefined =>
+  decodeHerdrJson(source, herdrWorkspaceListResponseSchema)?.result.workspaces.map((workspace) => ({
+    workspaceId: workspace.workspace_id,
+    ...(workspace.label === undefined ? {} : { label: workspace.label }),
   }));
+
+const decodeNewWorkspaceId = (
+  source: string,
+  existingWorkspaceIds: readonly string[],
+  expectedLabel: string,
+): string | undefined => {
+  const response = decodeHerdrJson(source, herdrWorkspaceListResponseSchema);
+  if (response === undefined) return undefined;
+  const existing = new Set(existingWorkspaceIds);
+  const matches = response.result.workspaces.filter(
+    (workspace) => !existing.has(workspace.workspace_id) && workspace.label === expectedLabel,
+  );
+  return matches.length === 1 ? matches[0]?.workspace_id : undefined;
 };
 
-const decodeOpenedWorktree = (
-  source: string,
-  requestedWorktreePath: string,
-): OpenedWorktree | undefined => {
-  const response = decodeHerdrJson(source, herdrWorktreeOpenedResponseSchema);
+const decodeCreatedWorkspace = (source: string): OpenedWorkspace | undefined => {
+  const response = decodeHerdrJson(source, herdrWorkspaceCreatedResponseSchema);
   if (response === undefined) return undefined;
-  const { root_pane: rootPane, tab, workspace, worktree } = response.result;
-  return worktree.path === requestedWorktreePath &&
-    worktree.open_workspace_id === workspace.workspace_id &&
-    workspace.worktree.checkout_path === requestedWorktreePath &&
-    tab.workspace_id === workspace.workspace_id &&
+  const { root_pane: rootPane, tab, workspace } = response.result;
+  return tab.workspace_id === workspace.workspace_id &&
     rootPane.workspace_id === workspace.workspace_id &&
     rootPane.tab_id === tab.tab_id
-    ? { rootPaneId: rootPane.pane_id }
+    ? { workspaceId: workspace.workspace_id, rootPaneId: rootPane.pane_id }
     : undefined;
+};
+
+const decodeSoleWorkspacePane = (
+  source: string,
+  workspaceId: string,
+): OpenedWorkspace | undefined => {
+  const response = decodeHerdrJson(source, herdrPaneListResponseSchema);
+  if (response === undefined || response.result.panes.length !== 1) return undefined;
+  const pane = response.result.panes[0];
+  return pane?.workspace_id === workspaceId ? { workspaceId, rootPaneId: pane.pane_id } : undefined;
 };
 
 const decodeAgentStarted = (source: string): { readonly terminalId: string } | undefined => {
@@ -688,57 +746,49 @@ const isAgentPaneBusyFailure = (message: string): boolean => {
   return decodeHerdrJson(trimmed, herdrErrorResponseSchema)?.error.code === "agent_pane_busy";
 };
 
-const hasActiveSession = (
-  agents: readonly HerdrAgent[],
-  input: InteractiveSessionLaunchInput,
-  sessionName: string,
-): boolean => {
-  const status = findSession(agents, input, sessionName)?.agent_status;
+const hasActiveSession = (agents: readonly HerdrAgent[], sessionName: string): boolean => {
+  const status = findSession(agents, sessionName)?.agent_status;
   return status !== undefined && isActiveAgentStatus(status);
 };
 
-const hasCompletedSession = (
-  agents: readonly HerdrAgent[],
-  input: InteractiveSessionLaunchInput,
-  sessionName: string,
-): boolean => findSession(agents, input, sessionName)?.agent_status === "done";
+const hasCompletedSession = (agents: readonly HerdrAgent[], sessionName: string): boolean =>
+  findSession(agents, sessionName)?.agent_status === "done";
 
-const hasUnknownSession = (
-  agents: readonly HerdrAgent[],
-  input: InteractiveSessionLaunchInput,
-  sessionName: string,
-): boolean => findSession(agents, input, sessionName)?.agent_status === "unknown";
+const hasUnknownSession = (agents: readonly HerdrAgent[], sessionName: string): boolean =>
+  findSession(agents, sessionName)?.agent_status === "unknown";
 
-const findSession = (
-  agents: readonly HerdrAgent[],
+const findSession = (agents: readonly HerdrAgent[], sessionName: string): HerdrAgent | undefined =>
+  agents.find((agent) => agent.name === sessionName || agent.agent === sessionName);
+
+const isAgentInWorktree = (
+  agent: HerdrAgent,
   input: InteractiveSessionLaunchInput,
-  sessionName: string,
-): HerdrAgent | undefined =>
-  agents.find(
-    (agent) =>
-      (agent.name === sessionName || agent.agent === sessionName) &&
-      agent.cwd === input.worktreePath,
-  );
+  workspaceId?: string,
+): boolean =>
+  agent.cwd === input.worktreePath ||
+  (workspaceId !== undefined && agent.workspace_id === workspaceId);
 
 const hasUnknownAgentInWorktree = (
   agents: readonly HerdrAgent[],
   input: InteractiveSessionLaunchInput,
+  workspaceId?: string,
 ): boolean =>
-  agents.some((agent) => agent.cwd === input.worktreePath && agent.agent_status === "unknown");
+  agents.some(
+    (agent) => isAgentInWorktree(agent, input, workspaceId) && agent.agent_status === "unknown",
+  );
 
 const hasActiveAgentInWorktree = (
   agents: readonly HerdrAgent[],
   input: InteractiveSessionLaunchInput,
+  workspaceId?: string,
 ): boolean =>
   agents.some(
-    (agent) => agent.cwd === input.worktreePath && isActiveAgentStatus(agent.agent_status),
+    (agent) =>
+      isAgentInWorktree(agent, input, workspaceId) && isActiveAgentStatus(agent.agent_status),
   );
 
 const isActiveAgentStatus = (status: HerdrAgentStatus): boolean =>
   status === "idle" || status === "working" || status === "blocked";
-
-const worktreeMatchesTarget = (worktrees: readonly HerdrWorktree[], targetPath: string): boolean =>
-  worktrees.some((worktree) => worktree.paths.includes(targetPath));
 
 const executeHerdr: HerdrCommandExecutor = async (args, signal) => {
   try {
