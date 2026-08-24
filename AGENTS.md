@@ -1,82 +1,37 @@
-## Always-on facts
+# Contributor agent instructions
 
-- But Why validates submitted code against approved human intent.
-- But Why is task-based.
-- `by` is an agent-first, non-interactive CLI.
+These instructions govern agents changing the But Why source repository.
+They do not describe how agents use But Why in a target repository.
+
+## Development authorities
+
+- Read `CONTEXT-MAP.md` and the applicable context before naming or changing domain behavior.
+- Read `docs/architecture.md` before changing ownership, dependencies, or workflow boundaries.
+- Read `VISION.md` before proposing or implementing a change to product direction, scope, or a lasting acceptance boundary.
+- Read the applicable accepted decisions in `docs/adr/` before changing their constraints.
+- Read `docs/cli-output.md` when changing structured CLI output.
+- Follow the shared Documentation policy in the `writing-instructions` skill when changing documentation.
+
+## Runtime safety
+
 - The globally installed built `by` executable is the only CLI permitted to open or mutate live Shared Repository State.
-- Candidate source and package artifacts may run only in disposable test repositories with independent Git Common Directories and state.
-- Shared Repository State uses immutable ordered Effect SQL migrations beginning with `0001_baseline`.
-- SQLite Tasks are the source of truth for active work and accepted implementation intent.
-- Use current domain terms in code, storage, and documentation.
+- Run source and Candidate executables only in disposable test repositories with independent Git Common Directories and state.
+- A migration introduced by an unmerged Change may be revised or removed, including after Candidate tests applied it to disposable state.
+- Once a migration is present on `main`, treat it as potentially applied: preserve it and express later schema changes through a new ordered migration.
 
-## Documentation
+## Product interface boundary
 
-- Read `CONTEXT-MAP.md` and the applicable context before naming domain-facing behavior.
-- Read `docs/architecture.md` for current ownership and workflow boundaries.
-- Read `VISION.md` before proposing, reviewing, or accepting a change that affects product direction, scope, or a lasting acceptance boundary.
-- Read `docs/cli-output.md` for structured CLI output contracts.
-- Read `docs/tooling.md` for contributor verification and architecture checks.
-- Read accepted decisions in `docs/adr/` when a change affects their constraints.
-- Read the shared Documentation policy in `writing-instructions` before changing documentation.
-  It governs documentation admission, authoritative media, current-system description, and authority maintenance.
+- Treat packaged CLI help, `docs/public/`, packaged `extensions/`, and injected agent prompts as product interfaces produced by this repository.
+- These interfaces must work in target repositories without access to this repository's contributor instructions, context files, internal documentation, or development files.
+- Portable guidance may direct agents to discover target-repository instructions, but it must not assume a particular instruction file, tool, directory, or domain context.
+- Package every required extension and reference, or declare an explicit configurable external dependency with actionable failure behavior.
 
-## Portable product boundary
+## Repository workflow
 
-- Treat packaged CLI help, `docs/public/`, packaged `extensions/`, and injected agent prompts as portable product interfaces.
-- Portable product interfaces must work in target repositories without this source repository's agent instructions, context files, internal documentation, or local development files.
-- This repository's agent instructions, context files, and internal contributor documentation govern development of But Why only.
-- Portable guidance may direct an agent to discover and follow target-repository instructions, but it must not assume a specific instruction file, tool, directory, or domain context.
-- Package every extension and reference required by a portable workflow, or declare it as an explicit configurable external dependency with actionable failure behavior.
-
-## Code map
-
-- `src/main.ts`: executable entrypoint.
-- `src/cli.ts`: top-level CLI routing.
-- `src/cli/`: command modules and output boundary.
-- `src/cli/change/implementerPromptFile.ts`: Implementer Prompt file input handling.
-- `src/task/`: Task intent, lifecycle, persistence interfaces, files, and composition.
-- `src/taskChange/`: Task/Change coordination for linked Change Start, joined inspection, coordinated cancellation, and exact merged completion.
-- `src/taskChange/taskChangeStart.ts`: linked Change Start eligibility and coordination around the Change-owned start operation.
-- `src/change/`: Change workflows and Change-owned implementation, Candidate, validation, and delivery modules.
-- `src/change/changeLifecycle.ts`: Change Start, Change Prepare, and Change Implement orchestration; `startChange` owns Change creation and preparation.
-- `src/change/composition/loadChangeLifecycle.ts`: Change lifecycle composition; `withChangeStart` routes unlinked starts to `startChange` and linked starts to Task/Change coordination.
-- `src/cli/change/start.ts`: `change start` command input and result routing.
-- `src/change/interactiveSession/`: Interactive Session launch preparation and host execution (`launchInteractiveImplementer.ts`, `interactiveSessionHost.ts`, `adapters/herdrInteractiveSessionHost.ts`, `implementerPrompt.ts`) with `InteractiveSessionHost` as the only injected seam and Herdr as the default host selected by `loadChangeLifecycle.ts`; `implementChange` retains Change lookup and open-state validation.
-- `src/change/packageAssetPath.ts`: package-asset resolution.
-- `src/change/candidate/`: Candidate domain records.
-- `src/change/candidateCapture/`: Candidate capture interfaces and Git Adapters.
-- `src/change/changePolicy.ts`: immutable Change Policy representation, pure definition resolution, and persistence codecs.
-- `src/change/composition/resolveChangePolicy.ts`: complete Change Policy resolution from exact-commit repository inputs, Global Config, and installed resources.
-- `src/change/candidateValidation/`: Candidate validation execution, inspection, and composition.
-- `src/change/validation/`: Change Validation Gate and validation Adapters.
-- `src/change/validationRun/`: Validation Run domain records and evidence.
-- `src/agent/agentSession/`: shared Agent Session execution, continuation and invocation records, transcript paths, and token evidence.
-- `src/change/publication/`: Candidate publication policy and Git Adapter.
-- `src/change/submitChange.ts`: Change submission orchestration.
-- `src/change/reviewerResolutionErrors.ts`: Change reviewer resolution errors.
-- `src/agent/`: project-owned reviewer execution, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
-- `src/contracts/`: configuration, output, and shared error contracts.
-- `src/repositoryRuntime/`: Local Repository resolution, initialization coordination, and the Shared Repository State open lifecycle.
-- `src/init/`: initialization-specific Git and Repo Config Adapters.
-- `src/output/`: structured output codecs and serializers.
-- `src/repositoryPreparation/`: shared Repository Preparation Adapter.
-- `src/disposableWorkspace/`: shared exact-commit disposable Git workspace creation, identity verification, Effect command execution, interruption handling, and cleanup for Task Review and Change Validation.
-- `src/repositoryRuntime/adapters/sqlite/`: Shared Repository State SQLite infrastructure Adapters.
-- `src/task/adapters/sqlite/`: Task-owned SQLite persistence Adapters.
-- `src/sqlite/`: Change-owned SQLite persistence Adapters.
-- `src/submissionEnvironment/`: Git and GitHub submission-environment Adapters.
-
-## Repository synchronization
-
-Before starting a new investigation, Task design, or Change from the main checkout, fetch `origin/main` if it has not been fetched in the current session.
-If local `main` is clean and can fast-forward, fast-forward it.
-Refresh again after an external merge or before a new work item after a long session.
-Otherwise, preserve the checkout and report its state.
-Do not merge, rebase, or reset automatically.
-
-## Commands
-
-Run `just` to list available recipes.
-Use Just recipes for repository workflows.
-Use the globally installed `by` executable for But Why commands.
-The source repository does not provide a `just by` route.
+- Before starting new work from the main checkout, fetch `origin/main` if it has not been fetched in the current session.
+- Fast-forward a clean local `main` when possible; otherwise preserve its state and report why it was not updated.
+- Refresh after an external merge or before new work after a long session.
+- Do not merge, rebase, or reset automatically.
+- Read `docs/tooling.md` before selecting contributor checks or changing architecture enforcement.
+- Use Just recipes for repository workflows, and run `just` to discover the current recipes.
+- Use focused checks during implementation and `just quality` only when repository-wide blocking verification is required.
