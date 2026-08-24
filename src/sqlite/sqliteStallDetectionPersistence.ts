@@ -198,7 +198,7 @@ const getAssessmentInput = (
         (finding) => finding.phase === "acceptance_review" || finding.phase === "specialist_review",
       );
       if (reviewerFindings.length === 0) continue;
-      const prefixes = yield* readImplementationBlockerPrefix(
+      yield* readImplementationBlockerPrefix(
         sql,
         changeId,
         row.highestBlockerId,
@@ -220,10 +220,7 @@ const getAssessmentInput = (
       qualifying.push({
         validationRunId: row.id,
         acceptanceContext: context,
-        resolutionPrefix: [
-          ...(context?.resolutions ?? []),
-          ...prefixes.resolutions.map((resolution) => resolution.content),
-        ],
+        resolutionPrefix: context?.resolutions ?? [],
         findings: reviewerFindings,
       });
     }
