@@ -87,7 +87,6 @@ export const prepareChange = (
   });
 
 export const implementChange = (
-  repositoryPath: string,
   repoConfig: RepoConfig,
   store: ChangeStartPersistence,
   interactiveSessionHost: InteractiveSessionHost,
@@ -101,7 +100,6 @@ export const implementChange = (
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     return yield* launchInteractiveImplementer({
-      repositoryPath,
       repoConfig,
       change,
       interactiveSessionHost,

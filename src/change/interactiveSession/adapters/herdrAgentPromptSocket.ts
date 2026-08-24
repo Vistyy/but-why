@@ -3,7 +3,7 @@ import { createConnection } from "node:net";
 
 import { Either, Schema } from "effect";
 
-export const supportedHerdrProtocol = 19;
+export const supportedHerdrProtocol = 20;
 export const herdrMaxInitialRequestBytes = 1024 * 1024;
 const herdrInitialRequestTimeoutMs = 5_000;
 

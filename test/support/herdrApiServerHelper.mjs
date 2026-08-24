@@ -16,7 +16,7 @@ const server = createServer((socket) => {
       socket.end(
         `${JSON.stringify({
           id: request.id,
-          result: { type: "pong", version: "0.8.0", protocol: 19 },
+          result: { type: "pong", version: "0.8.2", protocol: 20 },
         })}\n`,
       );
       return;
