@@ -100,6 +100,7 @@ it.effect("runs a bounded serialized Stall Detection with a fresh restricted Pi 
     };
     const persistence: StallDetectionPersistence = {
       linkInvocation: () => () => Effect.void,
+      recoverDispatchedInvocations: () => Effect.void,
       getAttemptByValidationRun: () => Effect.succeed(undefined),
       getAssessmentInput: () => Effect.succeed(assessmentInput),
       getByValidationRun: () => Effect.succeed(undefined),

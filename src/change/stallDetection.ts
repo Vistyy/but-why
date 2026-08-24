@@ -52,6 +52,10 @@ export type StallDetectionDiagnostic = {
 
 export type StallDetectionPersistence = {
   readonly linkInvocation: (validationRunId: number) => AgentSessionSqlLink;
+  readonly recoverDispatchedInvocations: (
+    validationRunId: number,
+    now: string,
+  ) => EffectResult<void>;
   readonly getAttemptByValidationRun: (
     validationRunId: number,
   ) => EffectResult<StallDetectionDiagnostic | undefined>;

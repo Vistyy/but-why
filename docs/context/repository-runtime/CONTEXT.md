@@ -27,9 +27,16 @@ The globally installed `by` executable authorized to operate a Local Repository'
 Source and Candidate executables must not open live Shared Repository State.
 _Avoid_: Candidate CLI, source checkout command, per-worktree executable
 
+**Migration Artifact**:
+One ordered Effect SQL schema transition.
+A Migration Artifact becomes immutable when the Change that introduces it merges to `main`, because an installed executable may then apply it to live Shared Repository State.
+Before that merge, the Change may revise or remove its Migration Artifacts; Candidate tests recreate their disposable Shared Repository State rather than preserving compatibility with an earlier Candidate schema.
+After that merge, schema changes append new Migration Artifacts and never rewrite or remove the merged artifact.
+_Avoid_: review-version migration, corrective migration for an unmerged Candidate schema
+
 **Release Baseline Migration Artifact**:
-The `0001_baseline` source artifact that defines the initial Shared Repository State for the release-ready executable.
-The release applies it and every subsequent immutable ordered Migration Artifact shipped with the executable.
+The `0001_baseline` Migration Artifact that defines the initial Shared Repository State for the release-ready executable.
+The release applies it and every subsequent merged Migration Artifact shipped with the executable.
 The chain excludes unsupported prerelease conversion and compatibility behavior.
 _Avoid_: prerelease migration chain, conversion script, compatibility schema
 

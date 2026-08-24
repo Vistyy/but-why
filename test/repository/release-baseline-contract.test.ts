@@ -132,11 +132,6 @@ const expectedColumns = {
     "input_snapshot:TEXT:1:0",
     "created_at:TEXT:1:0",
   ],
-  stall_detection_agent_invocations: [
-    "stall_detection_id:INTEGER:1:1",
-    "validation_run_id:INTEGER:1:0",
-    "agent_invocation_id:INTEGER:1:2",
-  ],
   stall_detection_attempts: [
     "id:INTEGER:0:1",
     "change_id:INTEGER:1:0",
@@ -144,11 +139,6 @@ const expectedColumns = {
     "agent_session_id:INTEGER:1:0",
     "diagnostic:TEXT:1:0",
     "created_at:TEXT:1:0",
-  ],
-  stall_detection_attempt_invocations: [
-    "stall_detection_attempt_id:INTEGER:1:1",
-    "validation_run_id:INTEGER:1:0",
-    "agent_invocation_id:INTEGER:1:2",
   ],
   stall_detection_run_invocations: [
     "validation_run_id:INTEGER:1:1",
@@ -197,19 +187,9 @@ const expectedForeignKeys = {
     "change_id->changes.id",
     "validation_run_id->validation_runs.id",
   ],
-  stall_detection_agent_invocations: [
-    "agent_invocation_id->agent_invocations.id",
-    "stall_detection_id->stall_detections.id",
-    "validation_run_id->validation_runs.id",
-  ],
   stall_detection_attempts: [
     "agent_session_id->agent_sessions.id",
     "change_id->changes.id",
-    "validation_run_id->validation_runs.id",
-  ],
-  stall_detection_attempt_invocations: [
-    "agent_invocation_id->agent_invocations.id",
-    "stall_detection_attempt_id->stall_detection_attempts.id",
     "validation_run_id->validation_runs.id",
   ],
   stall_detection_run_invocations: [
@@ -342,15 +322,7 @@ const expectedImplicitUniqueIndexes = {
   ],
   validation_phase_results: ["pk:validation_run_id,phase,producer"],
   stall_detections: ["u:validation_run_id"],
-  stall_detection_agent_invocations: [
-    "pk:stall_detection_id,agent_invocation_id",
-    "u:agent_invocation_id",
-  ],
   stall_detection_attempts: ["u:validation_run_id"],
-  stall_detection_attempt_invocations: [
-    "pk:stall_detection_attempt_id,agent_invocation_id",
-    "u:agent_invocation_id",
-  ],
   stall_detection_run_invocations: ["pk:validation_run_id,agent_invocation_id"],
 } as const;
 
@@ -381,7 +353,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       const tables = objects.filter((object) => object.type === "table");
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
-      expect(tables).toHaveLength(23);
+      expect(tables).toHaveLength(21);
 
       const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
         sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),
@@ -517,8 +489,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
             (table) =>
               table.name !== "agent_invocations" &&
               table.name !== "stall_detections" &&
-              table.name !== "stall_detection_attempts" &&
-              table.name !== "stall_detection_attempt_invocations",
+              table.name !== "stall_detection_attempts",
           )
           .every((table) => !table.sql?.match(/created_at|updated_at|closed_at|round_number/)),
       ).toBe(true);
@@ -763,7 +734,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
           SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id
         `,
       );
-      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
+      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
     }),
   ),
 );

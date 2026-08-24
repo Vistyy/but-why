@@ -1645,7 +1645,7 @@ describe("Change Submit orchestration", () => {
           "inspect Stall Detection Submit fixture",
           (sql) =>
             sql<{ readonly count: number }>`
-              SELECT COUNT(*) AS count FROM stall_detection_agent_invocations
+              SELECT COUNT(*) AS count FROM stall_detection_run_invocations
               WHERE validation_run_id = ${ids.validationRunId}
             `,
         );

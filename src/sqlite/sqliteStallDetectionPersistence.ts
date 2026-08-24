@@ -1,6 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 import { resolvedReviewerPiAgentProfileSchema } from "../agent/agentProfiles.js";
+import { settleUnsettledAgentInvocations } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentInvocationPersistenceRow } from "../agent/agentSession/agentInvocationPersistenceCodec.js";
 import { decodeAgentInvocation } from "../agent/agentSession/agentInvocationPersistenceCodec.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
@@ -35,6 +36,10 @@ export const openSqliteStallDetectionPersistence = () =>
           INSERT INTO stall_detection_run_invocations (validation_run_id, agent_invocation_id)
           VALUES (${validationRunId}, ${invocationId})
         `.pipe(Effect.asVoid),
+      recoverDispatchedInvocations: (validationRunId, now) =>
+        repository.transactionImmediate("recover Stall Detection Invocations", (sql) =>
+          recoverDispatchedInvocations(sql, validationRunId, now),
+        ),
       getAttemptByValidationRun: (validationRunId) =>
         repository.transaction("read Stall Detection attempt", (sql) =>
           getAttemptByValidationRun(sql, validationRunId),
@@ -61,6 +66,25 @@ export const openSqliteStallDetectionPersistence = () =>
         ),
     }),
   );
+
+const recoverDispatchedInvocations = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  now: string,
+) =>
+  Effect.gen(function* () {
+    const linked = yield* sql<{ readonly invocationId: number }>`
+      SELECT agent_invocation_id AS invocationId
+      FROM stall_detection_run_invocations
+      WHERE validation_run_id = ${validationRunId}
+    `;
+    yield* settleUnsettledAgentInvocations(
+      sql,
+      linked.map(({ invocationId }) => invocationId),
+      now,
+      "Stall Detection recovery confirmed that the assessor process stopped before settlement.",
+    );
+  }).pipe(Effect.asVoid);
 
 const getTerminalAttemptByValidationRun = (sql: SqlClient.SqlClient, validationRunId: number) =>
   Effect.gen(function* () {
@@ -279,13 +303,6 @@ const recordStallDetectionAttempt = (
     const attemptId = inserted[0]?.id;
     if (attemptId === undefined)
       return yield* invalid("record Stall Detection attempt", "Identity was not allocated");
-    for (const invocationId of input.invocationIds) {
-      yield* sql`
-        INSERT INTO stall_detection_attempt_invocations (
-          stall_detection_attempt_id, validation_run_id, agent_invocation_id
-        ) VALUES (${attemptId}, ${input.assessmentInput.triggeringValidationRunId}, ${invocationId})
-      `;
-    }
     return input.diagnostic;
   });
 
@@ -342,13 +359,6 @@ const recordStallDetection = (
     const detectionId = inserted[0]?.id;
     if (detectionId === undefined)
       return yield* invalid("record Stall Detection", "Identity was not allocated");
-    for (const invocationId of input.invocationIds) {
-      yield* sql`
-        INSERT INTO stall_detection_agent_invocations (
-          stall_detection_id, validation_run_id, agent_invocation_id
-        ) VALUES (${detectionId}, ${input.assessmentInput.triggeringValidationRunId}, ${invocationId})
-      `;
-    }
     if (input.assessment.decision === "stop") {
       yield* sql`
         INSERT INTO implementation_blockers (

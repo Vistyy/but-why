@@ -70,6 +70,10 @@ export const makeStallDetectionService = (input: {
         assessmentInput.validationRunId,
       );
       if (previousAttempt !== undefined) {
+        yield* input.persistence.recoverDispatchedInvocations(
+          assessmentInput.validationRunId,
+          assessmentInput.now,
+        );
         return { attempted: true, diagnostic: previousAttempt } as const;
       }
       const source = yield* input.persistence.getAssessmentInput(

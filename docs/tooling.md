@@ -37,6 +37,13 @@ Candidate source and package artifacts execute only in disposable test repositor
 Package contract tests own installed runtime behavior, packaged resources, and Repo Config behavior.
 Candidate code must not open live Shared Repository State.
 
+### Migration development
+
+A migration becomes immutable when the Change that introduces it merges to `main`.
+Until then, revise or remove that Change's migrations as its persistence design changes instead of appending migrations that only correct its earlier Candidate schema.
+Candidate tests use disposable Shared Repository State and must recreate that state after an introduced migration is revised.
+After merge, preserve every merged migration and express later schema changes through new ordered migrations.
+
 Change Start reads Repo Config and referenced repository reviewer instructions directly from the exact starting Change Base and stores the complete immutable Change policy.
 Change Submit uses that stored policy and treats Candidate Repo Config as Candidate content rather than judgment authority.
 
