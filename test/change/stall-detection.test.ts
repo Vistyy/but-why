@@ -8,10 +8,11 @@ import type {
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import { makeStallDetectionService } from "../../src/change/runStallDetection.js";
-import type {
-  StallDetectionAssessmentInput,
-  StallDetectionPersistence,
-  StallDetectionRecord,
+import {
+  toStallDetectionFinding,
+  type StallDetectionAssessmentInput,
+  type StallDetectionPersistence,
+  type StallDetectionRecord,
 } from "../../src/change/stallDetection.js";
 
 const profile = {
@@ -37,6 +38,23 @@ const assessmentInput: StallDetectionAssessmentInput = {
     ],
   })),
 };
+
+it("removes Validation Run identities from Stall Detection Findings", () => {
+  const sanitized = toStallDetectionFinding({
+    validationRunId: 123,
+    phase: "acceptance_review",
+    producer: "acceptance",
+    title: "Finding",
+    description: "The accepted outcome is not established.",
+    evidence: "Evidence",
+    files: [],
+    artifactRefs: ["artifact:123/checks/quality/execution.json"],
+  });
+
+  expect(sanitized).not.toHaveProperty("validationRunId");
+  expect(sanitized).not.toHaveProperty("artifactRefs");
+  expect(JSON.stringify(sanitized)).not.toContain("artifact:123");
+});
 
 const invocation = {
   id: 17,

@@ -5,10 +5,20 @@ import type { ValidationRunFindingRecord } from "./validationRun/validationRun.j
 
 export type StallDetectionDecision = "continue" | "stop";
 
-export type StallDetectionFinding = Omit<ValidationRunFindingRecord, "validationRunId">;
+export type StallDetectionFinding = Omit<
+  ValidationRunFindingRecord,
+  "validationRunId" | "artifactRefs"
+>;
 
 export type StallDetectionRunInput = {
   readonly findings: readonly StallDetectionFinding[];
+};
+
+export const toStallDetectionFinding = (
+  finding: ValidationRunFindingRecord,
+): StallDetectionFinding => {
+  const { validationRunId: _validationRunId, artifactRefs: _artifactRefs, ...sanitized } = finding;
+  return sanitized;
 };
 
 export type StallDetectionAssessmentInput = {

@@ -1,9 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type {
-  StallDetectionAssessmentInput,
-  StallDetectionPersistence,
+import {
+  type StallDetectionAssessmentInput,
+  type StallDetectionPersistence,
+  toStallDetectionFinding,
 } from "../change/stallDetection.js";
 import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -105,7 +106,7 @@ const getAssessmentInput = (
           (finding) =>
             finding.phase === "acceptance_review" || finding.phase === "specialist_review",
         )
-        .map(({ validationRunId: _validationRunId, ...finding }) => finding);
+        .map(toStallDetectionFinding);
       if (reviewerFindings.length > 0) {
         qualifyingRuns.push({ findings: reviewerFindings });
         if (run.id === validationRunId) triggerQualifies = true;
