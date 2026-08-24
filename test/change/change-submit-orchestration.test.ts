@@ -5,6 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
+import { shellQuote } from "../../src/agent/agentEnvironment.js";
 import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
@@ -1562,12 +1563,20 @@ describe("Change Submit orchestration", () => {
         const stallProvider = join(process.cwd(), "test/fixtures/pi/stall-detection-provider.mjs");
         const reviewerExecutor: ReviewerProcessExecutor = createPiReviewerProcessExecutor((input) =>
           Effect.sync(() => {
+            const args = [
+              "--extension",
+              stallProvider,
+              ...(input.args ?? [])
+                .filter((argument) => argument !== "--no-extensions")
+                .map((argument, index, all) =>
+                  index > 0 && all[index - 1] === "--model"
+                    ? "by-why-test/deterministic-stall-detector"
+                    : argument,
+                ),
+            ];
             const process = runTestProcess(
               "sh",
-              [
-                "-c",
-                `exec pi --extension ${JSON.stringify(stallProvider)} -p --mode json --model by-why-test/deterministic-stall-detector --no-session`,
-              ],
+              ["-c", `exec ${shellQuote(input.command)} ${args.map(shellQuote).join(" ")}`],
               {
                 cwd: input.cwd ?? repositoryRoot,
                 env: { PI_OFFLINE: "1" },
