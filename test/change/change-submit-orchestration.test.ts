@@ -1833,7 +1833,9 @@ const dependencies = (input: {
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
     executionLock: input.executionLock ?? { withLock: ({ effect }) => effect },
-    ...(input.stallDetection === undefined ? {} : { stallDetection: input.stallDetection }),
+    stallDetection: input.stallDetection ?? {
+      assess: () => Effect.succeed({ attempted: false as const }),
+    },
   };
 };
 

@@ -171,7 +171,7 @@ export const openChangeSubmit = (dependencies: {
   ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
   readonly executionLock: ExecutionLock;
-  readonly stallDetection?: StallDetectionService;
+  readonly stallDetection: StallDetectionService;
 }): CandidateValidationChangeSubmit => ({
   submit: (input) =>
     dependencies.executionLock
@@ -484,35 +484,33 @@ const blockedValidationResult = (
     if (
       validation.outcome === "blocked" &&
       change.acceptanceContext !== null &&
-      change.policy.stallDetection?.enabled
+      change.policy.stallDetection.enabled
     ) {
       const profile = change.policy.stallDetection.profile;
       if (profile === null) {
         return yield* Effect.dieMessage("Enabled Stall Detection has no Agent Profile");
       }
-      if (dependencies.stallDetection !== undefined) {
-        const detected = yield* dependencies.stallDetection.assess({
-          changeId: change.id,
-          validationRunId: validation.validationRunId,
-          configuration: profile,
-          now: validation.now,
-        });
-        if (detected.attempted && "record" in detected && detected.record.decision === "stop") {
-          return { ok: false, code: "change_blocked" } as const;
-        }
-        const findings = yield* candidateValidation.listFindings(validation.validationRunId);
-        return {
-          ok: false,
-          code: "validation_findings",
-          changeId: change.id,
-          candidateId: candidate.candidateId,
-          validationRunId: validation.validationRunId,
-          findings,
-          ...(detected.attempted && "diagnostic" in detected
-            ? { stallDetection: detected.diagnostic }
-            : {}),
-        } as const;
+      const detected = yield* dependencies.stallDetection.assess({
+        changeId: change.id,
+        validationRunId: validation.validationRunId,
+        configuration: profile,
+        now: validation.now,
+      });
+      if (detected.attempted && "record" in detected && detected.record.decision === "stop") {
+        return { ok: false, code: "change_blocked" } as const;
       }
+      const findings = yield* candidateValidation.listFindings(validation.validationRunId);
+      return {
+        ok: false,
+        code: "validation_findings",
+        changeId: change.id,
+        candidateId: candidate.candidateId,
+        validationRunId: validation.validationRunId,
+        findings,
+        ...(detected.attempted && "diagnostic" in detected
+          ? { stallDetection: detected.diagnostic }
+          : {}),
+      } as const;
     }
     return validation.outcome === "blocked"
       ? {

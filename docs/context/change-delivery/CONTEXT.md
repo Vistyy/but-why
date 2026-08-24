@@ -170,7 +170,7 @@ _Avoid_: reviewer attempt, cumulative session usage, reviewer outcome
 
 **Agent Session Configuration**:
 The resolved Pi harness, provider, model, and thinking configuration fixed for an Agent Session.
-A Task stores its resolved Task Reviewer configuration atomically with the first linked Invocation, and Change Start stores its resolved reviewer roster before implementation.
+A Task stores its resolved Task Reviewer configuration atomically with the first linked Invocation, and Change Start stores its resolved reviewer roster and enabled Stall Detector configuration before implementation.
 Later configuration changes do not alter these stored facts.
 _Avoid_: current Repo Config, Agent Profile name alone, prompt
 

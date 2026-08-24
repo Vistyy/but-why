@@ -74,7 +74,7 @@ But Why freezes it in Shared Repository State and derives Task IDs as `<id-prefi
 `agentEnvironment.command` is an optional non-empty argument list for headless reviewers.
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
-`review` selects Task Review policy, Acceptance Review policy, and Specialists.
+`review` selects Task Review policy, Acceptance Review policy, Specialists, and Stall Detection policy.
 `reviewers` supplies Specialist instruction files.
 `agentProfiles` supplies Repo Agent Profiles.
 

@@ -1,8 +1,8 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 import { resolvedReviewerPiAgentProfileSchema } from "../agent/agentProfiles.js";
-import type { AgentInvocationPersistenceRow } from "../agent/agentSession/adapters/sqlite/sqliteAgentInvocationCodec.js";
-import { decodeAgentInvocation } from "../agent/agentSession/adapters/sqlite/sqliteAgentInvocationCodec.js";
+import type { AgentInvocationPersistenceRow } from "../agent/agentSession/agentInvocationPersistenceCodec.js";
+import { decodeAgentInvocation } from "../agent/agentSession/agentInvocationPersistenceCodec.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type {
   StallDetectionAssessmentInput,
@@ -450,37 +450,71 @@ const readStallDetection = (sql: SqlClient.SqlClient, validationRunId: number, i
     });
   });
 
-const decodeAssessmentInput = (value: unknown): StallDetectionAssessmentInput => {
-  if (typeof value !== "object" || value === null) {
-    throw new Error("Stall Detection input is not an object");
-  }
-  const input = value as {
-    readonly changeId?: unknown;
-    readonly triggeringValidationRunId?: unknown;
-    readonly acceptanceContext?: unknown;
-    readonly qualifyingRuns?: unknown;
-    readonly blockerHistory?: unknown;
-  };
-  if (
-    typeof input.changeId !== "string" ||
-    !Number.isSafeInteger(input.triggeringValidationRunId) ||
-    !Array.isArray(input.qualifyingRuns) ||
-    typeof input.blockerHistory !== "object" ||
-    input.blockerHistory === null
-  ) {
-    throw new Error("Stall Detection input shape is invalid");
-  }
-  const acceptanceContext = Schema.decodeUnknownSync(acceptanceContextSnapshotSchema)(
-    input.acceptanceContext,
-  );
-  return {
-    changeId: input.changeId as string,
-    triggeringValidationRunId: input.triggeringValidationRunId as number,
-    acceptanceContext,
-    qualifyingRuns: input.qualifyingRuns as StallDetectionAssessmentInput["qualifyingRuns"],
-    blockerHistory: input.blockerHistory as StallDetectionAssessmentInput["blockerHistory"],
-  };
-};
+const positiveIntegerSchema = Schema.Number.pipe(
+  Schema.filter((value) => Number.isSafeInteger(value) && value > 0, {
+    message: () => "Expected a positive safe integer",
+  }),
+);
+
+const nonBlankStringSchema = Schema.String.pipe(
+  Schema.filter((value) => value.trim().length > 0, {
+    message: () => "Expected a non-blank string",
+  }),
+);
+
+const findingSchema = Schema.Struct({
+  validationRunId: positiveIntegerSchema,
+  phase: Schema.Literal("prepare", "checks", "acceptance_review", "specialist_review"),
+  producer: nonBlankStringSchema,
+  title: nonBlankStringSchema,
+  description: Schema.String,
+  evidence: Schema.String,
+  files: Schema.Array(Schema.String),
+  artifactRefs: Schema.Array(Schema.String),
+});
+
+const blockerResolutionSchema = Schema.Struct({
+  blockerId: positiveIntegerSchema,
+  content: nonBlankStringSchema,
+});
+
+const blockerSchema = Schema.Struct({
+  id: positiveIntegerSchema,
+  changeId: nonBlankStringSchema,
+  content: nonBlankStringSchema,
+  source: Schema.Union(
+    Schema.Struct({ type: Schema.Literal("implementer") }),
+    Schema.Struct({
+      type: Schema.Literal("stall_detection"),
+      stallDetectionId: positiveIntegerSchema,
+    }),
+  ),
+  resolution: Schema.NullOr(blockerResolutionSchema),
+});
+
+const blockerHistorySchema = Schema.Struct({
+  blockers: Schema.Array(blockerSchema),
+  resolutions: Schema.Array(blockerResolutionSchema),
+  active: Schema.NullOr(blockerSchema),
+});
+
+const qualifyingRunSchema = Schema.Struct({
+  validationRunId: positiveIntegerSchema,
+  acceptanceContext: Schema.NullOr(acceptanceContextSnapshotSchema),
+  resolutionPrefix: Schema.Array(Schema.String),
+  findings: Schema.Array(findingSchema),
+});
+
+const assessmentInputSchema = Schema.Struct({
+  changeId: nonBlankStringSchema,
+  triggeringValidationRunId: positiveIntegerSchema,
+  acceptanceContext: acceptanceContextSnapshotSchema,
+  qualifyingRuns: Schema.Array(qualifyingRunSchema),
+  blockerHistory: blockerHistorySchema,
+});
+
+const decodeAssessmentInput = (value: unknown): StallDetectionAssessmentInput =>
+  Schema.decodeUnknownSync(assessmentInputSchema, { onExcessProperty: "error" })(value);
 
 const stallBlockerContent = (reason: string, validationRunId: number) =>
   `Stall Detector stopped this Change after Validation Run ${validationRunId} and requests Operator direction. ${reason}`;

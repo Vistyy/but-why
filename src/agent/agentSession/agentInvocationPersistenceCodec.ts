@@ -3,7 +3,7 @@ import type {
   AgentInvocationRecord,
   AgentInvocationSettlement,
   AgentSessionConfiguration,
-} from "../../agentSession.js";
+} from "./agentSession.js";
 
 const positiveIntegerMax = 9_007_199_254_740_991;
 

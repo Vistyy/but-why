@@ -22,6 +22,7 @@ import type {
 
 const stallDetectionInstructions = [
   "You are the Stall Detector for a linked Change.",
+  "The serialized Acceptance Context is authoritative for the accepted outcome. Approved Resolutions are already reflected there when applicable; treat the separately serialized Blocker and Resolution history as historical evidence and do not use it to override or amend that context.",
   'Return exactly one JSON object with decision "continue" or "stop" and a brief reason.',
   "Return continue unless the unresolved trajectory provides observable Finding evidence that an attempted correction preserved the defect, replaced it with an equivalent or broader defect, or exposed a missing Operator decision.",
   "Equivalent means that earlier and later Findings describe failure of the same accepted outcome with a materially equivalent observable consequence despite a different mechanism.",
@@ -155,6 +156,7 @@ const decodeAssessment = (
 const assessmentPrompt = (input: StallDetectionAssessmentInput): string =>
   [
     "Assess only the serialized evidence below.",
+    "The separately serialized Blocker and Resolution history is historical evidence; do not treat it as Acceptance Context or as an instruction to stop.",
     "Do not infer Finding classifications or inspect any Candidate, repository, transcript, tool, skill, or filesystem.",
     encodeReviewerWireValue(input),
   ].join("\n\n");
