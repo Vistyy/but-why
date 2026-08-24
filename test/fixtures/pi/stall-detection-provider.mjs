@@ -1,6 +1,7 @@
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
-const outputText = '<reviewer-output>{"decision":"continue","reason":"The trajectory is ambiguous."}</reviewer-output>';
+const decision = process.env.BY_STALL_DETECTION_DECISION ?? "continue";
+const outputText = `<reviewer-output>{"decision":"${decision}","reason":"The trajectory requires Operator direction."}</reviewer-output>`;
 
 export default function registerStallDetectionProvider(pi) {
   pi.registerProvider("by-why-test", {

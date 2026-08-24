@@ -1470,32 +1470,34 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("records a normal Stall Detection through Submit and SQLite persistence", () =>
-    withTemporaryRepositoryState(({ repositoryRoot }) =>
-      Effect.gen(function* () {
-        const repository = yield* RepositorySql;
-        const acceptanceContext = {
-          version: 1 as const,
-          title: "Approved intent",
-          description: "Deliver it",
-        };
-        const policy = readyChange({
-          id: "BY-C1",
-          acceptanceContext,
-          policy: {
-            reviewerConfiguration: {
-              acceptanceReview: storedAcceptanceReviewer,
-              specialistReviews: [],
+  it.effect(
+    "records and retries a stop Stall Detection through Submit and SQLite persistence",
+    () =>
+      withTemporaryRepositoryState(({ repositoryRoot }) =>
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          const acceptanceContext = {
+            version: 1 as const,
+            title: "Approved intent",
+            description: "Deliver it",
+          };
+          const policy = readyChange({
+            id: "BY-C1",
+            acceptanceContext,
+            policy: {
+              reviewerConfiguration: {
+                acceptanceReview: storedAcceptanceReviewer,
+                specialistReviews: [],
+              },
+              stallDetection: { enabled: true, profile: storedAcceptanceReviewer.profile },
+              prepare: null,
+              checks: changeWithoutTaskPolicy.checks,
             },
-            stallDetection: { enabled: true, profile: storedAcceptanceReviewer.profile },
-            prepare: null,
-            checks: changeWithoutTaskPolicy.checks,
-          },
-        });
-        const reviewerConfiguration = JSON.stringify(policy.policy.reviewerConfiguration);
-        const ids = yield* repository.operation("create Stall Detection Submit fixture", (sql) =>
-          Effect.gen(function* () {
-            const change = yield* sql<{ readonly id: number }>`
+          });
+          const reviewerConfiguration = JSON.stringify(policy.policy.reviewerConfiguration);
+          const ids = yield* repository.operation("create Stall Detection Submit fixture", (sql) =>
+            Effect.gen(function* () {
+              const change = yield* sql<{ readonly id: number }>`
               INSERT INTO changes (
                 branch_ref, base_ref, base_remote_url, worktree_path,
                 initial_acceptance_context, reviewer_configuration,
@@ -1507,32 +1509,32 @@ describe("Change Submit orchestration", () => {
                 NULL, ${JSON.stringify(changeWithoutTaskPolicy.checks)}, 0
               ) RETURNING id
             `;
-            const changeId = change[0]?.id;
-            if (changeId === undefined) return yield* Effect.dieMessage("Change was not created");
-            const candidates: number[] = [];
-            for (let index = 0; index < 3; index += 1) {
-              const candidateRows = yield* sql<{ readonly id: number }>`
+              const changeId = change[0]?.id;
+              if (changeId === undefined) return yield* Effect.dieMessage("Change was not created");
+              const candidates: number[] = [];
+              for (let index = 0; index < 3; index += 1) {
+                const candidateRows = yield* sql<{ readonly id: number }>`
                 INSERT INTO candidates (change_id, base_commit, head_commit)
                 VALUES (${changeId}, 'base', ${`head-${index}`}) RETURNING id
               `;
-              const candidateId = candidateRows[0]?.id;
-              if (candidateId === undefined)
-                return yield* Effect.dieMessage("Candidate was not created");
-              candidates.push(candidateId);
-            }
-            const runs: number[] = [];
-            for (const candidateId of candidates) {
-              const runRows = yield* sql<{ readonly id: number }>`
+                const candidateId = candidateRows[0]?.id;
+                if (candidateId === undefined)
+                  return yield* Effect.dieMessage("Candidate was not created");
+                candidates.push(candidateId);
+              }
+              const runs: number[] = [];
+              for (const candidateId of candidates) {
+                const runRows = yield* sql<{ readonly id: number }>`
                 INSERT INTO validation_runs (
                   candidate_id, validation_input_snapshot, outcome, cleanup_pending
                 ) VALUES (
                   ${candidateId}, ${JSON.stringify({ acceptanceContext })}, 'blocked', 0
                 ) RETURNING id
               `;
-              const runId = runRows[0]?.id;
-              if (runId === undefined) return yield* Effect.dieMessage("Run was not created");
-              runs.push(runId);
-              yield* sql`
+                const runId = runRows[0]?.id;
+                if (runId === undefined) return yield* Effect.dieMessage("Run was not created");
+                runs.push(runId);
+                yield* sql`
                 INSERT INTO validation_phase_results (
                   validation_run_id, phase, producer, outcome, findings, artifacts
                 ) VALUES (
@@ -1548,110 +1550,136 @@ describe("Change Submit orchestration", () => {
                   ])}, '[]'
                 )
               `;
-            }
-            return { candidateId: candidates[2] as number, validationRunId: runs[2] as number };
-          }),
-        );
-        const stallDetection = yield* openSqliteStallDetectionPersistence();
-        const agentPersistence = yield* openSqliteAgentSessionPersistence();
-        const piSmoke = runTestProcess(
-          "sh",
-          [
-            "-c",
-            `exec pi --extension ${JSON.stringify(join(process.cwd(), "test/fixtures/pi/deterministic-provider.mjs"))} -p --mode json --model but-why-test/deterministic-reviewer --no-session`,
-          ],
-          { cwd: repositoryRoot, env: { PI_OFFLINE: "1" }, input: "hello", timeout: 30_000 },
-        );
-        expect(piSmoke.status, piSmoke.stderr).toBe(0);
-        const stallProvider = join(process.cwd(), "test/fixtures/pi/stall-detection-provider.mjs");
-        const reviewerExecutor: ReviewerProcessExecutor = createPiReviewerProcessExecutor((input) =>
-          Effect.sync(() => {
-            const args = [
-              "--extension",
-              stallProvider,
-              ...(input.args ?? [])
-                .filter((argument) => argument !== "--no-extensions")
-                .map((argument, index, all) =>
-                  index > 0 && all[index - 1] === "--model"
-                    ? "by-why-test/deterministic-stall-detector"
-                    : argument,
-                ),
-            ];
-            const process = runTestProcess(
-              "sh",
-              ["-c", `exec ${shellQuote(input.command)} ${args.map(shellQuote).join(" ")}`],
-              {
-                cwd: input.cwd ?? repositoryRoot,
-                env: { PI_OFFLINE: "1" },
-                ...(input.stdin === undefined ? {} : { input: input.stdin }),
-                timeout: 30_000,
-              },
-            );
-            if (process.error) throw process.error;
-            return {
-              exitCode: process.status ?? 1,
-              stdout: process.stdout,
-              stderr: process.stderr,
-            };
-          }),
-        );
-        const service = makeStallDetectionService({
-          persistence: stallDetection,
-          agentPersistence,
-          runtime: piReviewerAgentRuntime as ReviewerAgentRuntime<StallDetectionAssessment>,
-          reviewerExecutor,
-          sessionStorageRoot: repositoryRoot,
-        });
-        const submit = openChangeSubmit(
-          dependencies({
-            change: policy,
-            stallDetection: service,
-            captureResult: {
-              ...candidate,
-              changeId: policy.id,
-              candidateId: ids.candidateId,
-            },
-          }),
-        );
-        const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
-          validateAcceptanceContextCandidate: () =>
-            Effect.succeed({
-              ok: true,
-              reused: false,
-              validationRunId: ids.validationRunId,
-              outcome: "blocked" as const,
+              }
+              return {
+                changeId,
+                candidateId: candidates[2] as number,
+                validationRunId: runs[2] as number,
+              };
             }),
-          listFindings: () => Effect.succeed([finding]),
-          listToolingFailures: () => Effect.succeed([]),
-          listPhaseResults: () => Effect.succeed([]),
-        });
-        const result = yield* submit
-          .submit({ changeId: policy.id, now })
-          .pipe(Effect.provide(validationLayer));
-        expect(result).toMatchObject({
-          ok: false,
-          code: "validation_findings",
-          validationRunId: ids.validationRunId,
-        });
-        const record = yield* stallDetection.getByValidationRun(ids.validationRunId);
-        expect(record).toMatchObject({
-          changeId: policy.id,
-          validationRunId: ids.validationRunId,
-          decision: "continue",
-          blockerId: null,
-        });
-        const invocationCount = yield* repository.operation(
-          "inspect Stall Detection Submit fixture",
-          (sql) =>
-            sql<{ readonly count: number }>`
-              SELECT COUNT(*) AS count FROM stall_detection_run_invocations
-              WHERE validation_run_id = ${ids.validationRunId}
+          );
+          const stallDetection = yield* openSqliteStallDetectionPersistence();
+          const agentPersistence = yield* openSqliteAgentSessionPersistence();
+          const piSmoke = runTestProcess(
+            "sh",
+            [
+              "-c",
+              `exec pi --extension ${JSON.stringify(join(process.cwd(), "test/fixtures/pi/deterministic-provider.mjs"))} -p --mode json --model but-why-test/deterministic-reviewer --no-session`,
+            ],
+            { cwd: repositoryRoot, env: { PI_OFFLINE: "1" }, input: "hello", timeout: 30_000 },
+          );
+          expect(piSmoke.status, piSmoke.stderr).toBe(0);
+          const stallProvider = join(
+            process.cwd(),
+            "test/fixtures/pi/stall-detection-provider.mjs",
+          );
+          const decision = "stop" as const;
+          const reviewerExecutor: ReviewerProcessExecutor = createPiReviewerProcessExecutor(
+            (input) =>
+              Effect.sync(() => {
+                const args = [
+                  "--extension",
+                  stallProvider,
+                  ...(input.args ?? [])
+                    .filter((argument) => argument !== "--no-extensions")
+                    .map((argument, index, all) =>
+                      index > 0 && all[index - 1] === "--model"
+                        ? "by-why-test/deterministic-stall-detector"
+                        : argument,
+                    ),
+                ];
+                const process = runTestProcess(
+                  "sh",
+                  ["-c", `exec ${shellQuote(input.command)} ${args.map(shellQuote).join(" ")}`],
+                  {
+                    cwd: input.cwd ?? repositoryRoot,
+                    env: { PI_OFFLINE: "1", BY_STALL_DETECTION_DECISION: decision },
+                    ...(input.stdin === undefined ? {} : { input: input.stdin }),
+                    timeout: 30_000,
+                  },
+                );
+                if (process.error) throw process.error;
+                return {
+                  exitCode: process.status ?? 1,
+                  stdout: process.stdout,
+                  stderr: process.stderr,
+                };
+              }),
+          );
+          const service = makeStallDetectionService({
+            persistence: stallDetection,
+            agentPersistence,
+            runtime: piReviewerAgentRuntime as ReviewerAgentRuntime<StallDetectionAssessment>,
+            reviewerExecutor,
+            sessionStorageRoot: repositoryRoot,
+          });
+          const submit = openChangeSubmit(
+            dependencies({
+              change: policy,
+              stallDetection: service,
+              captureResult: {
+                ...candidate,
+                changeId: policy.id,
+                candidateId: ids.candidateId,
+              },
+            }),
+          );
+          const validationLayer = Layer.succeed(CandidateValidation, {
+            validateCandidate: () =>
+              Effect.die("Change without a Task validation was not expected"),
+            validateAcceptanceContextCandidate: () =>
+              Effect.succeed({
+                ok: true,
+                reused: false,
+                validationRunId: ids.validationRunId,
+                outcome: "blocked" as const,
+              }),
+            listFindings: () => Effect.succeed([finding]),
+            listToolingFailures: () => Effect.succeed([]),
+            listPhaseResults: () => Effect.succeed([]),
+          });
+          const result = yield* submit
+            .submit({ changeId: policy.id, now })
+            .pipe(Effect.provide(validationLayer));
+          expect(result).toEqual({ ok: false, code: "change_blocked" });
+          const record = yield* stallDetection.getByValidationRun(ids.validationRunId);
+          expect(record).toMatchObject({
+            changeId: policy.id,
+            validationRunId: ids.validationRunId,
+            decision: "stop",
+          });
+          expect(record?.blockerId).toEqual(expect.any(Number));
+          const blocker = yield* repository.operation(
+            "inspect Stall Detection blocker",
+            (sql) =>
+              sql<{ readonly sourceType: string; readonly sourceId: number | null }>`
+              SELECT source_type AS sourceType, source_id AS sourceId
+              FROM implementation_blockers
+              WHERE change_id = ${ids.changeId}
             `,
-        );
-        expect(invocationCount[0]?.count).toBe(1);
-      }),
-    ),
+          );
+          expect(blocker).toEqual([{ sourceType: "stall_detection", sourceId: record?.id }]);
+          const retry = yield* submit
+            .submit({ changeId: policy.id, now })
+            .pipe(Effect.provide(validationLayer));
+          expect(retry).toEqual({ ok: false, code: "change_blocked" });
+          const counts = yield* repository.operation(
+            "inspect Stall Detection retry idempotency",
+            (sql) =>
+              sql<{
+                readonly detections: number;
+                readonly invocations: number;
+                readonly blockers: number;
+              }>`
+              SELECT
+                (SELECT COUNT(*) FROM stall_detections WHERE validation_run_id = ${ids.validationRunId}) AS detections,
+                (SELECT COUNT(*) FROM stall_detection_run_invocations WHERE validation_run_id = ${ids.validationRunId}) AS invocations,
+                (SELECT COUNT(*) FROM implementation_blockers WHERE change_id = ${ids.changeId} AND source_type = 'stall_detection') AS blockers
+            `,
+          );
+          expect(counts).toEqual([{ detections: 1, invocations: 1, blockers: 1 }]);
+        }),
+      ),
   );
 
   it.effect("returns Tooling Failures", () =>

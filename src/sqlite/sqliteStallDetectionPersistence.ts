@@ -220,7 +220,10 @@ const getAssessmentInput = (
       qualifying.push({
         validationRunId: row.id,
         acceptanceContext: context,
-        resolutionPrefix: prefixes.resolutions.map((resolution) => resolution.content),
+        resolutionPrefix: [
+          ...(context?.resolutions ?? []),
+          ...prefixes.resolutions.map((resolution) => resolution.content),
+        ],
         findings: reviewerFindings,
       });
     }
