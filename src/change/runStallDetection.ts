@@ -15,7 +15,6 @@ import {
 import type { ReviewerProcessExecutor } from "../agent/reviewerExecution.js";
 import { encodeReviewerWireValue } from "../agent/reviewerOutputWire.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { StallDetectionProfile } from "./stallDetectionConfig.js";
 import type {
   StallDetectionAssessment,
   StallDetectionAssessmentInput,
@@ -23,6 +22,7 @@ import type {
   StallDetectionPersistence,
   StallDetectionRecord,
 } from "./stallDetection.js";
+import type { StallDetectionProfile } from "./stallDetectionConfig.js";
 
 const stallDetectionInstructions = [
   "You are the Stall Detector for a linked Change.",

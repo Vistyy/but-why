@@ -9,10 +9,10 @@ import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js"
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import { makeStallDetectionService } from "../../src/change/runStallDetection.js";
 import {
-  toStallDetectionFinding,
   type StallDetectionAssessmentInput,
   type StallDetectionPersistence,
   type StallDetectionRecord,
+  toStallDetectionFinding,
 } from "../../src/change/stallDetection.js";
 
 const profile = {

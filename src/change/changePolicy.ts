@@ -8,7 +8,7 @@ import {
   encodeSqliteChangeReviewerConfiguration,
 } from "./changeReviewerConfiguration.js";
 import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";
-import { stallDetectionProfileSchema, type StallDetectionProfile } from "./stallDetectionConfig.js";
+import { type StallDetectionProfile, stallDetectionProfileSchema } from "./stallDetectionConfig.js";
 
 export type ChangeReviewerConfiguration = {
   readonly acceptanceReview: AcceptanceReviewPolicy | null;
