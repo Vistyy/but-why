@@ -262,6 +262,7 @@ describe("Change Start Managed Worktree boundaries", () => {
           description: "Start approved work.\n",
         },
         policy: {
+          stallDetection: { enabled: false, profile: null },
           reviewerConfiguration: {
             acceptanceReview: {
               instructions: defaultAcceptanceInstructions,
