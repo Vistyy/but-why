@@ -62,7 +62,7 @@ export const openSqliteStallDetectionPersistence = () =>
     }),
   );
 
-const getAttemptByValidationRun = (sql: SqlClient.SqlClient, validationRunId: number) =>
+const getTerminalAttemptByValidationRun = (sql: SqlClient.SqlClient, validationRunId: number) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly diagnostic: string }>`
       SELECT diagnostic FROM stall_detection_attempts
@@ -72,6 +72,22 @@ const getAttemptByValidationRun = (sql: SqlClient.SqlClient, validationRunId: nu
     return diagnostic === undefined
       ? undefined
       : ({ code: "stall_detection_unavailable", message: diagnostic } as const);
+  });
+
+const getAttemptByValidationRun = (sql: SqlClient.SqlClient, validationRunId: number) =>
+  Effect.gen(function* () {
+    const terminal = yield* getTerminalAttemptByValidationRun(sql, validationRunId);
+    if (terminal !== undefined) return terminal;
+    const dispatched = yield* sql<{ readonly count: number }>`
+      SELECT COUNT(*) AS count FROM stall_detection_run_invocations
+      WHERE validation_run_id = ${validationRunId}
+    `;
+    return (dispatched[0]?.count ?? 0) === 0
+      ? undefined
+      : ({
+          code: "stall_detection_unavailable",
+          message: "Stall Detection was dispatched but did not complete.",
+        } as const);
   });
 
 const listForChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
@@ -220,7 +236,7 @@ const recordStallDetectionAttempt = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const existing = yield* getAttemptByValidationRun(
+    const existing = yield* getTerminalAttemptByValidationRun(
       sql,
       input.assessmentInput.triggeringValidationRunId,
     );
@@ -279,7 +295,7 @@ const recordStallDetection = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const attempt = yield* getAttemptByValidationRun(
+    const attempt = yield* getTerminalAttemptByValidationRun(
       sql,
       input.assessmentInput.triggeringValidationRunId,
     );
