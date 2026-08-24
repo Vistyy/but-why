@@ -19,6 +19,7 @@ import type {
   PublishCandidateInput,
   PublishCandidateResult,
 } from "../../src/change/publication/candidatePublication.js";
+import type { StallDetectionService } from "../../src/change/runStallDetection.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
@@ -1367,6 +1368,93 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("runs the enabled Stall Detection after a blocked Validation Run", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      let assessmentInput:
+        | {
+            readonly changeId: string;
+            readonly validationRunId: number;
+          }
+        | undefined;
+      const change = readyChange({
+        acceptanceContext: {
+          version: 1,
+          title: "Approved intent",
+          description: "Deliver it",
+        },
+        policy: {
+          reviewerConfiguration: {
+            acceptanceReview: storedAcceptanceReviewer,
+            specialistReviews: [],
+          },
+          stallDetection: {
+            enabled: true,
+            profile: storedAcceptanceReviewer.profile,
+          },
+          prepare: null,
+          checks: changeWithoutTaskPolicy.checks,
+        },
+      });
+      const stallDetection: StallDetectionService = {
+        assess: (input) => {
+          assessmentInput = input;
+          return Effect.succeed({
+            attempted: true as const,
+            record: {
+              id: 1,
+              changeId: input.changeId,
+              validationRunId: input.validationRunId,
+              agentSessionId: 2,
+              decision: "continue" as const,
+              reason: "The trajectory is ambiguous.",
+              configuration: input.configuration,
+              input: {
+                changeId: input.changeId,
+                triggeringValidationRunId: input.validationRunId,
+                acceptanceContext: {
+                  version: 1,
+                  title: "Approved intent",
+                  description: "Deliver it",
+                },
+                qualifyingRuns: [],
+                blockerHistory: { blockers: [], resolutions: [], active: null },
+              },
+              invocations: [],
+              blockerId: null,
+              createdAt: input.now,
+            },
+          });
+        },
+      };
+      const submit = openChangeSubmit(dependencies({ events, change, stallDetection }));
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
+        validateAcceptanceContextCandidate: () =>
+          Effect.succeed({
+            ok: true,
+            reused: false,
+            validationRunId: 3,
+            outcome: "blocked" as const,
+          }),
+        listFindings: () => Effect.succeed([finding]),
+        listToolingFailures: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toMatchObject({
+        ok: false,
+        code: "validation_findings",
+        validationRunId: 3,
+      });
+      expect(assessmentInput).toMatchObject({ changeId: change.id, validationRunId: 3 });
+    }),
+  );
+
   it.effect("returns Tooling Failures", () =>
     Effect.gen(function* () {
       const change = readyChange({
@@ -1440,6 +1528,7 @@ const dependencies = (input: {
     readonly headSha: string;
   } | null;
   readonly executionLock?: ExecutionLock;
+  readonly stallDetection?: StallDetectionService;
   readonly refreshResults?: readonly RemoteChangeBaseResult[];
   readonly completeMergedInputs?: Array<{ readonly changeId: string; readonly observed: unknown }>;
   readonly targetResult?:
@@ -1545,6 +1634,7 @@ const dependencies = (input: {
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
     executionLock: input.executionLock ?? { withLock: ({ effect }) => effect },
+    ...(input.stallDetection === undefined ? {} : { stallDetection: input.stallDetection }),
   };
 };
 

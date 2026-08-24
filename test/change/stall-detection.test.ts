@@ -6,14 +6,10 @@ import type {
   AgentDispatchResult,
   AgentSessionPersistence,
 } from "../../src/agent/agentSession/agentSession.js";
-import type {
-  ReviewerAgentResult,
-  ReviewerAgentRuntime,
-} from "../../src/agent/reviewerAgentRuntime.js";
+import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import { makeStallDetectionService } from "../../src/change/runStallDetection.js";
 import type {
-  StallDetectionAssessment,
   StallDetectionAssessmentInput,
   StallDetectionPersistence,
   StallDetectionRecord,
@@ -102,27 +98,6 @@ it.effect("runs a bounded serialized Stall Detection with a fresh restricted Pi 
       settleInvocation: () => Effect.void,
       readInvocationHistory: () => Effect.succeed([]),
     };
-    const runtime: ReviewerAgentRuntime<StallDetectionAssessment> = {
-      review: (input): Effect.Effect<ReviewerAgentResult<StallDetectionAssessment>> => {
-        const restrictedProfile = input.profile as ResolvedReviewerPiAgentProfile;
-        observedProfile = restrictedProfile;
-        expect(input.sessionId).toBe("fresh-session");
-        expect(input.resumeSession).toBeUndefined();
-        expect(input.agentEnvironment).toBeUndefined();
-        expect(restrictedProfile.profile.runtimeConfig.extensions).toEqual([]);
-        expect(restrictedProfile.profile.runtimeConfig.skills).toEqual([]);
-        expect(restrictedProfile.profile.runtimeConfig.tools).toEqual([]);
-        expect(restrictedProfile.profile.runtimeConfig.contextFileDiscovery).toBe(false);
-        expect(input.systemPrompt).toContain("Stall Detector");
-        expect(input.prompt).toContain("serialized evidence");
-        return Effect.succeed({
-          ok: true,
-          report: { decision: "continue", reason: "Ambiguous." },
-          attempts: 1,
-          stdout: "{}",
-        });
-      },
-    };
     const persistence: StallDetectionPersistence = {
       getAttemptByValidationRun: () => Effect.succeed(undefined),
       getAssessmentInput: () => Effect.succeed(assessmentInput),
@@ -149,12 +124,28 @@ it.effect("runs a bounded serialized Stall Detection with a fresh restricted Pi 
       },
     };
     const reviewerExecutor: ReviewerProcessExecutor = {
-      execute: () => Effect.die("The fake runtime does not launch a process."),
+      execute: (input) => {
+        const restrictedProfile = input.profile as ResolvedReviewerPiAgentProfile;
+        observedProfile = restrictedProfile;
+        expect(input.sessionId).toBe("fresh-session");
+        expect(input.resumeSession).toBeUndefined();
+        expect(input.agentEnvironment).toBeUndefined();
+        expect(restrictedProfile.profile.runtimeConfig.extensions).toEqual([]);
+        expect(restrictedProfile.profile.runtimeConfig.skills).toEqual([]);
+        expect(restrictedProfile.profile.runtimeConfig.tools).toEqual([]);
+        expect(restrictedProfile.profile.runtimeConfig.contextFileDiscovery).toBe(false);
+        expect(input.systemPrompt).toContain("Stall Detector");
+        expect(input.prompt).toContain("serialized evidence");
+        return Effect.succeed({
+          stdout:
+            '<reviewer-output>{"decision":"continue","reason":"Ambiguous."}</reviewer-output>',
+        });
+      },
     };
     const service = makeStallDetectionService({
       persistence,
       agentPersistence,
-      runtime,
+      runtime: piReviewerAgentRuntime,
       reviewerExecutor,
       sessionStorageRoot: "/sessions",
     });
