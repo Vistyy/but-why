@@ -282,6 +282,7 @@ Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
 Change Start resolves Acceptance Review, Specialist, and enabled Stall Detector profile selections from its Change Base Repo Config, then Global Config, then Global `defaultAgentProfile`.
 Change Start freezes Stall Detection enablement and its resolved Pi model and thinking level in the Change Policy.
+Stall Detection uses only that model and thinking level; configured extensions, skills, tools, and context-file discovery do not apply to the restricted Stall Detector.
 In a published target repository, Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists for user-configured resources.
