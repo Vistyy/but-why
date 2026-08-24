@@ -48,6 +48,9 @@ export type StallDetectionDiagnostic = {
 };
 
 export type StallDetectionPersistence = {
+  readonly getAttemptByValidationRun: (
+    validationRunId: number,
+  ) => EffectResult<StallDetectionDiagnostic | undefined>;
   readonly getAssessmentInput: (
     changeId: string,
     validationRunId: number,
@@ -55,6 +58,13 @@ export type StallDetectionPersistence = {
   readonly getByValidationRun: (
     validationRunId: number,
   ) => EffectResult<StallDetectionRecord | undefined>;
+  readonly recordAttempt: (input: {
+    readonly assessmentInput: StallDetectionAssessmentInput;
+    readonly diagnostic: StallDetectionDiagnostic;
+    readonly agentSessionId: number;
+    readonly invocationIds: readonly number[];
+    readonly now: string;
+  }) => EffectResult<StallDetectionDiagnostic>;
   readonly listForChange: (changeId: string) => EffectResult<readonly StallDetectionRecord[]>;
   readonly record: (input: {
     readonly assessment: StallDetectionAssessment;

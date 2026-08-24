@@ -48,6 +48,25 @@ export const stallDetectionMigration = Effect.gen(function* () {
     ) STRICT
   `);
   yield* sql.unsafe(`
+    CREATE TABLE stall_detection_attempts (
+      id INTEGER PRIMARY KEY CHECK (id BETWEEN 1 AND ${safeIntegerMaximum}),
+      change_id INTEGER NOT NULL REFERENCES changes(id),
+      validation_run_id INTEGER NOT NULL UNIQUE REFERENCES validation_runs(id),
+      agent_session_id INTEGER NOT NULL REFERENCES agent_sessions(id),
+      diagnostic TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      CHECK (length(trim(diagnostic)) > 0)
+    ) STRICT
+  `);
+  yield* sql.unsafe(`
+    CREATE TABLE stall_detection_attempt_invocations (
+      stall_detection_attempt_id INTEGER NOT NULL REFERENCES stall_detection_attempts(id),
+      validation_run_id INTEGER NOT NULL REFERENCES validation_runs(id),
+      agent_invocation_id INTEGER NOT NULL UNIQUE REFERENCES agent_invocations(id),
+      PRIMARY KEY (stall_detection_attempt_id, agent_invocation_id)
+    ) STRICT
+  `);
+  yield* sql.unsafe(`
     CREATE UNIQUE INDEX implementation_blockers_stall_source_idx
       ON implementation_blockers (source_id) WHERE source_type = 'stall_detection'
   `);

@@ -65,6 +65,12 @@ export const makeStallDetectionService = (input: {
     Effect.gen(function* () {
       const existing = yield* input.persistence.getByValidationRun(assessmentInput.validationRunId);
       if (existing !== undefined) return { attempted: true, record: existing } as const;
+      const previousAttempt = yield* input.persistence.getAttemptByValidationRun(
+        assessmentInput.validationRunId,
+      );
+      if (previousAttempt !== undefined) {
+        return { attempted: true, diagnostic: previousAttempt } as const;
+      }
       const source = yield* input.persistence.getAssessmentInput(
         assessmentInput.changeId,
         assessmentInput.validationRunId,
@@ -101,13 +107,18 @@ export const makeStallDetectionService = (input: {
         sessionStorageRoot: input.sessionStorageRoot,
       });
       if (!execution.result.ok) {
-        return {
-          attempted: true,
-          diagnostic: {
-            code: "stall_detection_unavailable",
-            message: `Stall Detection could not complete: ${execution.result.failure.message}`,
-          },
-        } as const;
+        const diagnostic = {
+          code: "stall_detection_unavailable" as const,
+          message: `Stall Detection could not complete: ${execution.result.failure.message}`,
+        };
+        const retained = yield* input.persistence.recordAttempt({
+          assessmentInput: source,
+          diagnostic,
+          agentSessionId: execution.evidence.agentSessionId,
+          invocationIds,
+          now: assessmentInput.now,
+        });
+        return { attempted: true, diagnostic: retained } as const;
       }
       const record = yield* input.persistence.record({
         assessment: execution.result.report,

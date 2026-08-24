@@ -29,6 +29,10 @@ export const openSqliteStallDetectionPersistence = () =>
   Effect.map(
     RepositorySql,
     (repository): StallDetectionPersistence => ({
+      getAttemptByValidationRun: (validationRunId) =>
+        repository.transaction("read Stall Detection attempt", (sql) =>
+          getAttemptByValidationRun(sql, validationRunId),
+        ),
       getAssessmentInput: (changeId, validationRunId) =>
         repository.transaction("read Stall Detection input", (sql) =>
           getAssessmentInput(sql, changeId, validationRunId, repository.idPrefix),
@@ -41,12 +45,28 @@ export const openSqliteStallDetectionPersistence = () =>
         repository.transaction("list Stall Detections", (sql) =>
           listForChange(sql, changeId, repository.idPrefix),
         ),
+      recordAttempt: (input) =>
+        repository.transactionImmediate("record Stall Detection attempt", (sql) =>
+          recordStallDetectionAttempt(sql, input, repository.idPrefix),
+        ),
       record: (input) =>
         repository.transactionImmediate("record Stall Detection", (sql) =>
           recordStallDetection(sql, input, repository.idPrefix),
         ),
     }),
   );
+
+const getAttemptByValidationRun = (sql: SqlClient.SqlClient, validationRunId: number) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly diagnostic: string }>`
+      SELECT diagnostic FROM stall_detection_attempts
+      WHERE validation_run_id = ${validationRunId}
+    `;
+    const diagnostic = rows[0]?.diagnostic;
+    return diagnostic === undefined
+      ? undefined
+      : ({ code: "stall_detection_unavailable", message: diagnostic } as const);
+  });
 
 const listForChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.gen(function* () {
@@ -188,12 +208,79 @@ const getAssessmentInput = (
     };
   });
 
+const recordStallDetectionAttempt = (
+  sql: SqlClient.SqlClient,
+  input: Parameters<StallDetectionPersistence["recordAttempt"]>[0],
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const existing = yield* getAttemptByValidationRun(
+      sql,
+      input.assessmentInput.triggeringValidationRunId,
+    );
+    if (existing !== undefined) return existing;
+    if (input.invocationIds.length === 0)
+      return yield* invalid(
+        "record Stall Detection attempt",
+        "No Stall Detector Invocation was retained",
+      );
+    if (new Set(input.invocationIds).size !== input.invocationIds.length)
+      return yield* invalid(
+        "record Stall Detection attempt",
+        "Stall Detector Invocation identities are duplicated",
+      );
+    const invocationOwners = yield* sql<{ readonly agentSessionId: number }>`
+      SELECT continuation.agent_session_id AS agentSessionId
+      FROM agent_invocations AS invocation
+      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+      WHERE invocation.id IN (${input.invocationIds})
+    `;
+    if (
+      invocationOwners.length !== input.invocationIds.length ||
+      invocationOwners.some((owner) => owner.agentSessionId !== input.agentSessionId)
+    ) {
+      return yield* invalid(
+        "record Stall Detection attempt",
+        "Stall Detector Invocation ownership is invalid",
+      );
+    }
+    const inserted = yield* sql<{ readonly id: number }>`
+      INSERT INTO stall_detection_attempts (
+        change_id, validation_run_id, agent_session_id, diagnostic, created_at
+      ) VALUES (
+        ${internalChangeId(input.assessmentInput.changeId, idPrefix)},
+        ${input.assessmentInput.triggeringValidationRunId}, ${input.agentSessionId},
+        ${input.diagnostic.message}, ${input.now}
+      ) RETURNING id
+    `;
+    const attemptId = inserted[0]?.id;
+    if (attemptId === undefined)
+      return yield* invalid("record Stall Detection attempt", "Identity was not allocated");
+    for (const invocationId of input.invocationIds) {
+      yield* sql`
+        INSERT INTO stall_detection_attempt_invocations (
+          stall_detection_attempt_id, validation_run_id, agent_invocation_id
+        ) VALUES (${attemptId}, ${input.assessmentInput.triggeringValidationRunId}, ${invocationId})
+      `;
+    }
+    return input.diagnostic;
+  });
+
 const recordStallDetection = (
   sql: SqlClient.SqlClient,
   input: Parameters<StallDetectionPersistence["record"]>[0],
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
+    const attempt = yield* getAttemptByValidationRun(
+      sql,
+      input.assessmentInput.triggeringValidationRunId,
+    );
+    if (attempt !== undefined)
+      return yield* invalid(
+        "record Stall Detection",
+        "A failed Stall Detection attempt already exists for this Validation Run",
+      );
     const existing = yield* readStallDetection(
       sql,
       input.assessmentInput.triggeringValidationRunId,
@@ -244,7 +331,10 @@ const recordStallDetection = (
           change_id, content, resolution_content, source_type, source_id
         ) VALUES (
           ${internalChangeId(input.assessmentInput.changeId, idPrefix)},
-          ${stallBlockerContent(input.assessment.reason)}, NULL, 'stall_detection', ${detectionId}
+          ${stallBlockerContent(
+            input.assessment.reason,
+            input.assessmentInput.triggeringValidationRunId,
+          )}, NULL, 'stall_detection', ${detectionId}
         )
       `;
     }
@@ -448,8 +538,8 @@ const invalidHarness = (value: string): never => {
   throw new Error(`Invalid Agent Harness: ${value}`);
 };
 
-const stallBlockerContent = (reason: string) =>
-  `Stall Detector stopped this Change and requests Operator direction. ${reason}`;
+const stallBlockerContent = (reason: string, validationRunId: number) =>
+  `Stall Detector stopped this Change after Validation Run ${validationRunId} and requests Operator direction. ${reason}`;
 
 const invalid = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

@@ -137,6 +137,19 @@ const expectedColumns = {
     "validation_run_id:INTEGER:1:0",
     "agent_invocation_id:INTEGER:1:2",
   ],
+  stall_detection_attempts: [
+    "id:INTEGER:0:1",
+    "change_id:INTEGER:1:0",
+    "validation_run_id:INTEGER:1:0",
+    "agent_session_id:INTEGER:1:0",
+    "diagnostic:TEXT:1:0",
+    "created_at:TEXT:1:0",
+  ],
+  stall_detection_attempt_invocations: [
+    "stall_detection_attempt_id:INTEGER:1:1",
+    "validation_run_id:INTEGER:1:0",
+    "agent_invocation_id:INTEGER:1:2",
+  ],
   github_publications: [
     "change_id:INTEGER:0:1",
     "candidate_id:INTEGER:1:0",
@@ -183,6 +196,16 @@ const expectedForeignKeys = {
   stall_detection_agent_invocations: [
     "agent_invocation_id->agent_invocations.id",
     "stall_detection_id->stall_detections.id",
+    "validation_run_id->validation_runs.id",
+  ],
+  stall_detection_attempts: [
+    "agent_session_id->agent_sessions.id",
+    "change_id->changes.id",
+    "validation_run_id->validation_runs.id",
+  ],
+  stall_detection_attempt_invocations: [
+    "agent_invocation_id->agent_invocations.id",
+    "stall_detection_attempt_id->stall_detection_attempts.id",
     "validation_run_id->validation_runs.id",
   ],
 } as const;
@@ -315,6 +338,11 @@ const expectedImplicitUniqueIndexes = {
     "pk:stall_detection_id,agent_invocation_id",
     "u:agent_invocation_id",
   ],
+  stall_detection_attempts: ["u:validation_run_id"],
+  stall_detection_attempt_invocations: [
+    "pk:stall_detection_attempt_id,agent_invocation_id",
+    "u:agent_invocation_id",
+  ],
 } as const;
 
 const expectStatementRejected = (
@@ -344,7 +372,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       const tables = objects.filter((object) => object.type === "table");
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
-      expect(tables).toHaveLength(20);
+      expect(tables).toHaveLength(22);
 
       const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
         sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),
@@ -477,7 +505,11 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       expect(
         tables
           .filter(
-            (table) => table.name !== "agent_invocations" && table.name !== "stall_detections",
+            (table) =>
+              table.name !== "agent_invocations" &&
+              table.name !== "stall_detections" &&
+              table.name !== "stall_detection_attempts" &&
+              table.name !== "stall_detection_attempt_invocations",
           )
           .every((table) => !table.sql?.match(/created_at|updated_at|closed_at|round_number/)),
       ).toBe(true);

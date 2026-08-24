@@ -32,7 +32,13 @@ export const decodeImplementationDecisions = (
 
 export const implementationBlockerReadColumns = `
   id, change_id AS changeId, content, source_type AS sourceType,
-  source_id AS sourceId, resolution_content AS resolutionContent
+  source_id AS sourceId, resolution_content AS resolutionContent,
+  EXISTS (
+    SELECT 1 FROM stall_detections AS detection
+    WHERE detection.id = implementation_blockers.source_id
+      AND detection.change_id = implementation_blockers.change_id
+      AND detection.decision = 'stop'
+  ) AS stallDetectionExists
 `;
 
 export type StoredImplementationBlockerRow = {
@@ -42,6 +48,7 @@ export type StoredImplementationBlockerRow = {
   readonly sourceType: string | null;
   readonly sourceId: number | null;
   readonly resolutionContent: string | null;
+  readonly stallDetectionExists: number;
 };
 
 export const decodeImplementationBlockerHistory = (
@@ -58,7 +65,9 @@ export const decodeImplementationBlockerHistory = (
       const source =
         (row.sourceType === null || row.sourceType === "implementer") && row.sourceId === null
           ? { type: "implementer" as const }
-          : row.sourceType === "stall_detection" && row.sourceId !== null
+          : row.sourceType === "stall_detection" &&
+              row.sourceId !== null &&
+              row.stallDetectionExists === 1
             ? { type: "stall_detection" as const, stallDetectionId: row.sourceId }
             : (() => {
                 throw new Error("Implementation Blocker source is invalid");
