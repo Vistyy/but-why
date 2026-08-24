@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
+import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
@@ -1558,13 +1559,30 @@ describe("Change Submit orchestration", () => {
           { cwd: repositoryRoot, env: { PI_OFFLINE: "1" }, input: "hello", timeout: 30_000 },
         );
         expect(piSmoke.status, piSmoke.stderr).toBe(0);
-        const reviewerExecutor: ReviewerProcessExecutor = {
-          execute: () =>
-            Effect.succeed({
-              stdout:
-                '<reviewer-output>{"decision":"continue","reason":"The trajectory is ambiguous."}</reviewer-output>',
-            }),
-        };
+        const stallProvider = join(process.cwd(), "test/fixtures/pi/stall-detection-provider.mjs");
+        const reviewerExecutor: ReviewerProcessExecutor = createPiReviewerProcessExecutor((input) =>
+          Effect.sync(() => {
+            const process = runTestProcess(
+              "sh",
+              [
+                "-c",
+                `exec pi --extension ${JSON.stringify(stallProvider)} -p --mode json --model by-why-test/deterministic-stall-detector --no-session`,
+              ],
+              {
+                cwd: input.cwd ?? repositoryRoot,
+                env: { PI_OFFLINE: "1" },
+                ...(input.stdin === undefined ? {} : { input: input.stdin }),
+                timeout: 30_000,
+              },
+            );
+            if (process.error) throw process.error;
+            return {
+              exitCode: process.status ?? 1,
+              stdout: process.stdout,
+              stderr: process.stderr,
+            };
+          }),
+        );
         const service = makeStallDetectionService({
           persistence: stallDetection,
           agentPersistence,
