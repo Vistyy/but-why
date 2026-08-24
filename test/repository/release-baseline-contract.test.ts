@@ -323,7 +323,10 @@ const expectedImplicitUniqueIndexes = {
   validation_phase_results: ["pk:validation_run_id,phase,producer"],
   stall_detections: ["u:validation_run_id"],
   stall_detection_attempts: ["u:validation_run_id"],
-  stall_detection_run_invocations: ["pk:validation_run_id,agent_invocation_id"],
+  stall_detection_run_invocations: [
+    "pk:validation_run_id,agent_invocation_id",
+    "u:agent_invocation_id",
+  ],
 } as const;
 
 const expectStatementRejected = (

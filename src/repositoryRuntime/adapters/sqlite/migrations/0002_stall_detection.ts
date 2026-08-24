@@ -42,7 +42,7 @@ export const stallDetectionMigration = Effect.gen(function* () {
   yield* sql.unsafe(`
     CREATE TABLE stall_detection_run_invocations (
       validation_run_id INTEGER NOT NULL REFERENCES validation_runs(id),
-      agent_invocation_id INTEGER NOT NULL REFERENCES agent_invocations(id),
+      agent_invocation_id INTEGER NOT NULL UNIQUE REFERENCES agent_invocations(id),
       PRIMARY KEY (validation_run_id, agent_invocation_id)
     ) STRICT
   `);
