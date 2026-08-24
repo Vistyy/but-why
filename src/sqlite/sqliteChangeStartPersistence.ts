@@ -210,7 +210,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
   );
   const policy = decodeSqliteChangePolicy({
     reviewerConfiguration: encodedReviewerConfiguration,
-    ...(encodedStallDetection === null ? {} : { stallDetection: encodedStallDetection }),
+    stallDetection: encodedStallDetection ?? JSON.stringify({ enabled: false, profile: null }),
     prepareDefinition: encodedPrepareDefinition,
     checksDefinition: encodedChecksDefinition,
   });

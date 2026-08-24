@@ -151,7 +151,7 @@ A stop atomically creates a Stall-Detector-sourced Implementation Blocker, while
 _Avoid_: Validation Phase, deterministic Finding classifier, Candidate analysis, transcript analysis, background worker
 
 **Agent Session**:
-The durable conversation owner for one Task Reviewer or one Change reviewer producer.
+The durable conversation owner for one Task Reviewer, one Change reviewer producer, or one Change-owned Stall Detector.
 It owns the ordered Agent Continuations and their Invocations while the domain owner retains policy, Findings, and lifecycle state.
 An Agent Session does not cross its Task or Change owner boundary.
 _Avoid_: alternate reviewer record, fresh conversation per Candidate, cross-owner conversation
@@ -165,7 +165,7 @@ _Avoid_: Agent Session, reviewer policy, transcript copy
 **Agent Invocation**:
 One dispatched host call in an Agent Continuation.
 An Invocation is settled exactly once as returned, launch_failed, failed, or return_unknown and records token evidence when available.
-Task Review and Change Validation link each Invocation to their own domain evidence.
+Task Review, Change Validation, and Change-owned Stall Detection link each Invocation to their own domain evidence.
 _Avoid_: reviewer attempt, cumulative session usage, reviewer outcome
 
 **Agent Session Configuration**:
@@ -193,6 +193,7 @@ _Avoid_: Agent Session total, inferred zero usage, cumulative resumed-session us
 **Producer**:
 The named source of validation evidence, such as Prepare, a Check, Acceptance Review, or a Specialist Review.
 A Producer identifies the source that creates an Artifact or Finding.
+A Change-owned Stall Detector is an Agent Session owner but is not a Validation Producer.
 _Avoid_: Agent Profile, Agent Session, Validation Run
 
 **Reviewer Producer**:

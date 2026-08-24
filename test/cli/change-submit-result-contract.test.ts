@@ -19,6 +19,7 @@ const change: ChangeRecord = {
   acceptanceContext: null,
   policy: {
     reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    stallDetection: { enabled: false, profile: null },
     prepare: null,
     checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
   },

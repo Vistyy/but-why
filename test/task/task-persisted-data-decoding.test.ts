@@ -41,6 +41,7 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
         taskId: publicTaskId("BY-5"),
         policy: {
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+          stallDetection: { enabled: false, profile: null },
           prepare: null,
           checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
         },
@@ -114,6 +115,7 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
         taskId: publicTaskId("BY-3"),
         policy: {
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+          stallDetection: { enabled: false, profile: null },
           prepare: null,
           checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
         },

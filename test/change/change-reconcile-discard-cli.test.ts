@@ -49,6 +49,7 @@ describe("by change reconcile --discard-work", () => {
               managedWorktreeParent: dirname(join(root, "uncreated-worktree")),
               policy: {
                 reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+                stallDetection: { enabled: false, profile: null },
                 prepare: null,
                 checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
               },
@@ -109,6 +110,7 @@ describe("by change reconcile --discard-work", () => {
               managedWorktreeParent: dirname(recordedWorktreePath),
               policy: {
                 reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+                stallDetection: { enabled: false, profile: null },
                 prepare: null,
                 checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
               },

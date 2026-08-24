@@ -1,7 +1,8 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 import { resolvedReviewerPiAgentProfileSchema } from "../agent/agentProfiles.js";
-import type { AgentInvocationRecord, AgentThinking } from "../agent/agentSession/agentSession.js";
+import type { AgentInvocationPersistenceRow } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { decodeAgentInvocation } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type {
   StallDetectionAssessmentInput,
@@ -379,7 +380,9 @@ const readStallDetection = (sql: SqlClient.SqlClient, validationRunId: number, i
       SELECT id, source_type AS sourceType, source_id AS sourceId, change_id AS changeId
       FROM implementation_blockers WHERE source_type = 'stall_detection' AND source_id = ${row.id}
     `;
-    const invocationRows = yield* sql<StoredInvocationRow>`
+    const invocationRows = yield* sql<
+      AgentInvocationPersistenceRow & { readonly validationRunId: number }
+    >`
       SELECT link.validation_run_id AS validationRunId,
         invocation.id, invocation.continuation_id AS continuationId,
         continuation.agent_session_id AS agentSessionId, invocation.created_at AS createdAt,
@@ -430,7 +433,7 @@ const readStallDetection = (sql: SqlClient.SqlClient, validationRunId: number, i
       ) {
         throw new Error("Stall Detection Invocation link is invalid");
       }
-      const invocations = invocationRows.map(decodeInvocation);
+      const invocations = invocationRows.map(decodeAgentInvocation);
       return {
         id: row.id,
         changeId: publicChangeId(idPrefix, row.changeId),
@@ -446,55 +449,6 @@ const readStallDetection = (sql: SqlClient.SqlClient, validationRunId: number, i
       };
     });
   });
-
-type StoredInvocationRow = {
-  readonly validationRunId: number;
-  readonly id: number;
-  readonly continuationId: number;
-  readonly agentSessionId: number;
-  readonly createdAt: string;
-  readonly settledAt: string | null;
-  readonly settlementKind: string | null;
-  readonly harness: string;
-  readonly provider: string | null;
-  readonly model: string;
-  readonly thinking: string | null;
-  readonly transcriptPath: string | null;
-  readonly unusableReason: string | null;
-  readonly inputTokens: number | null;
-  readonly cachedInputTokens: number | null;
-  readonly cacheWriteTokens: number | null;
-  readonly outputTokens: number | null;
-  readonly totalTokens: number | null;
-};
-
-const decodeInvocation = (row: StoredInvocationRow): AgentInvocationRecord => ({
-  id: row.id,
-  continuationId: row.continuationId,
-  createdAt: row.createdAt,
-  settledAt: row.settledAt,
-  settlementKind: row.settlementKind as AgentInvocationRecord["settlementKind"],
-  continuation: {
-    id: row.continuationId,
-    agentSessionId: row.agentSessionId,
-    harness: row.harness === "pi" ? "pi" : invalidHarness(row.harness),
-    provider: row.provider,
-    model: row.model,
-    thinking: decodeThinking(row.thinking),
-    transcriptPath: row.transcriptPath,
-    unusableReason: row.unusableReason,
-  },
-  usage:
-    row.inputTokens === null
-      ? null
-      : {
-          inputTokens: row.inputTokens,
-          cachedInputTokens: row.cachedInputTokens ?? 0,
-          cacheWriteTokens: row.cacheWriteTokens ?? 0,
-          outputTokens: row.outputTokens ?? 0,
-          totalTokens: row.totalTokens ?? 0,
-        },
-});
 
 const decodeAssessmentInput = (value: unknown): StallDetectionAssessmentInput => {
   if (typeof value !== "object" || value === null) {
@@ -526,18 +480,6 @@ const decodeAssessmentInput = (value: unknown): StallDetectionAssessmentInput =>
     qualifyingRuns: input.qualifyingRuns as StallDetectionAssessmentInput["qualifyingRuns"],
     blockerHistory: input.blockerHistory as StallDetectionAssessmentInput["blockerHistory"],
   };
-};
-
-const decodeThinking = (value: string | null) => {
-  if (value === null) return null;
-  if (["off", "minimal", "low", "medium", "high", "xhigh"].includes(value)) {
-    return value as AgentThinking;
-  }
-  throw new Error(`Invalid Agent thinking level: ${value}`);
-};
-
-const invalidHarness = (value: string): never => {
-  throw new Error(`Invalid Agent Harness: ${value}`);
 };
 
 const stallBlockerContent = (reason: string, validationRunId: number) =>

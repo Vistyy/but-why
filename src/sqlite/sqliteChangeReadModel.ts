@@ -88,7 +88,7 @@ export const decodeChangeRow = (
       row.reviewerConfiguration,
       "Change Reviewer Configuration",
     ),
-    ...(encodedStallDetection === null ? {} : { stallDetection: encodedStallDetection }),
+    stallDetection: encodedStallDetection ?? JSON.stringify({ enabled: false, profile: null }),
     prepareDefinition: encodedPrepareDefinition,
     checksDefinition: encodedChecksDefinition,
   });

@@ -30,8 +30,8 @@ Domain workflow modules depend on owner-defined ports instead of concrete Adapte
 Repository Runtime provides a scoped database capability rather than an Adapter registry or application container.
 
 SQLite Adapters implement owner-defined persistence ports and own SQL and transaction mechanics.
-Shared Agent Session execution owns Agent Session dispatch, Agent Continuation resume, Invocation settlement, Pi harness execution, transcript paths, and token evidence for Task Review and Change Validation.
-Repository Runtime supplies one Git Common Directory Agent Session transcript root to both workflows.
+Shared Agent Session execution owns Agent Session dispatch, Agent Continuation resume, Invocation settlement, Pi harness execution, transcript paths, and token evidence for Task Review, Change Validation, and Change-owned Stall Detection.
+Repository Runtime supplies one Git Common Directory Agent Session transcript root to these workflows.
 Task Intent and Change Delivery retain separate reviewer policy, prompts, output decoding, Findings, errors, and lifecycle behavior.
 External execution, Git, GitHub, agent runtime, and disposable workspace behavior remain behind their applicable Adapter boundaries.
 
@@ -68,7 +68,7 @@ Shared Repository State is resolved through the Git Common Directory and shared 
 The globally installed `by` executable is the only supported CLI that opens or mutates live Shared Repository State.
 Repo Config remains tracked at `.but-why/config.json`, while Global Config remains user-local.
 Release-ready Shared Repository State starts from the single `0001_baseline` defined by [ADR 0009](adr/0009-use-forward-schema-migrations-before-release.md).
-The baseline stores only current Task, Change, validation, publication, and Agent Session facts, with public Task and Change IDs derived from the repository ID Prefix and SQLite integer identities.
+The baseline stores only current Task, Change, validation, publication, Stall Detection, and Agent Session facts, with public Task and Change IDs derived from the repository ID Prefix and SQLite integer identities.
 
 The public configuration contract is documented in [But Why Config](public/config.md).
 Cross-command serialization policy is documented in [CLI Output](cli-output.md) and constrained by [ADR 0011](adr/0011-use-json-as-the-only-cli-result-format.md).

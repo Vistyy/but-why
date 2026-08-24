@@ -61,6 +61,7 @@ const createTerminalChange = (fixture: ReconcileFixture) =>
       managedWorktreeParent: join(fixture.root, "worktrees", "but-why"),
       policy: {
         reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+        stallDetection: { enabled: false, profile: null },
         prepare: null,
         checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
       },
@@ -237,6 +238,7 @@ describe("Change reconciliation discard boundary", () => {
           managedWorktreeParent: join(fixture.root, "worktrees", "but-why"),
           policy: {
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            stallDetection: { enabled: false, profile: null },
             prepare: null,
             checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
           },

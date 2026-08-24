@@ -70,6 +70,7 @@ describe("by change reconcile", () => {
             managedWorktreeParent: dirname(join(input.commonDirectory, "worktree")),
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              stallDetection: { enabled: false, profile: null },
               prepare: null,
               checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
@@ -165,6 +166,7 @@ describe("by change reconcile", () => {
             managedWorktreeParent: dirname(join(input.commonDirectory, "worktree")),
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              stallDetection: { enabled: false, profile: null },
               prepare: null,
               checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
@@ -276,6 +278,7 @@ describe("by change reconcile", () => {
           taskId,
           policy: {
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            stallDetection: { enabled: false, profile: null },
             prepare: null,
             checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
           },
@@ -408,6 +411,7 @@ describe("by change reconcile", () => {
             managedWorktreeParent: dirname(join(input.commonDirectory, "worktree")),
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              stallDetection: { enabled: false, profile: null },
               prepare: null,
               checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
@@ -512,6 +516,7 @@ describe("by change reconcile", () => {
             taskId,
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              stallDetection: { enabled: false, profile: null },
               prepare: null,
               checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },
@@ -629,6 +634,7 @@ describe("by change reconcile", () => {
             taskId,
             policy: {
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              stallDetection: { enabled: false, profile: null },
               prepare: null,
               checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
             },

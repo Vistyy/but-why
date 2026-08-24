@@ -26,7 +26,7 @@ type ContinuationRow = {
   readonly unusableReason: string | null;
 };
 
-type InvocationRow = {
+export type AgentInvocationPersistenceRow = {
   readonly id: number;
   readonly agentSessionId: number;
   readonly continuationId: number;
@@ -311,7 +311,7 @@ export const settleUnsettledAgentInvocations = (
 
 const readInvocationHistory = (sql: SqlClient.SqlClient, agentSessionId: number) =>
   Effect.gen(function* () {
-    const rows = yield* sql<InvocationRow>`
+    const rows = yield* sql<AgentInvocationPersistenceRow>`
       SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
         invocation.continuation_id AS continuationId,
         invocation.created_at AS createdAt, invocation.settled_at AS settledAt,
@@ -332,9 +332,10 @@ const readInvocationHistory = (sql: SqlClient.SqlClient, agentSessionId: number)
       WHERE continuation.agent_session_id = ${agentSessionId}
       ORDER BY invocation.id
     `;
-    return yield* decodePersisted("read Agent Invocation history", () =>
-      rows.map(decodeInvocation),
-    );
+    return yield* decodePersisted("read Agent Invocation history", () => {
+      const decoded: readonly AgentInvocationRecord[] = rows.map(decodeAgentInvocation);
+      return decoded;
+    });
   });
 
 const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({
@@ -348,7 +349,9 @@ const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({
   unusableReason: row.unusableReason,
 });
 
-const decodeInvocation = (row: InvocationRow): AgentInvocationRecord => {
+export const decodeAgentInvocation = (
+  row: AgentInvocationPersistenceRow,
+): AgentInvocationRecord => {
   const usagePresent =
     row.inputTokens !== null ||
     row.cachedInputTokens !== null ||

@@ -14,6 +14,7 @@ import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPr
 const now = "2026-06-30T12:00:00.000Z";
 const policy = {
   reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+  stallDetection: { enabled: false, profile: null },
   prepare: null,
   checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
 } as const;
