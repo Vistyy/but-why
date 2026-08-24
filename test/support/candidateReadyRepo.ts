@@ -24,10 +24,10 @@ export const candidateReadyRepo = (workspace?: string): string => {
       .prepare(`
         INSERT INTO changes (
           id, branch_ref, base_ref, base_remote_url, worktree_path,
-          reviewer_configuration, checks_definition, cleanup_pending
+          reviewer_configuration, stall_detection_definition, checks_definition, cleanup_pending
         ) VALUES (1, 'refs/heads/feature', 'refs/remotes/origin/main',
           'https://github.com/acme/widgets.git', ?,
-          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
+          '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
       `)
       .run(root);
   } finally {
@@ -47,9 +47,9 @@ export const registerCandidateChange = (
       .prepare(`
         INSERT INTO changes (
           branch_ref, base_ref, base_remote_url, worktree_path,
-          reviewer_configuration, checks_definition, cleanup_pending
+          reviewer_configuration, stall_detection_definition, checks_definition, cleanup_pending
         ) VALUES (?, 'refs/remotes/origin/main', 'https://github.com/acme/widgets.git', ?,
-          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
+          '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
       `)
       .run(branchRef, worktreePath);
   } finally {

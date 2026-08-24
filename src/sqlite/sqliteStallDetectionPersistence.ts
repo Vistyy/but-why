@@ -1,8 +1,8 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 import { resolvedReviewerPiAgentProfileSchema } from "../agent/agentProfiles.js";
-import type { AgentInvocationPersistenceRow } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
-import { decodeAgentInvocation } from "../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import type { AgentInvocationPersistenceRow } from "../agent/agentSession/adapters/sqlite/sqliteAgentInvocationCodec.js";
+import { decodeAgentInvocation } from "../agent/agentSession/adapters/sqlite/sqliteAgentInvocationCodec.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type {
   StallDetectionAssessmentInput,
