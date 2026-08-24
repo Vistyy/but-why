@@ -32,6 +32,7 @@ import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repos
 import { openSqliteStallDetectionPersistence } from "../../src/sqlite/sqliteStallDetectionPersistence.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -1548,6 +1549,15 @@ describe("Change Submit orchestration", () => {
         );
         const stallDetection = yield* openSqliteStallDetectionPersistence();
         const agentPersistence = yield* openSqliteAgentSessionPersistence();
+        const piSmoke = runTestProcess(
+          "sh",
+          [
+            "-c",
+            `exec pi --extension ${JSON.stringify(join(process.cwd(), "test/fixtures/pi/deterministic-provider.mjs"))} -p --mode json --model but-why-test/deterministic-reviewer --no-session`,
+          ],
+          { cwd: repositoryRoot, env: { PI_OFFLINE: "1" }, input: "hello", timeout: 30_000 },
+        );
+        expect(piSmoke.status, piSmoke.stderr).toBe(0);
         const reviewerExecutor: ReviewerProcessExecutor = {
           execute: () =>
             Effect.succeed({
