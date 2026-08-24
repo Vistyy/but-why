@@ -154,7 +154,6 @@ describe("by change implement", () => {
       expect(launches[0]).toMatchObject({
         changeId: fixture.id,
         hostSessionName: fixture.id.toLowerCase(),
-        repositoryPath: root,
         worktreePath: fixture.worktreePath,
       });
       const launch = launches[0] as {
@@ -325,12 +324,10 @@ describe("by change implement", () => {
         expect(launches).toEqual([
           expect.objectContaining({
             changeId: change.change.id,
-            repositoryPath: root,
             worktreePath: change.worktreePath,
           }),
           expect.objectContaining({
             changeId: change.change.id,
-            repositoryPath: linkedCheckout,
             worktreePath: change.worktreePath,
           }),
         ]);

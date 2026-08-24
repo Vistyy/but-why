@@ -43,7 +43,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
           envelope.method === "ping"
             ? {
                 id: envelope.id,
-                result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
+                result: { type: "pong", version: "0.8.2", protocol: supportedHerdrProtocol },
               }
             : {
                 id: envelope.id,
@@ -119,7 +119,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
         socket.end(
           `${JSON.stringify({
             id: envelope.id,
-            result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
+            result: { type: "pong", version: "0.8.2", protocol: supportedHerdrProtocol },
           })}\n`,
         );
         return;
@@ -148,7 +148,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
           envelope.method === "ping"
             ? {
                 id: envelope.id,
-                result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
+                result: { type: "pong", version: "0.8.2", protocol: supportedHerdrProtocol },
               }
             : {
                 id: "another-request",
@@ -182,7 +182,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
         socket.end(
           `${JSON.stringify({
             id: envelope.id,
-            result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
+            result: { type: "pong", version: "0.8.2", protocol: supportedHerdrProtocol },
           })}\n`,
         );
       }
@@ -213,7 +213,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
           envelope.method === "ping"
             ? {
                 id: envelope.id,
-                result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
+                result: { type: "pong", version: "0.8.2", protocol: supportedHerdrProtocol },
               }
             : {
                 id: envelope.id,
