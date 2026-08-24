@@ -147,12 +147,12 @@ export const createChangeFixture = (
           INSERT INTO changes (
             branch_ref, base_ref, base_remote_url, worktree_path,
             initial_acceptance_context, reviewer_configuration,
-            checks_definition, cleanup_pending
+            stall_detection_definition, checks_definition, cleanup_pending
           ) VALUES (
             ${branchRef}, ${options.baseRef ?? "refs/remotes/origin/main"},
             'https://github.test/acme/repo.git',
             ${options.worktreePath ?? join(root, `worktree-${branchRef.split("/").at(-1) ?? "change"}`)},
-            ${acceptanceContext}, '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
+            ${acceptanceContext}, '{"acceptanceReview":null,"specialistReviews":[]}', '{"enabled":false,"profile":null}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
           )
           RETURNING id
         `,

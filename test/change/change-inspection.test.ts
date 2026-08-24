@@ -199,6 +199,7 @@ describe("Change inspection CLI", () => {
           worktreePath: join(root, "worktree-older"),
           policy: {
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            stallDetection: { enabled: false, profile: null },
             prepare: null,
             checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
           },

@@ -53,7 +53,7 @@ export const createChangeImplementFixture = (
             INSERT INTO changes (
               id, branch_ref, base_ref, base_remote_url, worktree_path,
               initial_acceptance_context, reviewer_configuration,
-              prepare_definition, checks_definition, prepare_failure, cleanup_pending
+              stall_detection_definition, prepare_definition, checks_definition, prepare_failure, cleanup_pending
             ) VALUES (
               ${internalChangeId(id, "BY")}, 'refs/heads/implement-fixture',
               'refs/remotes/origin/main', 'https://github.com/acme/repo.git', ${worktreePath},
@@ -67,6 +67,7 @@ export const createChangeImplementFixture = (
                     })
               },
               '{"acceptanceReview":null,"specialistReviews":[]}',
+              '{"enabled":false,"profile":null}',
               ${
                 options.prepareFailure === undefined
                   ? null

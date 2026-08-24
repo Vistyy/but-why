@@ -189,10 +189,10 @@ export const readValidationExecutionAuthorityById = (
       if (row === undefined) throw new Error("Validation Run owning Change was not selected");
       const changePolicy = decodeSqliteChangePolicy({
         reviewerConfiguration: row.reviewerConfiguration,
-        stallDetection: decodeStoredString(
-          row.stallDetection,
-          "Validation Change Stall Detection policy",
-        ),
+        stallDetection:
+          row.stallDetection === null
+            ? JSON.stringify({ enabled: false, profile: null })
+            : decodeStoredString(row.stallDetection, "Validation Change Stall Detection policy"),
         prepareDefinition: row.prepareDefinition,
         checksDefinition: row.checksDefinition,
       });

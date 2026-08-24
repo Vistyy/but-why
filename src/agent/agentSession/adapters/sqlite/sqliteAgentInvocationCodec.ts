@@ -5,7 +5,7 @@ import type {
   AgentSessionConfiguration,
 } from "../../agentSession.js";
 
-export const positiveIntegerMax = 9_007_199_254_740_991;
+const positiveIntegerMax = 9_007_199_254_740_991;
 
 export type AgentInvocationPersistenceRow = {
   readonly id: number;
@@ -56,7 +56,7 @@ export const decodeAgentInvocation = (
   };
 };
 
-export const decodeContinuation = (
+const decodeContinuation = (
   row: Pick<
     AgentInvocationPersistenceRow,
     | "continuationId"
@@ -97,13 +97,13 @@ export const decodeThinking = (
   return value as NonNullable<AgentSessionConfiguration["thinking"]>;
 };
 
-export const decodeSettlementKind = (value: string): AgentInvocationSettlement["kind"] => {
+const decodeSettlementKind = (value: string): AgentInvocationSettlement["kind"] => {
   if (!["returned", "launch_failed", "failed", "return_unknown"].includes(value))
     throw new Error(`Invalid Agent Invocation settlement kind: ${value}`);
   return value as AgentInvocationSettlement["kind"];
 };
 
-export const requiredToken = (value: number | null): number => {
+const requiredToken = (value: number | null): number => {
   if (value === null || !Number.isSafeInteger(value) || value < 0 || value > positiveIntegerMax)
     throw new Error("Agent Invocation token evidence is incomplete");
   return value;
