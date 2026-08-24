@@ -60,8 +60,11 @@ const raiseBlocker = (
     const active = yield* readActiveBlocker(sql, input.changeId, idPrefix);
     if (active !== null) return { ok: false as const, code: "change_blocked" as const };
     const inserted = yield* sql<{ readonly id: number }>`
-      INSERT INTO implementation_blockers (change_id, content, resolution_content)
-      VALUES (${internalChangeId(input.changeId, idPrefix)}, ${input.content}, NULL)
+      INSERT INTO implementation_blockers (
+        change_id, content, resolution_content, source_type, source_id
+      ) VALUES (
+        ${internalChangeId(input.changeId, idPrefix)}, ${input.content}, NULL, 'implementer', NULL
+      )
       RETURNING id
     `;
     const id = inserted[0]?.id;
