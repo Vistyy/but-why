@@ -451,7 +451,7 @@ if [ "$1" = "workspace" ] && [ "$2" = "list" ]; then
   exit 0
 fi
 if [ "$1" = "workspace" ] && [ "$2" = "create" ]; then
-  printf '{"result":{"type":"workspace_created","workspace":{"workspace_id":"workspace"},"tab":{"tab_id":"tab","workspace_id":"workspace"},"root_pane":{"pane_id":"pane","workspace_id":"workspace","tab_id":"tab"}}}\\n'
+  printf '{"result":{"type":"workspace_created","workspace":{"workspace_id":"workspace"},"tab":{"tab_id":"tab","workspace_id":"workspace"},"root_pane":{"pane_id":"pane","workspace_id":"workspace","tab_id":"tab","cwd":"%s"}}}\\n' "$BY_FAKE_WORKTREE"
   exit 0
 fi
 if [ "$1" = "agent" ] && [ "$2" = "start" ]; then

@@ -234,18 +234,23 @@ const observeExistingSession = async (
   if (existingAgents === undefined) {
     return phaseStopped(launchFailure("Herdr returned malformed agent-list output."));
   }
-  if (hasActiveSession(existingAgents, sessionName)) {
+  if (hasUnboundNamedSession(existingAgents, input, sessionName)) {
+    return phaseStopped(
+      launchIndeterminate("The named Herdr session is not bound to this Managed Worktree."),
+    );
+  }
+  if (hasActiveSession(existingAgents, input, sessionName)) {
     return phaseStopped({ ok: true, host: "herdr", status: "already_active" });
   }
   if (
-    hasUnknownSession(existingAgents, sessionName) ||
+    hasUnknownSession(existingAgents, input, sessionName) ||
     hasUnknownAgentInWorktree(existingAgents, input)
   ) {
     return phaseStopped(
       launchIndeterminate("Herdr could not determine the existing session state."),
     );
   }
-  if (hasCompletedSession(existingAgents, sessionName)) {
+  if (hasCompletedSession(existingAgents, input, sessionName)) {
     if (hasActiveAgentInWorktree(existingAgents, input)) {
       return phaseStopped(
         launchFailure("Another Interactive Session is already active in this Managed Worktree."),
@@ -283,6 +288,7 @@ const openStandaloneWorkspace = async (
     const recovered = await observeWorkspaceRootPane(
       command,
       matchingWorkspace.workspaceId,
+      input.worktreePath,
       signal,
       options,
     );
@@ -300,7 +306,7 @@ const openStandaloneWorkspace = async (
     signal,
   );
   if (created.ok) {
-    const workspace = decodeCreatedWorkspace(created.stdout);
+    const workspace = decodeCreatedWorkspace(created.stdout, input.worktreePath);
     return workspace === undefined
       ? phaseStopped(launchIndeterminate("Herdr returned malformed workspace-create output."))
       : phaseComplete(workspace);
@@ -322,7 +328,13 @@ const openStandaloneWorkspace = async (
       launchIndeterminate(`Herdr did not confirm creating the workspace: ${created.message}`),
     );
   }
-  const recovered = await observeWorkspaceRootPane(command, recoveredWorkspaceId, signal, options);
+  const recovered = await observeWorkspaceRootPane(
+    command,
+    recoveredWorkspaceId,
+    input.worktreePath,
+    signal,
+    options,
+  );
   return recovered === undefined
     ? phaseStopped(
         launchIndeterminate(
@@ -335,6 +347,7 @@ const openStandaloneWorkspace = async (
 const observeWorkspaceRootPane = async (
   command: HerdrCommandExecutor,
   workspaceId: string,
+  expectedCwd: string,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
 ): Promise<OpenedWorkspace | undefined> => {
@@ -344,7 +357,7 @@ const observeWorkspaceRootPane = async (
     signal,
     options.observationRetries,
   );
-  return panes.ok ? decodeSoleWorkspacePane(panes.stdout, workspaceId) : undefined;
+  return panes.ok ? decodeSoleWorkspacePane(panes.stdout, workspaceId, expectedCwd) : undefined;
 };
 
 const startNativeAgent = async (
@@ -364,11 +377,16 @@ const startNativeAgent = async (
       launchIndeterminate("Herdr did not provide a trustworthy pre-start session observation."),
     );
   }
-  if (hasActiveSession(beforeStartAgents, sessionName)) {
+  if (hasUnboundNamedSession(beforeStartAgents, input, sessionName, opened.workspaceId)) {
+    return phaseStopped(
+      launchIndeterminate("The named Herdr session is not bound to this Managed Worktree."),
+    );
+  }
+  if (hasActiveSession(beforeStartAgents, input, sessionName, opened.workspaceId)) {
     return phaseStopped({ ok: true, host: "herdr", status: "already_active" });
   }
   if (
-    hasUnknownSession(beforeStartAgents, sessionName) ||
+    hasUnknownSession(beforeStartAgents, input, sessionName, opened.workspaceId) ||
     hasUnknownAgentInWorktree(beforeStartAgents, input, opened.workspaceId)
   ) {
     return phaseStopped(
@@ -380,7 +398,7 @@ const startNativeAgent = async (
       launchFailure("Another Interactive Session is already active in this Managed Worktree."),
     );
   }
-  if (hasCompletedSession(beforeStartAgents, sessionName)) {
+  if (hasCompletedSession(beforeStartAgents, input, sessionName, opened.workspaceId)) {
     return phaseComplete(undefined);
   }
 
@@ -417,9 +435,16 @@ const startNativeAgent = async (
   const afterStart = await observe(command, ["agent", "list"], signal, options.observationRetries);
   const afterStartAgents = afterStart.ok ? decodeAgentList(afterStart.stdout) : undefined;
   if (afterStartAgents !== undefined) {
-    if (hasActiveSession(afterStartAgents, sessionName)) return phaseComplete(undefined);
+    if (hasUnboundNamedSession(afterStartAgents, input, sessionName, opened.workspaceId)) {
+      return phaseStopped(
+        launchIndeterminate("The named Herdr session is not bound to this Managed Worktree."),
+      );
+    }
+    if (hasActiveSession(afterStartAgents, input, sessionName, opened.workspaceId)) {
+      return phaseComplete(undefined);
+    }
     if (
-      hasUnknownSession(afterStartAgents, sessionName) ||
+      hasUnknownSession(afterStartAgents, input, sessionName, opened.workspaceId) ||
       hasUnknownAgentInWorktree(afterStartAgents, input, opened.workspaceId)
     ) {
       return phaseStopped(
@@ -431,7 +456,7 @@ const startNativeAgent = async (
         launchFailure("Another Interactive Session is already active in this Managed Worktree."),
       );
     }
-    if (hasCompletedSession(afterStartAgents, sessionName)) {
+    if (hasCompletedSession(afterStartAgents, input, sessionName, opened.workspaceId)) {
       return phaseComplete(undefined);
     }
   }
@@ -648,6 +673,7 @@ const herdrWorkspaceCreatedResponseSchema = Schema.Struct({
       pane_id: nonBlankStringSchema,
       workspace_id: nonBlankStringSchema,
       tab_id: nonBlankStringSchema,
+      cwd: Schema.String,
     }),
   }),
 });
@@ -659,6 +685,7 @@ const herdrPaneListResponseSchema = Schema.Struct({
       Schema.Struct({
         pane_id: nonBlankStringSchema,
         workspace_id: nonBlankStringSchema,
+        cwd: Schema.String,
       }),
     ),
   }),
@@ -714,13 +741,17 @@ const decodeNewWorkspaceId = (
   return matches.length === 1 ? matches[0]?.workspace_id : undefined;
 };
 
-const decodeCreatedWorkspace = (source: string): OpenedWorkspace | undefined => {
+const decodeCreatedWorkspace = (
+  source: string,
+  expectedCwd: string,
+): OpenedWorkspace | undefined => {
   const response = decodeHerdrJson(source, herdrWorkspaceCreatedResponseSchema);
   if (response === undefined) return undefined;
   const { root_pane: rootPane, tab, workspace } = response.result;
   return tab.workspace_id === workspace.workspace_id &&
     rootPane.workspace_id === workspace.workspace_id &&
-    rootPane.tab_id === tab.tab_id
+    rootPane.tab_id === tab.tab_id &&
+    rootPane.cwd === expectedCwd
     ? { workspaceId: workspace.workspace_id, rootPaneId: rootPane.pane_id }
     : undefined;
 };
@@ -728,11 +759,14 @@ const decodeCreatedWorkspace = (source: string): OpenedWorkspace | undefined => 
 const decodeSoleWorkspacePane = (
   source: string,
   workspaceId: string,
+  expectedCwd: string,
 ): OpenedWorkspace | undefined => {
   const response = decodeHerdrJson(source, herdrPaneListResponseSchema);
   if (response === undefined || response.result.panes.length !== 1) return undefined;
   const pane = response.result.panes[0];
-  return pane?.workspace_id === workspaceId ? { workspaceId, rootPaneId: pane.pane_id } : undefined;
+  return pane?.workspace_id === workspaceId && pane.cwd === expectedCwd
+    ? { workspaceId, rootPaneId: pane.pane_id }
+    : undefined;
 };
 
 const decodeAgentStarted = (source: string): { readonly terminalId: string } | undefined => {
@@ -746,27 +780,58 @@ const isAgentPaneBusyFailure = (message: string): boolean => {
   return decodeHerdrJson(trimmed, herdrErrorResponseSchema)?.error.code === "agent_pane_busy";
 };
 
-const hasActiveSession = (agents: readonly HerdrAgent[], sessionName: string): boolean => {
-  const status = findSession(agents, sessionName)?.agent_status;
+const hasActiveSession = (
+  agents: readonly HerdrAgent[],
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  workspaceId?: string,
+): boolean => {
+  const status = findSession(agents, input, sessionName, workspaceId)?.agent_status;
   return status !== undefined && isActiveAgentStatus(status);
 };
 
-const hasCompletedSession = (agents: readonly HerdrAgent[], sessionName: string): boolean =>
-  findSession(agents, sessionName)?.agent_status === "done";
+const hasCompletedSession = (
+  agents: readonly HerdrAgent[],
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  workspaceId?: string,
+): boolean => findSession(agents, input, sessionName, workspaceId)?.agent_status === "done";
 
-const hasUnknownSession = (agents: readonly HerdrAgent[], sessionName: string): boolean =>
-  findSession(agents, sessionName)?.agent_status === "unknown";
+const hasUnknownSession = (
+  agents: readonly HerdrAgent[],
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  workspaceId?: string,
+): boolean => findSession(agents, input, sessionName, workspaceId)?.agent_status === "unknown";
 
-const findSession = (agents: readonly HerdrAgent[], sessionName: string): HerdrAgent | undefined =>
-  agents.find((agent) => agent.name === sessionName || agent.agent === sessionName);
+const hasUnboundNamedSession = (
+  agents: readonly HerdrAgent[],
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  workspaceId?: string,
+): boolean => {
+  const named = agents.find((agent) => agent.name === sessionName);
+  return named !== undefined && !isAgentInWorktree(named, input, workspaceId);
+};
+
+const findSession = (
+  agents: readonly HerdrAgent[],
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  workspaceId?: string,
+): HerdrAgent | undefined =>
+  agents.find(
+    (agent) => agent.name === sessionName && isAgentInWorktree(agent, input, workspaceId),
+  );
 
 const isAgentInWorktree = (
   agent: HerdrAgent,
   input: InteractiveSessionLaunchInput,
   workspaceId?: string,
 ): boolean =>
-  agent.cwd === input.worktreePath ||
-  (workspaceId !== undefined && agent.workspace_id === workspaceId);
+  agent.cwd === undefined
+    ? workspaceId !== undefined && agent.workspace_id === workspaceId
+    : agent.cwd === input.worktreePath;
 
 const hasUnknownAgentInWorktree = (
   agents: readonly HerdrAgent[],

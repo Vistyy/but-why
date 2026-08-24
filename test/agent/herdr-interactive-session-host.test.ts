@@ -29,7 +29,7 @@ const emptyWorkspaces = (): { readonly ok: true; readonly stdout: string } => ({
 const createdWorkspace = (): { readonly ok: true; readonly stdout: string } => ({
   ok: true,
   stdout:
-    '{"result":{"type":"workspace_created","workspace":{"workspace_id":"workspace-1","label":"change-123","future_field":true},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1","future_field":true},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","future_field":true},"future_field":true},"future_response_field":true}',
+    '{"result":{"type":"workspace_created","workspace":{"workspace_id":"workspace-1","label":"change-123","future_field":true},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1","future_field":true},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","cwd":"/workspace/change-123","future_field":true},"future_field":true},"future_response_field":true}',
 });
 
 const input = {
@@ -49,6 +49,7 @@ const listedAgents = (
 
 const matchingAgent = (status: string) => ({
   name: input.hostSessionName,
+  cwd: input.worktreePath,
   workspace_id: "workspace-1",
   pane_id: "pane-1",
   agent_status: status,
@@ -292,7 +293,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-1","workspace_id":"workspace-1","future_field":true}]}}',
+            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-1","workspace_id":"workspace-1","cwd":"/workspace/change-123","future_field":true}]}}',
         };
       }
       if (args[0] === "agent" && args[1] === "start") {
@@ -330,7 +331,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-1","workspace_id":"workspace-1"}]}}',
+            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-1","workspace_id":"workspace-1","cwd":"/workspace/change-123"}]}}',
         };
       }
       if (args[0] === "agent" && args[1] === "start") {
@@ -346,6 +347,34 @@ describe("Herdr Interactive Session Host", () => {
       ok: true,
       host: "herdr",
       status: "started",
+    });
+    expect(commands.some((args) => args[0] === "workspace" && args[1] === "create")).toBe(false);
+  });
+
+  it("does not reuse a same-label workspace at another cwd", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "workspace" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout: `{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"workspace-other","label":"${input.hostSessionName}"}]}}`,
+        };
+      }
+      if (args[0] === "pane" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"pane_list","panes":[{"pane_id":"pane-other","workspace_id":"workspace-other","cwd":"/workspace/other"}]}}',
+        };
+      }
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
     });
     expect(commands.some((args) => args[0] === "workspace" && args[1] === "create")).toBe(false);
   });
@@ -429,19 +458,23 @@ describe("Herdr Interactive Session Host", () => {
   it.each([
     [
       "a missing tab",
-      '{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"}}',
+      '{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","cwd":"/workspace/change-123"}}',
     ],
     [
       "a tab in another workspace",
-      '{"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-2"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"}}',
+      '{"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-2"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","cwd":"/workspace/change-123"}}',
     ],
     [
       "a root pane in another workspace",
-      '{"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-2","tab_id":"tab-1"}}',
+      '{"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-2","tab_id":"tab-1","cwd":"/workspace/change-123"}}',
     ],
     [
       "a root pane in another tab",
-      '{"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-2"}}',
+      '{"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-2","cwd":"/workspace/change-123"}}',
+    ],
+    [
+      "a root pane at another cwd",
+      '{"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","cwd":"/workspace/other"}}',
     ],
   ])("rejects workspace-create output with %s before starting or prompting", async (_description, body) => {
     const commands: string[][] = [];
@@ -487,7 +520,7 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") {
         return {
           ok: true,
-          stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","workspace_id":"workspace-1","pane_id":"pane-1","agent_status":"done"}]}}`,
+          stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","cwd":"${input.worktreePath}","workspace_id":"workspace-1","pane_id":"pane-1","agent_status":"done"}]}}`,
         };
       }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
@@ -724,7 +757,7 @@ describe("Herdr Interactive Session Host", () => {
       (commands as string[][]).push([...args]);
       return {
         ok: true,
-        stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","workspace_id":"workspace-1","pane_id":"pane-1","agent_status":"working","future_field":true}]}}`,
+        stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","cwd":"${input.worktreePath}","workspace_id":"workspace-1","pane_id":"pane-1","agent_status":"working","future_field":true}]}}`,
       };
     };
 
@@ -732,6 +765,26 @@ describe("Herdr Interactive Session Host", () => {
       ok: true,
       host: "herdr",
       status: "already_active",
+    });
+    expect(commands).toEqual([["agent", "list"]]);
+  });
+
+  it.each([
+    ["another cwd", '"cwd":"/workspace/other",'],
+    ["no reported cwd", ""],
+  ])("does not accept a same-name session with %s", async (_description, cwdField) => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      return {
+        ok: true,
+        stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}",${cwdField}"workspace_id":"workspace-other","pane_id":"pane-1","agent_status":"working"}]}}`,
+      };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
     });
     expect(commands).toEqual([["agent", "list"]]);
   });
