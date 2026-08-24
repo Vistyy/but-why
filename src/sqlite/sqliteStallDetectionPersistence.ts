@@ -229,12 +229,13 @@ const recordStallDetectionAttempt = (
         "record Stall Detection attempt",
         "Stall Detector Invocation identities are duplicated",
       );
-    const invocationOwners = yield* sql<{ readonly agentSessionId: number }>`
-      SELECT continuation.agent_session_id AS agentSessionId
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE invocation.id IN (${input.invocationIds})
-    `;
+    const invocationOwners = yield* sql.unsafe<{ readonly agentSessionId: number }>(
+      `SELECT continuation.agent_session_id AS agentSessionId
+       FROM agent_invocations AS invocation
+       JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+       WHERE invocation.id IN (${input.invocationIds.map(() => "?").join(", ")})`,
+      input.invocationIds,
+    );
     if (
       invocationOwners.length !== input.invocationIds.length ||
       invocationOwners.some((owner) => owner.agentSessionId !== input.agentSessionId)
@@ -289,12 +290,13 @@ const recordStallDetection = (
     if (existing !== undefined) return existing;
     if (input.invocationIds.length === 0)
       return yield* invalid("record Stall Detection", "No Stall Detector Invocation was retained");
-    const invocationOwners = yield* sql<{ readonly agentSessionId: number }>`
-      SELECT continuation.agent_session_id AS agentSessionId
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE invocation.id IN (${input.invocationIds})
-    `;
+    const invocationOwners = yield* sql.unsafe<{ readonly agentSessionId: number }>(
+      `SELECT continuation.agent_session_id AS agentSessionId
+       FROM agent_invocations AS invocation
+       JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+       WHERE invocation.id IN (${input.invocationIds.map(() => "?").join(", ")})`,
+      input.invocationIds,
+    );
     if (
       invocationOwners.length !== input.invocationIds.length ||
       invocationOwners.some((owner) => owner.agentSessionId !== input.agentSessionId)

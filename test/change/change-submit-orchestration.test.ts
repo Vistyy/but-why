@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
+import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type {
   CaptureLocalCandidateInput,
   CaptureLocalCandidateResult,
@@ -20,9 +24,14 @@ import type {
   PublishCandidateResult,
 } from "../../src/change/publication/candidatePublication.js";
 import type { StallDetectionService } from "../../src/change/runStallDetection.js";
+import { makeStallDetectionService } from "../../src/change/runStallDetection.js";
+import type { StallDetectionAssessment } from "../../src/change/stallDetection.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openSqliteStallDetectionPersistence } from "../../src/sqlite/sqliteStallDetectionPersistence.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
+import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -1453,6 +1462,156 @@ describe("Change Submit orchestration", () => {
       });
       expect(assessmentInput).toMatchObject({ changeId: change.id, validationRunId: 3 });
     }),
+  );
+
+  it.effect("records a normal Stall Detection through Submit and SQLite persistence", () =>
+    withTemporaryRepositoryState(({ repositoryRoot }) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const acceptanceContext = {
+          version: 1 as const,
+          title: "Approved intent",
+          description: "Deliver it",
+        };
+        const policy = readyChange({
+          id: "BY-C1",
+          acceptanceContext,
+          policy: {
+            reviewerConfiguration: {
+              acceptanceReview: storedAcceptanceReviewer,
+              specialistReviews: [],
+            },
+            stallDetection: { enabled: true, profile: storedAcceptanceReviewer.profile },
+            prepare: null,
+            checks: changeWithoutTaskPolicy.checks,
+          },
+        });
+        const reviewerConfiguration = JSON.stringify(policy.policy.reviewerConfiguration);
+        const ids = yield* repository.operation("create Stall Detection Submit fixture", (sql) =>
+          Effect.gen(function* () {
+            const change = yield* sql<{ readonly id: number }>`
+              INSERT INTO changes (
+                branch_ref, base_ref, base_remote_url, worktree_path,
+                initial_acceptance_context, reviewer_configuration,
+                stall_detection_definition, prepare_definition, checks_definition, cleanup_pending
+              ) VALUES (
+                'refs/heads/change-1', 'refs/remotes/origin/main', 'https://github.test/repo.git',
+                '/repo/worktree', ${JSON.stringify(acceptanceContext)}, ${reviewerConfiguration},
+                ${JSON.stringify({ enabled: true, profile: storedAcceptanceReviewer.profile })},
+                NULL, ${JSON.stringify(changeWithoutTaskPolicy.checks)}, 0
+              ) RETURNING id
+            `;
+            const changeId = change[0]?.id;
+            if (changeId === undefined) return yield* Effect.dieMessage("Change was not created");
+            const candidates: number[] = [];
+            for (let index = 0; index < 3; index += 1) {
+              const candidateRows = yield* sql<{ readonly id: number }>`
+                INSERT INTO candidates (change_id, base_commit, head_commit)
+                VALUES (${changeId}, 'base', ${`head-${index}`}) RETURNING id
+              `;
+              const candidateId = candidateRows[0]?.id;
+              if (candidateId === undefined)
+                return yield* Effect.dieMessage("Candidate was not created");
+              candidates.push(candidateId);
+            }
+            const runs: number[] = [];
+            for (const candidateId of candidates) {
+              const runRows = yield* sql<{ readonly id: number }>`
+                INSERT INTO validation_runs (
+                  candidate_id, validation_input_snapshot, outcome, cleanup_pending
+                ) VALUES (
+                  ${candidateId}, ${JSON.stringify({ acceptanceContext })}, 'blocked', 0
+                ) RETURNING id
+              `;
+              const runId = runRows[0]?.id;
+              if (runId === undefined) return yield* Effect.dieMessage("Run was not created");
+              runs.push(runId);
+              yield* sql`
+                INSERT INTO validation_phase_results (
+                  validation_run_id, phase, producer, outcome, findings, artifacts
+                ) VALUES (
+                  ${runId}, 'acceptance_review', 'acceptance', 'failed',
+                  ${JSON.stringify([
+                    {
+                      title: "Finding",
+                      description: "The accepted outcome is not established.",
+                      evidence: "Evidence",
+                      files: [],
+                      artifactRefs: [],
+                    },
+                  ])}, '[]'
+                )
+              `;
+            }
+            return { candidateId: candidates[2] as number, validationRunId: runs[2] as number };
+          }),
+        );
+        const stallDetection = yield* openSqliteStallDetectionPersistence();
+        const agentPersistence = yield* openSqliteAgentSessionPersistence();
+        const reviewerExecutor: ReviewerProcessExecutor = {
+          execute: () =>
+            Effect.succeed({
+              stdout:
+                '<reviewer-output>{"decision":"continue","reason":"The trajectory is ambiguous."}</reviewer-output>',
+            }),
+        };
+        const service = makeStallDetectionService({
+          persistence: stallDetection,
+          agentPersistence,
+          runtime: piReviewerAgentRuntime as ReviewerAgentRuntime<StallDetectionAssessment>,
+          reviewerExecutor,
+          sessionStorageRoot: repositoryRoot,
+        });
+        const submit = openChangeSubmit(
+          dependencies({
+            change: policy,
+            stallDetection: service,
+            captureResult: {
+              ...candidate,
+              changeId: policy.id,
+              candidateId: ids.candidateId,
+            },
+          }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
+          validateAcceptanceContextCandidate: () =>
+            Effect.succeed({
+              ok: true,
+              reused: false,
+              validationRunId: ids.validationRunId,
+              outcome: "blocked" as const,
+            }),
+          listFindings: () => Effect.succeed([finding]),
+          listToolingFailures: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
+        });
+        const result = yield* submit
+          .submit({ changeId: policy.id, now })
+          .pipe(Effect.provide(validationLayer));
+        expect(result).toMatchObject({
+          ok: false,
+          code: "validation_findings",
+          validationRunId: ids.validationRunId,
+        });
+        const record = yield* stallDetection.getByValidationRun(ids.validationRunId);
+        expect(record).toMatchObject({
+          changeId: policy.id,
+          validationRunId: ids.validationRunId,
+          decision: "continue",
+          blockerId: null,
+        });
+        const invocationCount = yield* repository.operation(
+          "inspect Stall Detection Submit fixture",
+          (sql) =>
+            sql<{ readonly count: number }>`
+              SELECT COUNT(*) AS count FROM stall_detection_agent_invocations
+              WHERE validation_run_id = ${ids.validationRunId}
+            `,
+        );
+        expect(invocationCount[0]?.count).toBe(1);
+      }),
+    ),
   );
 
   it.effect("returns Tooling Failures", () =>
