@@ -35,7 +35,7 @@ import type {
 import { localCandidatePublicationGit } from "../publication/adapters/localCandidatePublicationGit.js";
 import { openCandidatePublication } from "../publication/candidatePublication.js";
 import { makeStallDetectionService } from "../runStallDetection.js";
-import type { StallDetectionAssessment, StallDetectionPersistence } from "../stallDetection.js";
+import type { StallDetectionPersistence } from "../stallDetection.js";
 import { type ChangeSubmit, type ChangeSubmitResult, openChangeSubmit } from "../submitChange.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 
@@ -92,8 +92,7 @@ export const loadChangeSubmit = (input: {
       stallDetection: makeStallDetectionService({
         persistence: stallDetection,
         agentPersistence,
-        runtime: (input.reviewerAgentRuntime ??
-          piReviewerAgentRuntime) as unknown as ReviewerAgentRuntime<StallDetectionAssessment>,
+        runtime: piReviewerAgentRuntime,
         reviewerExecutor: piReviewerProcessExecutor,
         sessionStorageRoot: context.paths.agentSessionsPath,
       }),

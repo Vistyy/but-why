@@ -1405,7 +1405,12 @@ describe("Change Submit orchestration", () => {
           },
           stallDetection: {
             enabled: true,
-            profile: storedAcceptanceReviewer.profile,
+            profile: {
+              agentProfile: "default",
+              scope: "global",
+              model: "test/model",
+              thinking: null,
+            },
           },
           prepare: null,
           checks: changeWithoutTaskPolicy.checks,
@@ -1475,7 +1480,15 @@ describe("Change Submit orchestration", () => {
                 acceptanceReview: storedAcceptanceReviewer,
                 specialistReviews: [],
               },
-              stallDetection: { enabled: true, profile: storedAcceptanceReviewer.profile },
+              stallDetection: {
+                enabled: true,
+                profile: {
+                  agentProfile: "default",
+                  scope: "global",
+                  model: "test/model",
+                  thinking: null,
+                },
+              },
               prepare: null,
               checks: changeWithoutTaskPolicy.checks,
             },
@@ -1491,7 +1504,15 @@ describe("Change Submit orchestration", () => {
               ) VALUES (
                 'refs/heads/change-1', 'refs/remotes/origin/main', 'https://github.test/repo.git',
                 '/repo/worktree', ${JSON.stringify(acceptanceContext)}, ${reviewerConfiguration},
-                ${JSON.stringify({ enabled: true, profile: storedAcceptanceReviewer.profile })},
+                ${JSON.stringify({
+                  enabled: true,
+                  profile: {
+                    agentProfile: "default",
+                    scope: "global",
+                    model: "test/model",
+                    thinking: null,
+                  },
+                })},
                 NULL, ${JSON.stringify(changeWithoutTaskPolicy.checks)}, 0
               ) RETURNING id
             `;

@@ -14,20 +14,11 @@ import type {
   StallDetectionRecord,
 } from "../../src/change/stallDetection.js";
 
-const profile: ResolvedReviewerPiAgentProfile = {
+const profile = {
   agentProfile: "stall-detector",
-  scope: "global",
-  profile: {
-    agentRuntime: "pi",
-    runtimeConfig: {
-      model: "test/model",
-      thinking: "low",
-      extensions: ["extension"],
-      skills: ["skill"],
-      tools: ["tool"],
-      contextFileDiscovery: true,
-    },
-  },
+  scope: "global" as const,
+  model: "test/model",
+  thinking: "low" as const,
 };
 
 const assessmentInput: StallDetectionAssessmentInput = {

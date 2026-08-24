@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
-import type { ResolvedReviewerPiAgentProfile } from "../agent/agentProfiles.js";
+import type { ResolvedPiAgentProfile } from "../agent/agentProfiles.js";
 import type {
   AgentSessionPersistence,
   AgentSessionSqlLink,
@@ -15,6 +15,7 @@ import {
 import type { ReviewerProcessExecutor } from "../agent/reviewerExecution.js";
 import { encodeReviewerWireValue } from "../agent/reviewerOutputWire.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { StallDetectionProfile } from "./stallDetectionConfig.js";
 import type {
   StallDetectionAssessment,
   StallDetectionAssessmentInput,
@@ -45,7 +46,7 @@ export type StallDetectionService = {
   readonly assess: (input: {
     readonly changeId: string;
     readonly validationRunId: number;
-    readonly configuration: ResolvedReviewerPiAgentProfile;
+    readonly configuration: StallDetectionProfile;
     readonly newlyCompleted: boolean;
   }) => Effect.Effect<
     | { readonly attempted: false }
@@ -82,8 +83,8 @@ export const makeStallDetectionService = (input: {
         configuration: {
           harness: "pi",
           provider: null,
-          model: assessmentInput.configuration.profile.runtimeConfig.model,
-          thinking: assessmentInput.configuration.profile.runtimeConfig.thinking ?? null,
+          model: assessmentInput.configuration.model,
+          thinking: assessmentInput.configuration.thinking ?? null,
         },
         agentPersistence: input.agentPersistence,
         linkInvocation,
@@ -144,17 +145,14 @@ const assessmentPrompt = (input: StallDetectionAssessmentInput): string =>
     encodeReviewerWireValue(input),
   ].join("\n\n");
 
-const assessorProfile = (
-  profile: ResolvedReviewerPiAgentProfile,
-): ResolvedReviewerPiAgentProfile => ({
-  ...profile,
+const assessorProfile = (profile: StallDetectionProfile): ResolvedPiAgentProfile => ({
+  agentProfile: profile.agentProfile,
+  scope: profile.scope,
   profile: {
-    ...profile.profile,
+    agentRuntime: "pi",
     runtimeConfig: {
-      model: profile.profile.runtimeConfig.model,
-      ...(profile.profile.runtimeConfig.thinking === undefined
-        ? {}
-        : { thinking: profile.profile.runtimeConfig.thinking }),
+      model: profile.model,
+      ...(profile.thinking === null ? {} : { thinking: profile.thinking }),
       extensions: [],
       skills: [],
       tools: [],

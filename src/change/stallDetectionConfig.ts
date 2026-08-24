@@ -1,15 +1,32 @@
 import { dirname } from "node:path";
 
+import { Schema } from "effect";
 import {
   type ResolvedReviewerPiAgentProfile,
   resolveAgentProfile,
 } from "../agent/agentProfiles.js";
+import type { AgentThinking } from "../agent/agentSession/agentSession.js";
+import { configNameSchema, nonBlankStringSchema } from "../contracts/agentConfig.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 
+export type StallDetectionProfile = {
+  readonly agentProfile: string;
+  readonly scope: "repo" | "global";
+  readonly model: string;
+  readonly thinking: AgentThinking | null;
+};
+
+export const stallDetectionProfileSchema = Schema.Struct({
+  agentProfile: configNameSchema,
+  scope: Schema.Literal("repo", "global"),
+  model: nonBlankStringSchema,
+  thinking: Schema.NullOr(Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh")),
+});
+
 export type ResolvedStallDetectionConfig = {
   readonly enabled: boolean;
-  readonly profile: ResolvedReviewerPiAgentProfile | null;
+  readonly profile: StallDetectionProfile | null;
 };
 
 export const resolveStallDetectionConfig = (input: {
@@ -41,5 +58,18 @@ export const resolveStallDetectionConfig = (input: {
     globalConfigDirectory: dirname(input.globalConfigPath),
   });
   if (!resolved.ok) return { ok: false, message: resolved.error.message };
-  return { ok: true, config: { enabled: true, profile: resolved.resolved } };
+  return {
+    ok: true,
+    config: {
+      enabled: true,
+      profile: stallDetectionProfile(resolved.resolved),
+    },
+  };
 };
+
+const stallDetectionProfile = (profile: ResolvedReviewerPiAgentProfile): StallDetectionProfile => ({
+  agentProfile: profile.agentProfile,
+  scope: profile.scope,
+  model: profile.profile.runtimeConfig.model,
+  thinking: profile.profile.runtimeConfig.thinking ?? null,
+});

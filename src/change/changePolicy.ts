@@ -1,9 +1,5 @@
 import { Schema } from "effect";
 import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
-import {
-  type ResolvedReviewerPiAgentProfile,
-  resolvedReviewerPiAgentProfileSchema,
-} from "../agent/agentProfiles.js";
 import { nonBlankStringSchema } from "../contracts/agentConfig.js";
 import { checkIdSchema, type RepoConfig, timeoutSecondsSchema } from "../contracts/repoConfig.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReview/acceptanceReviewConfig.js";
@@ -12,6 +8,7 @@ import {
   encodeSqliteChangeReviewerConfiguration,
 } from "./changeReviewerConfiguration.js";
 import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";
+import { stallDetectionProfileSchema, type StallDetectionProfile } from "./stallDetectionConfig.js";
 
 export type ChangeReviewerConfiguration = {
   readonly acceptanceReview: AcceptanceReviewPolicy | null;
@@ -34,7 +31,7 @@ export type ChangeChecks = readonly [ChangeCheck, ...ChangeCheck[]];
 
 export type StallDetectionPolicy = {
   readonly enabled: boolean;
-  readonly profile: ResolvedReviewerPiAgentProfile | null;
+  readonly profile: StallDetectionProfile | null;
 };
 
 export type ChangePolicy = {
@@ -120,7 +117,7 @@ const changeChecksSchema = Schema.NonEmptyArray(
 
 const stallDetectionPolicySchema = Schema.Struct({
   enabled: Schema.Boolean,
-  profile: Schema.NullOr(Schema.Unknown),
+  profile: Schema.NullOr(stallDetectionProfileSchema),
 }).pipe(
   Schema.filter((policy) => !policy.enabled || policy.profile !== null, {
     message: () => "Enabled Stall Detection requires an Agent Profile",
@@ -147,9 +144,7 @@ const decodeChangePolicy = (value: unknown): ChangePolicy => {
       profile:
         policy.stallDetection.profile === null
           ? null
-          : Schema.decodeUnknownSync(resolvedReviewerPiAgentProfileSchema)(
-              policy.stallDetection.profile,
-            ),
+          : Schema.decodeUnknownSync(stallDetectionProfileSchema)(policy.stallDetection.profile),
     },
     prepare: policy.prepare,
     checks: policy.checks,
