@@ -58,6 +58,7 @@ const blockerHistory: ImplementationBlockerHistory = {
       id: 1,
       changeId: "change-1",
       content: "Authority was ambiguous.",
+      source: { type: "implementer" },
       resolution: {
         blockerId: 1,
         content: "Use the captured Acceptance Context.",

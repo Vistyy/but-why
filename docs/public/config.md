@@ -23,6 +23,8 @@ Global resource paths remain live operator-owned dependencies after selection.
 
 ## Repo Config
 
+Repo Config owns tracked Prepare, Checks, reviewer overrides, Specialists, Stall Detection, and Repo Agent Profile selections.
+
 A complete example is:
 
 ```json

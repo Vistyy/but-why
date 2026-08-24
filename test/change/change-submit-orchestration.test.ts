@@ -998,6 +998,7 @@ describe("Change Submit orchestration", () => {
           id: 1,
           changeId: "change-1",
           content: "Need an external decision.",
+          source: { type: "implementer" },
           resolution: null,
         },
         publication: {

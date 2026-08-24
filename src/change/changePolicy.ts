@@ -121,7 +121,11 @@ const changeChecksSchema = Schema.NonEmptyArray(
 const stallDetectionPolicySchema = Schema.Struct({
   enabled: Schema.Boolean,
   profile: Schema.NullOr(Schema.Unknown),
-});
+}).pipe(
+  Schema.filter((policy) => !policy.enabled || policy.profile !== null, {
+    message: () => "Enabled Stall Detection requires an Agent Profile",
+  }),
+);
 
 const changePolicySchema = Schema.Struct({
   reviewerConfiguration: Schema.Unknown,

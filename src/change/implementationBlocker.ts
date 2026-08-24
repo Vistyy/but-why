@@ -6,7 +6,7 @@ export type ImplementationBlocker = {
   readonly id: number;
   readonly changeId: string;
   readonly content: string;
-  readonly source?: ImplementationBlockerSource;
+  readonly source: ImplementationBlockerSource;
   readonly resolution: ImplementationBlockerResolution | null;
 };
 

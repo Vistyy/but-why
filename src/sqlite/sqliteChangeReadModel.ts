@@ -71,7 +71,7 @@ export const decodeChangeRow = (
     row.acceptanceContext,
     "Change Acceptance Context",
   );
-  const encodedStallDetection = decodeStoredNullableString(
+  const encodedStallDetection = decodeStoredString(
     row.stallDetectionDefinition,
     "Change Stall Detection policy",
   );
@@ -88,7 +88,7 @@ export const decodeChangeRow = (
       row.reviewerConfiguration,
       "Change Reviewer Configuration",
     ),
-    stallDetection: encodedStallDetection ?? JSON.stringify({ enabled: false, profile: null }),
+    stallDetection: encodedStallDetection,
     prepareDefinition: encodedPrepareDefinition,
     checksDefinition: encodedChecksDefinition,
   });

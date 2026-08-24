@@ -192,7 +192,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
     row.reviewerConfiguration,
     "Change Reviewer Configuration",
   );
-  const encodedStallDetection = decodeStoredNullableString(
+  const encodedStallDetection = decodeStoredString(
     row.stallDetectionDefinition,
     "Change Stall Detection policy",
   );
@@ -210,7 +210,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
   );
   const policy = decodeSqliteChangePolicy({
     reviewerConfiguration: encodedReviewerConfiguration,
-    stallDetection: encodedStallDetection ?? JSON.stringify({ enabled: false, profile: null }),
+    stallDetection: encodedStallDetection,
     prepareDefinition: encodedPrepareDefinition,
     checksDefinition: encodedChecksDefinition,
   });

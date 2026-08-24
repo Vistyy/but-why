@@ -487,7 +487,10 @@ const blockedValidationResult = (
       change.policy.stallDetection?.enabled
     ) {
       const profile = change.policy.stallDetection.profile;
-      if (profile !== null && dependencies.stallDetection !== undefined) {
+      if (profile === null) {
+        return yield* Effect.dieMessage("Enabled Stall Detection has no Agent Profile");
+      }
+      if (dependencies.stallDetection !== undefined) {
         const detected = yield* dependencies.stallDetection.assess({
           changeId: change.id,
           validationRunId: validation.validationRunId,

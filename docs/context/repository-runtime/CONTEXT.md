@@ -47,7 +47,7 @@ When Repo Config omits Repository Preparation, But Why runs no Repository Prepar
 _Avoid_: Validation-only setup, package-manager-specific install stage
 
 **Repo Config**:
-Tracked repository configuration for Prepare, Checks, reviewer overrides, Specialists, and Repo Agent Profiles.
+Tracked repository configuration for Prepare, Checks, reviewer overrides, Stall Detection, Specialists, and Repo Agent Profiles.
 Task Submit reads it from the exact Review Base.
 Change Start reads it from the exact starting Change Base and freezes the complete Change policy.
 _Avoid_: Global user preference, detected Git fact, Submit-time policy

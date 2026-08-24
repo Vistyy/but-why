@@ -20,6 +20,7 @@ import {
   readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
+import { decodeStoredString } from "./sqliteChangeValueDecoders.js";
 import { decodeSqliteValidationInputSnapshot } from "./sqliteValidationInputSnapshot.js";
 
 export type StoredValidationRunRow = {
@@ -188,7 +189,10 @@ export const readValidationExecutionAuthorityById = (
       if (row === undefined) throw new Error("Validation Run owning Change was not selected");
       const changePolicy = decodeSqliteChangePolicy({
         reviewerConfiguration: row.reviewerConfiguration,
-        stallDetection: row.stallDetection ?? JSON.stringify({ enabled: false, profile: null }),
+        stallDetection: decodeStoredString(
+          row.stallDetection,
+          "Validation Change Stall Detection policy",
+        ),
         prepareDefinition: row.prepareDefinition,
         checksDefinition: row.checksDefinition,
       });
