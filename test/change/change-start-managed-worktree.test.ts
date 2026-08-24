@@ -264,8 +264,6 @@ describe("Change Start Managed Worktree boundaries", () => {
         policy: {
           stallDetection: { enabled: false, profile: null },
           reviewerConfiguration: {
-            prepare: { command: "true", timeoutSeconds: 1200 },
-            stallDetection: { enabled: false, profile: null },
             acceptanceReview: {
               instructions: defaultAcceptanceInstructions,
               instructionsSource: "built_in",
