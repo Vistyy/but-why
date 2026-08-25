@@ -200,7 +200,9 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       const shouldRetry =
         !settledResult.ok &&
         settledResult.failure.kind === "output_contract" &&
+        settledResult.sessionUsability === "unknown" &&
         settledResult.sessionReference !== undefined &&
+        settledResult.sessionFilePath !== undefined &&
         invocationNumber < (input.maxOutputContractAttempts ?? 3);
       const evidence: AgentExecutionEvidence = {
         agentSessionId: sessionId,
