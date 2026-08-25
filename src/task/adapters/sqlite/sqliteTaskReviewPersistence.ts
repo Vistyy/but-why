@@ -407,7 +407,17 @@ export const admitTaskReview = (
     `;
     const reviewId = inserted[0]?.id;
     if (reviewId === undefined) return yield* invalid("admit Task Review", "Review ID is missing");
-    if (input.simplificationAdvice !== undefined) {
+    const completedAdvice = yield* sql<{ readonly adviceExists: number }>`
+      SELECT 1 AS adviceExists
+      FROM task_review_simplification_advice AS advice
+      JOIN task_reviews AS prior_review ON prior_review.id = advice.task_review_id
+      WHERE prior_review.task_id = ${internalTaskId(input.taskId, idPrefix)}
+        AND advice.outcome = 'completed'
+      LIMIT 1
+    `;
+    const simplificationAdviceAttempt =
+      input.simplificationAdvice !== undefined && completedAdvice[0] === undefined;
+    if (simplificationAdviceAttempt) {
       yield* sql`
         INSERT INTO task_review_simplification_advice (
           task_review_id, outcome, advice, unavailable, configuration
@@ -432,6 +442,7 @@ export const admitTaskReview = (
       policy,
       proposal,
       dependencyEvidence: dependencies,
+      simplificationAdviceAttempt,
     };
   });
 
@@ -899,16 +910,20 @@ const readSimplificationAdviceAttempt = (
           attempt.configuration === null
             ? null
             : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration) as unknown);
+        const decodedInvocations = invocations.map(decodeAgentInvocation);
         const invocationEvidence = {
           ...(invocations[0] === undefined
             ? {}
             : { agentSessionId: invocations[0].agentSessionId }),
-          ...(invocations.length === 0
-            ? {}
-            : { agentInvocations: invocations.map(decodeAgentInvocation) }),
+          ...(decodedInvocations.length === 0 ? {} : { agentInvocations: decodedInvocations }),
         };
         if (attempt.outcome === "completed") {
-          if (attempt.advice === null || attempt.unavailable !== null) {
+          if (
+            attempt.advice === null ||
+            attempt.unavailable !== null ||
+            configuration === null ||
+            invocations[0] === undefined
+          ) {
             throw new Error("Completed Task Simplification Advice has inconsistent result fields.");
           }
           return {
@@ -916,7 +931,11 @@ const readSimplificationAdviceAttempt = (
             advice: decodeTaskSimplificationAdvice(JSON.parse(attempt.advice) as unknown),
             unavailable: null,
             configuration,
-            ...invocationEvidence,
+            agentSessionId: invocations[0].agentSessionId,
+            agentInvocations: decodedInvocations as unknown as readonly [
+              AgentInvocationRecord,
+              ...AgentInvocationRecord[],
+            ],
           };
         }
         if (attempt.outcome === "unavailable") {

@@ -47,20 +47,23 @@ export const decodeTaskSimplificationAdvicePolicy = (
 ): TaskSimplificationAdvicePolicy =>
   Schema.decodeUnknownSync(simplificationAdvicePolicySchema, { onExcessProperty: "error" })(value);
 
-type TaskSimplificationAdviceAttemptBase = {
-  readonly configuration: TaskSimplificationAdvicePolicy | null;
+type TaskSimplificationAdviceAttemptEvidence = {
   readonly agentSessionId?: number;
   readonly agentInvocations?: readonly AgentInvocationRecord[];
 };
 
 export type TaskSimplificationAdviceAttempt =
-  | (TaskSimplificationAdviceAttemptBase & {
+  | (TaskSimplificationAdviceAttemptEvidence & {
       readonly state: "completed";
       readonly advice: TaskSimplificationAdvice;
       readonly unavailable: null;
+      readonly configuration: TaskSimplificationAdvicePolicy;
+      readonly agentSessionId: number;
+      readonly agentInvocations: readonly [AgentInvocationRecord, ...AgentInvocationRecord[]];
     })
-  | (TaskSimplificationAdviceAttemptBase & {
+  | (TaskSimplificationAdviceAttemptEvidence & {
       readonly state: "unavailable";
       readonly advice: null;
       readonly unavailable: TaskReviewToolingFailure;
+      readonly configuration: TaskSimplificationAdvicePolicy | null;
     });

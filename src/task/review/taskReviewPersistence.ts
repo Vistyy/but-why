@@ -45,6 +45,7 @@ export type AdmitTaskReviewResult =
       readonly policy: TaskReviewPolicySnapshot;
       readonly proposal: TaskReviewProposal;
       readonly dependencyEvidence: readonly TaskReviewDependencyEvidence[];
+      readonly simplificationAdviceAttempt: boolean;
     }
   | TaskReviewAdmissionRejection;
 

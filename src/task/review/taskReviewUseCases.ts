@@ -255,9 +255,10 @@ const submitTaskReview = (
         message: resolvedPolicy.message,
       } as const;
     }
-    const completedAdvice = yield* input.persistence.getCompletedSimplificationAdvice(taskId);
+    const completedAdviceBeforeAdmission =
+      yield* input.persistence.getCompletedSimplificationAdvice(taskId);
     const advicePolicy =
-      completedAdvice === undefined
+      completedAdviceBeforeAdmission === undefined
         ? input.resolveSimplificationAdvicePolicy(repoConfig, base.base.commit)
         : undefined;
     const admitted = yield* admission.admit({
@@ -266,7 +267,7 @@ const submitTaskReview = (
       baseRef: base.base.ref,
       baseCommit: base.base.commit,
       now,
-      ...(completedAdvice === undefined
+      ...(completedAdviceBeforeAdmission === undefined
         ? {
             simplificationAdvice: {
               ...(advicePolicy?.ok === true ? { configuration: advicePolicy.policy } : {}),
@@ -276,6 +277,10 @@ const submitTaskReview = (
     });
     if (!admitted.ok) return admitted;
     const reviewId = admitted.review.id;
+    const ownsSimplificationAdviceAttempt = admitted.simplificationAdviceAttempt;
+    const completedAdvice = ownsSimplificationAdviceAttempt
+      ? undefined
+      : yield* input.persistence.getCompletedSimplificationAdvice(taskId);
 
     let taskReviewProgress: StartedSubmitProgress | undefined;
     const result = yield* runAfterSubmitProgressStarted({
@@ -341,7 +346,7 @@ const submitTaskReview = (
                 }
               }
               const agentEnvironment = repoAgentEnvironment(repoConfig);
-              if (completedAdvice === undefined) {
+              if (ownsSimplificationAdviceAttempt) {
                 const adviceResult = yield* runTaskSimplificationAdvice({
                   input,
                   reviewId,
@@ -483,7 +488,7 @@ const submitTaskReview = (
               operation: workspace.toolingError.operationName,
               message: workspace.toolingError.errorMessage,
             };
-        if (workspaceFailure !== undefined && completedAdvice === undefined) {
+        if (workspaceFailure !== undefined && ownsSimplificationAdviceAttempt) {
           yield* input.persistence.recordSimplificationAdviceFailure(reviewId, workspaceFailure);
         }
         const execution: WorkspaceExecution =
@@ -518,7 +523,8 @@ const submitTaskReview = (
           if (active === undefined) return { ok: false, code: "task_review_not_found" } as const;
           return { ok: false, code: "task_review_recovery_required", review: active } as const;
         }
-        const advice = yield* input.persistence.getCompletedSimplificationAdvice(taskId);
+        const advice =
+          completedAdvice ?? (yield* input.persistence.getCompletedSimplificationAdvice(taskId));
         return {
           ...completed,
           ...(advice !== undefined ? { simplificationAdvice: advice } : {}),

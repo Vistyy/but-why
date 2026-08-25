@@ -12,7 +12,9 @@ export const taskSimplificationAdviceMigration = Effect.gen(function* () {
       configuration TEXT,
       agent_invocation_id INTEGER UNIQUE REFERENCES agent_invocations(id),
       CHECK ((outcome = 'completed') = (advice IS NOT NULL)),
-      CHECK ((outcome = 'unavailable') = (unavailable IS NOT NULL))
+      CHECK ((outcome = 'unavailable') = (unavailable IS NOT NULL)),
+      CHECK (outcome <> 'completed' OR configuration IS NOT NULL),
+      CHECK (outcome <> 'completed' OR agent_invocation_id IS NOT NULL)
     ) STRICT
   `);
 });
