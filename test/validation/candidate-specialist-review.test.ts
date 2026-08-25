@@ -868,7 +868,10 @@ describe("Candidate Specialist Review phase", () => {
                   throw new Error("Reviewer session storage root was not supplied.");
                 mkdirSync(sessionStorageRoot, { recursive: true });
                 const sessionFilePath = join(sessionStorageRoot, "session-1.jsonl");
-                writeFileSync(sessionFilePath, "session\n");
+                writeFileSync(
+                  sessionFilePath,
+                  `${JSON.stringify({ type: "session", id: input.sessionId, cwd })}\n`,
+                );
                 return {
                   ok: false as const,
                   failure: new ReviewerExecutionFailed({

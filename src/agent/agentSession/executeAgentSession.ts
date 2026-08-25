@@ -204,7 +204,11 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         settledResult.sessionUsability === "unknown" &&
         settledResult.sessionReference !== undefined &&
         settledResult.sessionFilePath !== undefined &&
-        isResumableTranscript(input.sessionStorageRoot, settledResult.sessionFilePath) &&
+        isResumableTranscript(
+          input.sessionStorageRoot,
+          settledResult.sessionFilePath,
+          dispatch.dispatch.piSessionId,
+        ) &&
         invocationNumber < (input.maxOutputContractAttempts ?? 3);
       const evidence: AgentExecutionEvidence = {
         agentSessionId: sessionId,
@@ -296,18 +300,21 @@ const settlementFor = <Output>(
   };
 };
 
-const isResumableTranscript = (root: string, path: string): boolean => {
+const isResumableTranscript = (root: string, path: string, sessionId: string): boolean => {
   if (safeTranscriptPath(root, path) === null) return false;
   try {
     const canonicalRoot = realpathSync(root);
     const canonicalPath = realpathSync(path);
     const candidate = relative(canonicalRoot, canonicalPath);
+    const matchingTranscript = findUniquePiSessionTranscript(root, sessionId);
     return (
       !isAbsolute(candidate) &&
       candidate !== "" &&
       candidate !== ".." &&
       !candidate.startsWith(`..${sep}`) &&
-      statSync(canonicalPath).isFile()
+      statSync(canonicalPath).isFile() &&
+      matchingTranscript !== undefined &&
+      realpathSync(matchingTranscript) === canonicalPath
     );
   } catch {
     return false;

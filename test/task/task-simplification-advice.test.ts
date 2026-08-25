@@ -78,7 +78,10 @@ it.effect("corrects malformed advice output in the same workspace and Agent Sess
           throw new Error("Expected Underengineer session root");
         mkdirSync(sessionStorageRoot, { recursive: true });
         const sessionFilePath = join(sessionStorageRoot, "underengineer.jsonl");
-        writeFileSync(sessionFilePath, "session\n");
+        writeFileSync(
+          sessionFilePath,
+          `${JSON.stringify({ type: "session", id: input.sessionId, cwd: input.commandCwd ?? root })}\n`,
+        );
         if (adviceCalls === 1) {
           const cwd = input.commandCwd ?? root;
           writeFileSync(join(cwd, ".but-why", "config.json"), "changed\n");

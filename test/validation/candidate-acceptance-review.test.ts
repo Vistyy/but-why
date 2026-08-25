@@ -131,7 +131,10 @@ layer(acceptanceTemplateLayer)(
                   throw new Error("Reviewer session storage root was not supplied.");
                 mkdirSync(sessionStorageRoot, { recursive: true });
                 const sessionFilePath = join(sessionStorageRoot, "session-1.jsonl");
-                writeFileSync(sessionFilePath, "session\n");
+                writeFileSync(
+                  sessionFilePath,
+                  `${JSON.stringify({ type: "session", id: input.sessionId, cwd })}\n`,
+                );
                 writeFileSync(join(cwd, ".but-why/config.json"), "mutated\n");
                 git(cwd, "add", ".but-why/config.json");
                 writeFileSync(join(cwd, "acceptance-untracked"), "remove\n");

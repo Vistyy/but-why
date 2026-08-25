@@ -170,7 +170,10 @@ it.effect("restores Task Review state before an output-correction retry", () =>
               throw new Error("Expected reviewer session storage root");
             mkdirSync(sessionStorageRoot, { recursive: true });
             const sessionFilePath = join(sessionStorageRoot, "reviewer.jsonl");
-            writeFileSync(sessionFilePath, "session\n");
+            writeFileSync(
+              sessionFilePath,
+              `${JSON.stringify({ type: "session", id: input.sessionId, cwd })}\n`,
+            );
             writeFileSync(join(cwd, ".but-why", "config.json"), "changed\n");
             expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd }).status).toBe(0);
             writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
