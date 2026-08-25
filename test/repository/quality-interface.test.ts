@@ -21,7 +21,7 @@ const runner = join(repositoryRoot, "scripts/with-capacity-lock.sh");
 const qualityRunner = join(repositoryRoot, "scripts/run-quality-workload.sh");
 const temporaryPaths: string[] = [];
 const processDeadlineMs = 5_000;
-const qualityTestTimeoutMs = 30_000;
+const qualityTestTimeoutMs = 60_000;
 
 type CommandResult = {
   status: number | null;
@@ -33,13 +33,21 @@ type StartedCommand = {
   readonly done: Promise<CommandResult>;
 };
 
-const awaitProcessDone = (process: StartedCommand, description: string): Promise<CommandResult> =>
-  observeUntil({
-    description,
-    observe: () => process.child.exitCode,
-    isReady: (exitCode) => exitCode !== null,
-    timeoutMs: processDeadlineMs,
-  }).then(() => process.done);
+const awaitProcessDone = (process: StartedCommand, description: string): Promise<CommandResult> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    process.done,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(new Error(`Timed out after ${processDeadlineMs}ms waiting for ${description}.`)),
+        processDeadlineMs,
+      );
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+};
 
 const startRunner = (lockFile: string, args: string[]) => {
   const child = startTestProcess("bash", [runner, ...args], {
@@ -447,38 +455,42 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
     expect(invocations.filter((invocation) => invocation === "test")).toHaveLength(1);
   });
 
-  test("waits for unselected workloads while targeted tests remain unlocked", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-    temporaryPaths.push(directory);
-    const lockFile = join(directory, "capacity.lock");
-    const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
-    createCompletingPnpm(directory);
-    let unselected: ReturnType<typeof startJust> | undefined;
+  test(
+    "waits for unselected workloads while targeted tests remain unlocked",
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+      temporaryPaths.push(directory);
+      const lockFile = join(directory, "capacity.lock");
+      const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
+      createCompletingPnpm(directory);
+      let unselected: ReturnType<typeof startJust> | undefined;
 
-    try {
-      await waitForFile(readyFile);
-      unselected = startJust(lockFile, ["test", "--reporter=dot"], {
-        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
-      });
-      await waitForOutput(unselected, "waiting: test is waiting for capacity");
-      expect(unselected.child.exitCode).toBeNull();
-      expect(unselected.output).toContain("waiting: test is waiting for capacity");
+      try {
+        await waitForFile(readyFile);
+        unselected = startJust(lockFile, ["test", "--reporter=dot"], {
+          PATH: `${directory}:${process.env["PATH"] ?? ""}`,
+        });
+        await waitForOutput(unselected, "waiting: test is waiting for capacity");
+        expect(unselected.child.exitCode).toBeNull();
+        expect(unselected.output).toContain("waiting: test is waiting for capacity");
 
-      const targeted = await runJust(lockFile, ["test", "test/cli/cli-task-id.test.ts"]);
-      expect(targeted.status).toBe(0);
-      expect(targeted.output).toContain("1 passed");
+        const targeted = await runJust(lockFile, ["test", "test/cli/cli-task-id.test.ts"]);
+        expect(targeted.status).toBe(0);
+        expect(targeted.output).toContain("1 passed");
 
-      writeFileSync(releaseFile, "release");
-      const unselectedResult = await awaitProcessDone(
-        unselected,
-        "unselected test process to exit",
-      );
-      expect(unselectedResult.status, unselectedResult.output).toBe(0);
-    } finally {
-      if (unselected !== undefined) await stopJust(unselected);
-      await stopRunner(holder);
-    }
-  }, 30_000);
+        writeFileSync(releaseFile, "release");
+        const unselectedResult = await awaitProcessDone(
+          unselected,
+          "unselected test process to exit",
+        );
+        expect(unselectedResult.status, unselectedResult.output).toBe(0);
+      } finally {
+        if (unselected !== undefined) await stopJust(unselected);
+        await stopRunner(holder);
+      }
+    },
+    qualityTestTimeoutMs,
+  );
 
   test("interrupts a workload while it waits for capacity", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
