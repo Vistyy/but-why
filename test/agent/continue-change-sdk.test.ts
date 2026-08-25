@@ -77,16 +77,17 @@ process.exit(2);
   return path;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const textMessages = (messages: readonly unknown[]): readonly string[] =>
   messages.flatMap((message) => {
-    if (typeof message !== "object" || message === null) return [];
-    const content = Reflect.get(message, "content");
+    if (!isRecord(message)) return [];
+    const content = message["content"];
     if (!Array.isArray(content)) return [];
     return content.flatMap((part) => {
-      if (typeof part !== "object" || part === null || Reflect.get(part, "type") !== "text") {
-        return [];
-      }
-      const text = Reflect.get(part, "text");
+      if (!isRecord(part) || part["type"] !== "text") return [];
+      const text = part["text"];
       return typeof text === "string" ? [text] : [];
     });
   });
@@ -99,7 +100,7 @@ const continuationState = (session: { readonly sessionManager: SessionManager })
     );
   const latest = entries.at(-1);
   const data = latest?.type === "custom" ? latest.data : undefined;
-  return typeof data === "object" && data !== null && !Array.isArray(data)
+  return isRecord(data)
     ? (data as Record<string, unknown> & { readonly paused?: boolean })
     : undefined;
 };

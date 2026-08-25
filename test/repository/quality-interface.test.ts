@@ -113,7 +113,7 @@ const startJust = (
 
 const runJust = async (lockFile: string, args: string[]): Promise<CommandResult> => {
   const justProcess = startJust(lockFile, args, {
-    PATH: `${dirname(lockFile)}:${Reflect.get(process.env, "PATH") ?? ""}`,
+    PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
   });
   try {
     return await awaitProcessDone(justProcess, "Just process to exit");
@@ -458,7 +458,7 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
     try {
       await waitForFile(readyFile);
       unselected = startJust(lockFile, ["test", "--reporter=dot"], {
-        PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
       });
       await waitForOutput(unselected, "waiting: test is waiting for capacity");
       expect(unselected.child.exitCode).toBeNull();
@@ -616,7 +616,7 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
     const descendantPidFile = join(directory, "just-descendant-pid");
     createBlockingPnpm(directory, readyFile, descendantPidFile);
     const justProcess = startJust(lockFile, ["test"], {
-      PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+      PATH: `${directory}:${process.env["PATH"] ?? ""}`,
     });
     let observer: ReturnType<typeof startRunner> | undefined;
 
@@ -654,7 +654,7 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
       lockFile,
       ["quality"],
       {
-        PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
       },
       directory,
     );
