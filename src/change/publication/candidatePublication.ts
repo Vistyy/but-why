@@ -493,7 +493,9 @@ const selectSingleRecoveredPullRequest = (
     };
   if (exact.length !== 1) return { ok: false, code: "publication_lookup_ambiguous" };
   if (found.length !== 1) return { ok: false, code: "publication_lookup_ambiguous" };
-  return { ok: true, pullRequest: exact[0] as GitHubPullRequest };
+  const [pullRequest] = exact;
+  if (pullRequest === undefined) return { ok: false, code: "publication_lookup_ambiguous" };
+  return { ok: true, pullRequest };
 };
 
 const updateOrReuse = (

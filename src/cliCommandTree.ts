@@ -52,7 +52,7 @@ const leaf = <Name extends string, const Config extends Command.Command.Config>(
 const group = <Name extends string, const Config extends Command.Command.Config>(
   name: Name,
   description: string,
-  children: readonly AnyCommand[],
+  children: Subcommands,
   config: Config,
   operation: CliOperation<ParsedConfig<Config>>,
 ): AnyCommand => {
@@ -60,7 +60,7 @@ const group = <Name extends string, const Config extends Command.Command.Config>
     Command.make(name, config).pipe(Command.withDescription(description)),
     operation,
   );
-  return eraseCommandType(handled.pipe(Command.withSubcommands(children as Subcommands)));
+  return eraseCommandType(handled.pipe(Command.withSubcommands(children)));
 };
 
 const withCliHandler = <Name extends string, R, E, Values>(

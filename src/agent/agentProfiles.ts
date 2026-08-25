@@ -56,6 +56,10 @@ type ProfileResolutionInput = {
   readonly globalConfigDirectory?: string;
 };
 
+type ReviewerProfileResolutionInput = Omit<ProfileResolutionInput, "requireModel"> & {
+  readonly requireModel?: true;
+};
+
 export const resolveInteractiveSessionAgentProfile = (input: {
   readonly repoConfig: RepoConfig;
   readonly globalConfig: GlobalConfig;
@@ -99,7 +103,7 @@ export function resolveAgentProfile(
   | { readonly ok: true; readonly resolved: InteractiveSessionAgentProfile }
   | { readonly ok: false; readonly error: AgentProfileResolutionError };
 export function resolveAgentProfile(
-  input: ProfileResolutionInput,
+  input: ReviewerProfileResolutionInput,
 ):
   | { readonly ok: true; readonly resolved: ResolvedReviewerPiAgentProfile }
   | { readonly ok: false; readonly error: AgentProfileResolutionError };
@@ -143,28 +147,33 @@ export function resolveAgentProfile(
   }
 
   const model = profile.runtimeConfig?.model;
-  if (input.requireModel !== false && (model === undefined || model.trim().length === 0)) {
-    return {
-      ok: false,
-      error: new MissingAgentModel({
-        profileName: selection.name,
-        scope: selection.scope,
-        agentRuntime: "pi",
-      }),
+  let resolved: InteractiveSessionAgentProfile;
+  if (input.requireModel === false) {
+    resolved = {
+      agentProfile: selection.name,
+      scope: selection.scope,
+      profile,
+    };
+  } else {
+    if (model === undefined || model.trim().length === 0) {
+      return {
+        ok: false,
+        error: new MissingAgentModel({
+          profileName: selection.name,
+          scope: selection.scope,
+          agentRuntime: "pi",
+        }),
+      };
+    }
+    resolved = {
+      agentProfile: selection.name,
+      scope: selection.scope,
+      profile: {
+        ...profile,
+        runtimeConfig: { ...profile.runtimeConfig, model },
+      },
     };
   }
-
-  const resolved: InteractiveSessionAgentProfile = {
-    agentProfile: selection.name,
-    scope: selection.scope,
-    profile:
-      input.requireModel === false
-        ? profile
-        : {
-            ...profile,
-            runtimeConfig: { ...profile.runtimeConfig, model: model as string },
-          },
-  };
   if (input.globalConfigDirectory !== undefined) {
     Object.defineProperty(resolved, "globalConfigDirectory", {
       value: input.globalConfigDirectory,
