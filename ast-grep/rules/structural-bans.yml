@@ -263,6 +263,16 @@ rule:
     - kind: import_statement
     - regex: '[\\s\\S]*from\\s+["`][^"`]*task/adapters/sqlite/[^"`]*["`][\\s\\S]*'
 ---
+# Change and Task/Change persistence no longer has an implementation path in the retired staged directory.
+id: retired-staged-sqlite-persistence-path
+language: TypeScript
+severity: error
+message: Do not add Task-owned or Change-owned persistence under the retired src/sqlite path; place persistence under the applicable owner Adapter boundary.
+files:
+  - src/sqlite/**/*.ts
+rule:
+  kind: program
+---
 # Task/Change coordination receives Change SQLite operations from composition instead of importing Change Adapters.
 id: task-change-coordination-uses-composed-change-operations
 language: TypeScript
