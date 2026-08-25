@@ -165,6 +165,15 @@ it.effect("restores Task Review state before an output-correction retry", () =>
           reviewerCalls += 1;
           const cwd = input.commandCwd ?? ".";
           if (reviewerCalls === 1) {
+            const sessionStorageRoot = input.sessionStorageRoot;
+            if (sessionStorageRoot === undefined)
+              throw new Error("Expected reviewer session storage root");
+            mkdirSync(sessionStorageRoot, { recursive: true });
+            const sessionFilePath = join(sessionStorageRoot, "reviewer.jsonl");
+            writeFileSync(
+              sessionFilePath,
+              `${JSON.stringify({ type: "session", id: input.sessionId, cwd })}\n`,
+            );
             writeFileSync(join(cwd, ".but-why", "config.json"), "changed\n");
             expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd }).status).toBe(0);
             writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
@@ -180,6 +189,7 @@ it.effect("restores Task Review state before an output-correction retry", () =>
               attempts: 1,
               stdout: "invalid output",
               sessionReference: "session-1",
+              sessionFilePath,
             });
           }
           observedConfig = readFileSync(join(cwd, ".but-why", "config.json"), "utf8");

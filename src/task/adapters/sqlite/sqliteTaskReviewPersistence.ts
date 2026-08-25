@@ -818,11 +818,55 @@ const linkSimplificationAdviceInvocation = (
   reviewId: number,
   invocationId: number,
 ) =>
-  sql`
-    UPDATE task_review_simplification_advice
-    SET agent_invocation_id = ${invocationId}
-    WHERE task_review_id = ${reviewId} AND agent_invocation_id IS NULL
-  `.pipe(Effect.asVoid);
+  Effect.gen(function* () {
+    const advice = yield* sql<{
+      readonly outcome: string;
+      readonly linkedInvocationId: number | null;
+    }>`
+      SELECT outcome, agent_invocation_id AS linkedInvocationId
+      FROM task_review_simplification_advice
+      WHERE task_review_id = ${reviewId}
+    `;
+    const current = advice[0];
+    if (current === undefined || current.outcome !== "unavailable") {
+      return yield* invalid(
+        "link Task Simplification Advice Invocation",
+        "Task Simplification Advice attempt is not pending",
+      );
+    }
+    const invocation = yield* sql<{ readonly agentSessionId: number }>`
+      SELECT continuation.agent_session_id AS agentSessionId
+      FROM agent_invocations AS invocation
+      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+      WHERE invocation.id = ${invocationId}
+    `;
+    const sessionId = invocation[0]?.agentSessionId;
+    if (sessionId === undefined) {
+      return yield* invalid(
+        "link Task Simplification Advice Invocation",
+        "Invocation Session is missing",
+      );
+    }
+    if (current.linkedInvocationId !== null) {
+      const prior = yield* sql<{ readonly agentSessionId: number }>`
+        SELECT continuation.agent_session_id AS agentSessionId
+        FROM agent_invocations AS invocation
+        JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+        WHERE invocation.id = ${current.linkedInvocationId}
+      `;
+      if (prior[0]?.agentSessionId !== sessionId) {
+        return yield* invalid(
+          "link Task Simplification Advice Invocation",
+          "Task Simplification Advice Invocations must share one Agent Session",
+        );
+      }
+    }
+    yield* sql`
+      UPDATE task_review_simplification_advice
+      SET agent_invocation_id = ${invocationId}
+      WHERE task_review_id = ${reviewId} AND outcome = 'unavailable'
+    `;
+  }).pipe(Effect.asVoid);
 
 const settleSimplificationAdvice = (
   sql: SqlClient.SqlClient,
@@ -831,22 +875,44 @@ const settleSimplificationAdvice = (
   },
 ) =>
   Effect.gen(function* () {
-    const row = yield* sql<{ readonly taskId: number }>`
-      SELECT task_id AS taskId FROM task_reviews WHERE id = ${input.reviewId}
+    const rows = yield* sql<{
+      readonly linkedInvocationId: number | null;
+      readonly outcome: string;
+    }>`
+      SELECT agent_invocation_id AS linkedInvocationId, outcome
+      FROM task_review_simplification_advice
+      WHERE task_review_id = ${input.reviewId}
     `;
-    if (row[0] === undefined)
+    const advice = rows[0];
+    if (advice === undefined)
       return yield* invalid("settle Task Simplification Advice", "Review missing");
+    if (advice.linkedInvocationId !== input.invocationId) {
+      return yield* invalid(
+        "settle Task Simplification Advice",
+        "Only the terminal linked Invocation can settle Task Simplification Advice",
+      );
+    }
+    if (advice.outcome !== "unavailable") {
+      return yield* invalid(
+        "settle Task Simplification Advice",
+        "Task Simplification Advice attempt is already settled",
+      );
+    }
     if (input.complete) {
       yield* sql`
         UPDATE task_review_simplification_advice
         SET outcome = 'completed', advice = ${JSON.stringify(input.advice)}, unavailable = NULL
         WHERE task_review_id = ${input.reviewId}
+          AND agent_invocation_id = ${input.invocationId}
+          AND outcome = 'unavailable'
       `;
     } else {
       yield* sql`
         UPDATE task_review_simplification_advice
         SET outcome = 'unavailable', advice = NULL, unavailable = ${JSON.stringify(input.failure)}
         WHERE task_review_id = ${input.reviewId}
+          AND agent_invocation_id = ${input.invocationId}
+          AND outcome = 'unavailable'
       `;
     }
   }).pipe(Effect.asVoid);
@@ -892,7 +958,15 @@ const readSimplificationAdviceAttempt = (
       attempt.agentInvocationId === null
         ? []
         : yield* sql.unsafe<AgentInvocationRow>(
-            `SELECT ${agentInvocationProjection} ${agentInvocationJoins} WHERE invocation.id = ?`,
+            `SELECT ${agentInvocationProjection} ${agentInvocationJoins}
+              WHERE continuation.agent_session_id = (
+                SELECT terminal_continuation.agent_session_id
+                FROM agent_invocations AS terminal_invocation
+                JOIN agent_continuations AS terminal_continuation
+                  ON terminal_continuation.id = terminal_invocation.continuation_id
+                WHERE terminal_invocation.id = ?
+              )
+              ORDER BY invocation.id ASC`,
             [attempt.agentInvocationId],
           );
     return yield* Effect.try({

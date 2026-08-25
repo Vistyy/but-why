@@ -1,3 +1,4 @@
+import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { Cause, Clock, Data, Effect, Option } from "effect";
@@ -42,7 +43,6 @@ export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirem
   readonly systemPrompt: string;
   readonly prompt: string;
   readonly continuationPrompt: string;
-  readonly maxOutputContractAttempts?: number;
   readonly commandCwd: string;
   readonly resourceRoot: string;
   readonly profile: ResolvedPiAgentProfile;
@@ -200,8 +200,14 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       const shouldRetry =
         !settledResult.ok &&
         settledResult.failure.kind === "output_contract" &&
-        settledResult.sessionReference !== undefined &&
-        invocationNumber < (input.maxOutputContractAttempts ?? 3);
+        settledResult.sessionUsability === "unknown" &&
+        settledResult.sessionFilePath !== undefined &&
+        isResumableTranscript(
+          input.sessionStorageRoot,
+          settledResult.sessionFilePath,
+          dispatch.dispatch.piSessionId,
+        ) &&
+        invocationNumber < 3;
       const evidence: AgentExecutionEvidence = {
         agentSessionId: sessionId,
         continuationId,
@@ -290,6 +296,27 @@ const settlementFor = <Output>(
       ? { unusableReason: result.failure.message }
       : {}),
   };
+};
+
+const isResumableTranscript = (root: string, path: string, sessionId: string): boolean => {
+  if (safeTranscriptPath(root, path) === null) return false;
+  try {
+    const canonicalRoot = realpathSync(root);
+    const canonicalPath = realpathSync(path);
+    const candidate = relative(canonicalRoot, canonicalPath);
+    const matchingTranscript = findUniquePiSessionTranscript(root, sessionId);
+    return (
+      !isAbsolute(candidate) &&
+      candidate !== "" &&
+      candidate !== ".." &&
+      !candidate.startsWith(`..${sep}`) &&
+      statSync(canonicalPath).isFile() &&
+      matchingTranscript !== undefined &&
+      realpathSync(matchingTranscript) === canonicalPath
+    );
+  } catch {
+    return false;
+  }
 };
 
 const safeTranscriptPath = (root: string, path: string | undefined): string | null => {
