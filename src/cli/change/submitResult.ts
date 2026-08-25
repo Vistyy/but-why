@@ -20,7 +20,6 @@ type SubmitRecoveryAction =
 type SubmitSuccessResult = Extract<ChangeSubmitResult, { readonly ok: true }>;
 type SubmitFailureResult = Extract<ChangeSubmitResult, { readonly ok: false }>;
 
-import type { StructuredObject } from "../../output/structured.js";
 import { structuredValue } from "../../output/structuredValue.js";
 import { remoteChangeBaseError } from "./sharedResults.js";
 
@@ -29,10 +28,7 @@ export const submitErrorResult = (error: ChangeSubmitError): CliResult => {
     return repositoryStorageErrorResult(error);
   }
   const result = repositoryStorageErrorResult(error.storageError);
-  const output = result.stdout as unknown as {
-    readonly error: StructuredObject;
-    readonly help: readonly string[];
-  };
+  const output = result.stdout;
   return {
     ...result,
     stdout: {

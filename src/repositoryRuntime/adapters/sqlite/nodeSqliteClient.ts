@@ -13,68 +13,73 @@ const databaseSystemName = "db.system.name";
 type SqliteParameter = null | number | bigint | string | NodeJS.ArrayBufferView;
 
 type NodeSqliteConnection = Connection;
+type NodeSqliteStatement = ReturnType<DatabaseSync["prepare"]>;
+
+type StatementReader<A> = (statement: NodeSqliteStatement, params: SqliteParameter[]) => A;
 
 const nodeSqliteConnection = (database: DatabaseSync): NodeSqliteConnection => {
-  const executeStatement = (
+  const executeStatement = <A>(
     sql: string,
     params: ReadonlyArray<unknown>,
-    raw: boolean,
-  ): Effect.Effect<ReadonlyArray<unknown>, SqlError> =>
+    read: StatementReader<A>,
+  ): Effect.Effect<A, SqlError> =>
     Effect.withFiberRuntime((fiber) => {
       try {
         const statement = database.prepare(sql);
-        statement.setReturnArrays(false);
         if (Context.get(fiber.currentContext, SqlClient.SafeIntegers)) {
           statement.setReadBigInts(true);
         }
-        if (statement.columns().length > 0) {
-          return Effect.succeed(statement.all(...(params as SqliteParameter[])));
-        }
-        const result = statement.run(...(params as SqliteParameter[]));
-        return Effect.succeed(raw ? (result as unknown as ReadonlyArray<unknown>) : []);
+        return Effect.succeed(read(statement, params as SqliteParameter[]));
       } catch (cause) {
         return Effect.fail(new SqlError({ cause, message: "Failed to execute statement" }));
       }
     });
 
+  const executeRows = (sql: string, params: ReadonlyArray<unknown>) =>
+    executeStatement(sql, params, (statement, boundParams) => {
+      if (statement.columns().length > 0) {
+        return statement.all(...boundParams);
+      }
+      statement.run(...boundParams);
+      return [];
+    });
+
   return {
     execute: (sql, params, transformRows) => {
-      const effect = executeStatement(sql, params, false);
+      const effect = executeRows(sql, params);
       return transformRows
         ? effect.pipe(Effect.map((rows) => transformRows(rows as ReadonlyArray<object>)))
         : effect;
     },
-    executeRaw: (sql, params) => executeStatement(sql, params, true),
+    executeRaw: (sql, params) =>
+      executeStatement(sql, params, (statement, boundParams) =>
+        statement.columns().length > 0
+          ? statement.all(...boundParams)
+          : statement.run(...boundParams),
+      ),
     executeValues: (sql, params) =>
-      Effect.withFiberRuntime((fiber) => {
-        try {
-          const statement = database.prepare(sql);
-          statement.setReturnArrays(true);
-          if (Context.get(fiber.currentContext, SqlClient.SafeIntegers)) {
-            statement.setReadBigInts(true);
-          }
-          if (statement.columns().length > 0) {
-            return Effect.succeed(
-              statement.all(...(params as SqliteParameter[])) as unknown as ReadonlyArray<
-                ReadonlyArray<unknown>
-              >,
-            );
-          }
-          statement.run(...(params as SqliteParameter[]));
-          return Effect.succeed([]);
-        } catch (cause) {
-          return Effect.fail(new SqlError({ cause, message: "Failed to execute statement" }));
+      executeStatement(sql, params, (statement, boundParams) => {
+        statement.setReturnArrays(true);
+        if (statement.columns().length > 0) {
+          return statement.all(...boundParams).map((row) => {
+            if (!Array.isArray(row)) {
+              throw new TypeError("SQLite return-array mode returned a non-array row");
+            }
+            return row;
+          });
         }
+        statement.run(...boundParams);
+        return [];
       }),
     executeUnprepared: (sql, params, transformRows) => {
-      const effect = executeStatement(sql, params, false);
+      const effect = executeRows(sql, params);
       return transformRows
         ? effect.pipe(Effect.map((rows) => transformRows(rows as ReadonlyArray<object>)))
         : effect;
     },
     executeStream: (sql, params, transformRows) =>
       Stream.fromEffect(
-        executeStatement(sql, params, false).pipe(
+        executeRows(sql, params).pipe(
           Effect.map((rows) =>
             transformRows ? transformRows(rows as ReadonlyArray<object>) : rows,
           ),
