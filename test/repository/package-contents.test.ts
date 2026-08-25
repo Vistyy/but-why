@@ -28,6 +28,7 @@ import {
 } from "../support/testWorkspace.js";
 
 const packageProcessTimeoutMs = 30_000;
+const packageProcessTestTimeoutMs = packageProcessTimeoutMs * 3 + 5_000;
 const expectedLazyCommandModules = [
   "./cli/task/commands/dependencies.js",
   "./cli/task/commands/contextDraft.js",
@@ -295,126 +296,138 @@ describe("release package boundary", () => {
     ).toBe(true);
   });
 
-  it("preserves missing dependency-option guidance through the installed executable", () => {
-    const repositoryRoot = createGitRepo();
-    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+  it(
+    "preserves missing dependency-option guidance through the installed executable",
+    () => {
+      const repositoryRoot = createGitRepo();
+      const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
 
-    for (const operation of ["add", "remove", "replace"] as const) {
-      const result = runTestProcess(
-        bin,
-        ["--log-level", "info", "task", "dependencies", operation, "BY-1"],
-        { cwd: repositoryRoot, timeout: packageProcessTimeoutMs },
-      );
+      for (const operation of ["add", "remove", "replace"] as const) {
+        const result = runTestProcess(
+          bin,
+          ["--log-level", "info", "task", "dependencies", operation, "BY-1"],
+          { cwd: repositoryRoot, timeout: packageProcessTimeoutMs },
+        );
 
-      expect(result.error).toBeUndefined();
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toEqual({
-        error:
-          operation === "replace"
-            ? {
-                code: "replace_requires_dependency",
-                message: "The replace operation requires at least one prerequisite.",
-              }
-            : {
-                code: "depends_on_required",
-                message: `The ${operation} operation requires at least one --depends-on value.`,
-              },
-        help:
-          operation === "replace"
-            ? ["Use `by task dependencies clear <task-id>` to remove all prerequisites."]
-            : [`Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`],
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe(2);
+        expect(result.stderr).toBe("");
+        expect(JSON.parse(result.stdout)).toEqual({
+          error:
+            operation === "replace"
+              ? {
+                  code: "replace_requires_dependency",
+                  message: "The replace operation requires at least one prerequisite.",
+                }
+              : {
+                  code: "depends_on_required",
+                  message: `The ${operation} operation requires at least one --depends-on value.`,
+                },
+          help:
+            operation === "replace"
+              ? ["Use `by task dependencies clear <task-id>` to remove all prerequisites."]
+              : [`Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`],
+        });
+      }
+    },
+    packageProcessTestTimeoutMs,
+  );
+
+  it.effect(
+    "initializes the release baseline through the installed executable",
+    () => {
+      const repositoryRoot = createGitRepo();
+      const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+      const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
+        cwd: repositoryRoot,
+        timeout: packageProcessTimeoutMs,
       });
-    }
-  });
+      expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
+      expect(JSON.parse(initialized.stdout)).toMatchObject({ init: { status: "initialized" } });
 
-  it.effect("initializes the release baseline through the installed executable", () => {
-    const repositoryRoot = createGitRepo();
-    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
-    const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
-      cwd: repositoryRoot,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
-    expect(JSON.parse(initialized.stdout)).toMatchObject({ init: { status: "initialized" } });
+      const listed = runTestProcess(bin, ["task", "list"], {
+        cwd: repositoryRoot,
+        timeout: packageProcessTimeoutMs,
+      });
+      expect(listed.status, listed.stderr || listed.stdout).toBe(0);
+      expect(JSON.parse(listed.stdout)).toMatchObject({ tasks: [] });
 
-    const listed = runTestProcess(bin, ["task", "list"], {
-      cwd: repositoryRoot,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(listed.status, listed.stderr || listed.stdout).toBe(0);
-    expect(JSON.parse(listed.stdout)).toMatchObject({ tasks: [] });
-
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const repository = yield* RepositorySql;
-        const migrations = yield* repository.operation(
-          "inspect installed migration ledger",
-          (sql) =>
-            sql<{ readonly migrationId: number }>`
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          const migrations = yield* repository.operation(
+            "inspect installed migration ledger",
+            (sql) =>
+              sql<{ readonly migrationId: number }>`
             SELECT migration_id AS migrationId
             FROM effect_sql_migrations
             ORDER BY migration_id
           `,
-        );
-        expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
+          );
+          expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
 
-        const tables = yield* repository.operation(
-          "inspect installed product tables",
-          (sql) =>
-            sql<{ readonly name: string }>`
+          const tables = yield* repository.operation(
+            "inspect installed product tables",
+            (sql) =>
+              sql<{ readonly name: string }>`
             SELECT name FROM sqlite_master
             WHERE type = 'table'
               AND name NOT LIKE 'sqlite_%'
               AND name NOT LIKE 'effect_sql_%'
             ORDER BY name
           `,
-        );
-        expect(tables).toHaveLength(19);
-        expect(tables.map(({ name }) => name)).toContain("shared_state_identity");
-        expect(tables.map(({ name }) => name)).toContain("validation_runs");
-      }).pipe(
-        Effect.provide(
-          repositorySqlLayer({
-            commonDirectory: join(repositoryRoot, ".git"),
-            statePath: join(repositoryRoot, ".git", "but-why", "state.sqlite"),
-            lifecycle: "open",
-          }),
+          );
+          expect(tables).toHaveLength(19);
+          expect(tables.map(({ name }) => name)).toContain("shared_state_identity");
+          expect(tables.map(({ name }) => name)).toContain("validation_runs");
+        }).pipe(
+          Effect.provide(
+            repositorySqlLayer({
+              commonDirectory: join(repositoryRoot, ".git"),
+              statePath: join(repositoryRoot, ".git", "but-why", "state.sqlite"),
+              lifecycle: "open",
+            }),
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+    packageProcessTestTimeoutMs,
+  );
 
-  it("uses a linked invoking worktree through the installed executable", () => {
-    const repositoryRoot = createGitRepo();
-    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
-    const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
-      cwd: repositoryRoot,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
-    commitButWhyConfigAndRecordDefault(repositoryRoot);
+  it(
+    "uses a linked invoking worktree through the installed executable",
+    () => {
+      const repositoryRoot = createGitRepo();
+      const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+      const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
+        cwd: repositoryRoot,
+        timeout: packageProcessTimeoutMs,
+      });
+      expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
+      commitButWhyConfigAndRecordDefault(repositoryRoot);
 
-    const linkedWorktree = join(
-      dirname(repositoryRoot),
-      `${basename(repositoryRoot)}-installed-linked-caller`,
-    );
-    runTestProcessOrThrow(
-      "git",
-      ["worktree", "add", "-b", "installed-linked-caller", linkedWorktree, "main"],
-      { cwd: repositoryRoot },
-    );
-    const started = runTestProcess(bin, ["change", "start"], {
-      cwd: linkedWorktree,
-      timeout: packageProcessTimeoutMs,
-    });
+      const linkedWorktree = join(
+        dirname(repositoryRoot),
+        `${basename(repositoryRoot)}-installed-linked-caller`,
+      );
+      runTestProcessOrThrow(
+        "git",
+        ["worktree", "add", "-b", "installed-linked-caller", linkedWorktree, "main"],
+        { cwd: repositoryRoot },
+      );
+      const started = runTestProcess(bin, ["change", "start"], {
+        cwd: linkedWorktree,
+        timeout: packageProcessTimeoutMs,
+      });
 
-    expect(started.status, started.stderr || started.stdout).toBe(0);
-    const result = JSON.parse(started.stdout) as { readonly worktreePath: string };
-    expect(dirname(dirname(result.worktreePath))).toBe(
-      join(dirname(linkedWorktree), `${basename(linkedWorktree)}-worktrees`),
-    );
-  });
+      expect(started.status, started.stderr || started.stdout).toBe(0);
+      const result = JSON.parse(started.stdout) as { readonly worktreePath: string };
+      expect(dirname(dirname(result.worktreePath))).toBe(
+        join(dirname(linkedWorktree), `${basename(linkedWorktree)}-worktrees`),
+      );
+    },
+    packageProcessTestTimeoutMs,
+  );
 
   it.effect(
     "loads installed continuation assets and reports invalid or missing extensions truthfully",

@@ -10,6 +10,8 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
+const synchronousTestProcessTimeoutMs = 4_000;
+const testProcessMaxBufferBytes = 50 * 1024 * 1024;
 
 const isInDirectory = (directory: string, path: string): boolean => {
   const relativePath = relative(directory, path);
@@ -31,6 +33,7 @@ type TestProcessOptions = {
   readonly env?: NodeJS.ProcessEnv;
   readonly isolatedHome?: string;
   readonly input?: string | Buffer;
+  readonly maxBuffer?: number;
   readonly timeout?: number;
   readonly detached?: boolean;
 };
@@ -142,6 +145,8 @@ export const runTestProcess = (
       ...prepared.options,
       ...(options.input === undefined ? {} : { input: options.input }),
       encoding: "utf8",
+      maxBuffer: options.maxBuffer ?? testProcessMaxBufferBytes,
+      timeout: options.timeout ?? synchronousTestProcessTimeoutMs,
     });
   } finally {
     prepared.cleanup();
