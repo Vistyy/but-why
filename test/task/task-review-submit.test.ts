@@ -1367,6 +1367,10 @@ it.effect(
       expect(second.status, second.stdout).toBe(1);
       expect(observed).toHaveLength(2);
       expect(observed[1]?.resumeSession).toBe("by-agent-2");
+      expect(observed[0]?.prompt).toContain(
+        '"title":"Review continuity","description":"Initial proposal","dependencyIds":[]',
+      );
+      expect(observed[1]?.systemPrompt).toBe(observed[0]?.systemPrompt);
       expect(observed[1]?.prompt).toContain(
         '"title":"Review continuity","description":"Changed proposal\\n","dependencyIds":[]',
       );
