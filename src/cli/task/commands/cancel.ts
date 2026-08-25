@@ -122,7 +122,7 @@ const cancelResult = (taskId: PublicTaskId, result: TaskCancellationResult): Cli
               id: result.change.id,
               state: result.change.state,
               closeReason: result.change.closeReason,
-              cleanup: result.cleanup,
+              cleanup: result.change.cleanup,
             },
           }),
     });

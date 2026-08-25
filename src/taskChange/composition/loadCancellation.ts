@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { openSqliteActiveValidationRunPort } from "../../change/adapters/sqlite/sqliteActiveValidationRunPersistence.js";
 import { taskChangeCancellationChangeOperations } from "../../change/composition/loadChangePersistence.js";
-import { composeTerminalCleanup } from "../../change/composition/terminalCleanup.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import {
@@ -39,9 +38,8 @@ export const withCancellationUseCases = <A, E, R>(
       ),
       tasks: openSqliteTaskPersistence(),
       activeValidation: openSqliteActiveValidationRunPort(),
-      cleanupTerminal: composeTerminalCleanup(context),
     }).pipe(
-      Effect.flatMap(({ changes, tasks, activeValidation, cleanupTerminal }) =>
+      Effect.flatMap(({ changes, tasks, activeValidation }) =>
         use(
           openCancellationUseCases({
             resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
@@ -52,7 +50,6 @@ export const withCancellationUseCases = <A, E, R>(
               commonDirectory: context.commonDirectory,
             }),
             github: localGitHubPullRequestGateway({ cwd: context.root }),
-            cleanupTerminal,
           }),
         ),
       ),
