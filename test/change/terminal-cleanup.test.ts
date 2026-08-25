@@ -311,8 +311,8 @@ describe("Change-owned terminal cleanup operation", () => {
   );
 });
 
-describe("Repeated cancellation retries the same cleanup operation", () => {
-  it.effect("retries pending cleanup when a Task Change is cancelled again", () =>
+describe("Repeated cancellation leaves cleanup for reconciliation", () => {
+  it.effect("does not retry cleanup when a Task Change is cancelled again", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const task = taskRecord("cancelled");
@@ -337,15 +337,9 @@ describe("Repeated cancellation retries the same cleanup operation", () => {
         ok: true,
         status: "cancelled",
         changed: false,
-        cleanup: { state: "complete", blockingReason: null },
+        change: { cleanup: pendingCleanup },
       });
-      expect(events).toEqual([
-        "read-task",
-        "read-change",
-        "cleanup",
-        "record-cleanup",
-        "read-task",
-      ]);
+      expect(events).toEqual(["read-task", "read-change", "read-task"]);
     }),
   );
 });
@@ -472,14 +466,6 @@ const cancellationDependencies = (input: {
         change: input.change,
         task: input.change.taskId === null ? null : input.task,
       }),
-    recordCleanup: () => {
-      input.events.push("record-cleanup");
-      return Effect.succeed({
-        ok: true as const,
-        changed: true,
-        cleanup: { state: "complete" as const, blockingReason: null },
-      });
-    },
   };
   const dependencies: CancellationDependencies = {
     resolveTaskId: (taskId) => ({ ok: true, taskId }),
@@ -497,14 +483,6 @@ const cancellationDependencies = (input: {
     },
     validation: { getActiveForChange: () => Effect.succeed(undefined) },
     executionLock: { withLock: ({ effect }) => effect },
-    cleanupTerminal: openTerminalCleanup({
-      ...noOpTerminalCleanupDependencies,
-      persistence: changes,
-      cleanup: () => {
-        input.events.push("cleanup");
-        return { state: "complete", blockingReason: null };
-      },
-    }),
   };
   return { ...dependencies, cancellation: openCancellationUseCases(dependencies) };
 };
