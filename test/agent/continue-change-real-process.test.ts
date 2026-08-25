@@ -19,7 +19,7 @@ const decodeEventObjects = (stdout: string): readonly Record<string, unknown>[] 
 
 const eventType = (event: Record<string, unknown>): unknown => Reflect.get(event, "type");
 
-const runPi = (worktreePath: string, callsPath: string) =>
+const runPi = (worktreePath: string, callsPath: string, sessionPath: string) =>
   runTestProcess(
     process.execPath,
     [
@@ -27,7 +27,8 @@ const runPi = (worktreePath: string, callsPath: string) =>
       "--mode",
       "json",
       "--print",
-      "--no-session",
+      "--session",
+      sessionPath,
       "--offline",
       "--no-extensions",
       "--no-context-files",
@@ -75,7 +76,11 @@ describe("packaged Change Implement continuation extension process boundary", ()
     if (typeof worktreePath !== "string") throw new Error("Change Start omitted worktreePath.");
 
     const normalCallsPath = join(repositoryRoot, "normal-provider-calls.log");
-    const normalRun = runPi(worktreePath, normalCallsPath);
+    const normalRun = runPi(
+      worktreePath,
+      normalCallsPath,
+      join(repositoryRoot, "normal-session.jsonl"),
+    );
     expect(normalRun.status, normalRun.stderr || normalRun.stdout).toBe(0);
     const normalEvents = decodeEventObjects(normalRun.stdout);
     expect(normalEvents.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(
@@ -91,12 +96,24 @@ describe("packaged Change Implement continuation extension process boundary", ()
     });
     expect(blocker.status, blocker.stderr || blocker.stdout).toBe(0);
 
-    const run = runPi(worktreePath, callsPath);
+    const blockedSessionPath = join(repositoryRoot, "blocked-session.jsonl");
+    const run = runPi(worktreePath, callsPath, blockedSessionPath);
     expect(run.status, run.stderr || run.stdout).toBe(0);
     const events = decodeEventObjects(run.stdout);
     expect(events.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(1);
     expect(events.some((event) => eventType(event) === "turn_end")).toBe(true);
     expect(events.some((event) => eventType(event) === "agent_end")).toBe(true);
     expect(readFileSync(callsPath, "utf8").trim().split("\n")).toEqual(["1"]);
+    const continuationEntries = decodeEventObjects(readFileSync(blockedSessionPath, "utf8")).filter(
+      (entry) => Reflect.get(entry, "customType") === "but-why-change-continuation",
+    );
+    const latestContinuation = continuationEntries.at(-1);
+    expect(latestContinuation).toBeDefined();
+    if (latestContinuation === undefined) throw new Error("Pi did not persist continuation state.");
+    const continuationData = Reflect.get(latestContinuation, "data");
+    if (typeof continuationData !== "object" || continuationData === null) {
+      throw new Error("Pi persisted malformed continuation state.");
+    }
+    expect(Reflect.get(continuationData, "paused")).toBe(false);
   }, 30_000);
 });

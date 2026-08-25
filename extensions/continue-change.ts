@@ -1235,7 +1235,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   });
 
   pi.on("turn_end", async (_event, ctx) => {
-    if (changeId === undefined || shutDown || persisted?.paused) return;
+    if (changeId === undefined || shutDown || persisted?.paused || blockerAbortRequested) return;
     const observed = await inspectBlockerHistory(ctx, changeId, ctx.signal);
     if (shutDown || persisted?.paused) return;
     if (!observed.ok) {
