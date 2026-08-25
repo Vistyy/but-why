@@ -1,6 +1,8 @@
 import { expect } from "@effect/vitest";
 import { describe, it as ordinaryIt } from "vitest";
 
+import { StallDetectionBlockerObservationFailed } from "../../src/change/submitChange.js";
+import { submitErrorResult } from "../../src/cli/change/submitResult.js";
 import { repositoryStorageErrorResult } from "../../src/cliResults.js";
 import {
   RepositoryIdentityConflict,
@@ -8,7 +10,6 @@ import {
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
-  StallDetectionBlockerObservationFailed,
 } from "../../src/contracts/repositoryStorageError.js";
 
 describe("Shared Repository State error classification", () => {
@@ -73,7 +74,7 @@ describe("Shared Repository State error classification", () => {
         guidance:
           "Restore access to valid repository state, inspect the blocker with `by change blocker list BY-1`, then retry `by change submit BY-1`.",
       });
-      const result = repositoryStorageErrorResult(error);
+      const result = submitErrorResult(error);
 
       expect(result.exitCode).toBe(1);
       expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({

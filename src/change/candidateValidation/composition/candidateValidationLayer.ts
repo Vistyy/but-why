@@ -21,6 +21,7 @@ import {
   CandidateValidationLive,
   CandidateValidationPaths,
   CandidateValidationWorkspace,
+  StallDetectorExecution,
 } from "../validateCandidate.js";
 
 export const candidateValidationLayer = (input: {
@@ -60,8 +61,8 @@ export const candidateValidationLayer = (input: {
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
           processExecutor: piReviewerProcessExecutor,
-          stallDetector: input.stallDetector,
         }),
+        Layer.succeed(StallDetectorExecution, input.stallDetector),
       ),
     ),
   );

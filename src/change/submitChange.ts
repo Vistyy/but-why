@@ -1,10 +1,6 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import type { ExecutionLock } from "../contracts/executionLock.js";
-import {
-  type RepositoryCommandError,
-  type RepositoryStorageError,
-  StallDetectionBlockerObservationFailed,
-} from "../contracts/repositoryStorageError.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../submission/submissionProgress.js";
 import type {
   RemoteChangeBaseError,
@@ -145,16 +141,26 @@ export type ChangeSubmitInput = {
   readonly progress?: SubmitProgress;
 };
 
+export class StallDetectionBlockerObservationFailed extends Data.TaggedError(
+  "StallDetectionBlockerObservationFailed",
+)<{
+  readonly storageError: RepositoryStorageError;
+  readonly changeId: string;
+  readonly guidance: string;
+}> {}
+
+export type ChangeSubmitError = RepositoryStorageError | StallDetectionBlockerObservationFailed;
+
 export type ChangeSubmit = {
   readonly submit: (
     input: ChangeSubmitInput,
-  ) => Effect.Effect<ChangeSubmitResult, RepositoryCommandError>;
+  ) => Effect.Effect<ChangeSubmitResult, ChangeSubmitError>;
 };
 
 export type CandidateValidationChangeSubmit = {
   readonly submit: (
     input: ChangeSubmitInput,
-  ) => Effect.Effect<ChangeSubmitResult, RepositoryCommandError, CandidateValidation>;
+  ) => Effect.Effect<ChangeSubmitResult, ChangeSubmitError, CandidateValidation>;
 };
 
 type CaptureCandidate = (
@@ -216,7 +222,7 @@ type SubmissionDecision =
 const submitChange = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   input: ChangeSubmitInput,
-): Effect.Effect<ChangeSubmitResult, RepositoryCommandError, CandidateValidation> =>
+): Effect.Effect<ChangeSubmitResult, ChangeSubmitError, CandidateValidation> =>
   Effect.gen(function* () {
     const selected = yield* selectOpenChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
@@ -427,7 +433,7 @@ const validateAndPublish = (
   target: ChangePublicationTarget,
   now: string,
   progress: SubmitProgress | undefined,
-): Effect.Effect<ChangeSubmitResult, RepositoryCommandError, CandidateValidation> =>
+): Effect.Effect<ChangeSubmitResult, ChangeSubmitError, CandidateValidation> =>
   Effect.gen(function* () {
     const validation = yield* CandidateValidation;
     const validationResult =
@@ -562,7 +568,7 @@ const raiseStallDetectionBlocker = (
     readonly validationRunIds: readonly number[];
   },
   now: string,
-): Effect.Effect<ChangeSubmitResult, RepositoryCommandError> =>
+): Effect.Effect<ChangeSubmitResult, ChangeSubmitError> =>
   Effect.gen(function* () {
     const content = [
       "Stall Detection requested Operator investigation after repeated blocked Validation Runs.",

@@ -95,12 +95,16 @@ export class CandidateValidationWorkspace extends Context.Tag("CandidateValidati
 type CandidateReviewerExecutionValue = {
   readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly processExecutor: ReviewerProcessExecutor;
-  readonly stallDetector: StallDetector;
 };
 
 export class CandidateReviewerExecution extends Context.Tag("CandidateReviewerExecution")<
   CandidateReviewerExecution,
   CandidateReviewerExecutionValue
+>() {}
+
+export class StallDetectorExecution extends Context.Tag("StallDetectorExecution")<
+  StallDetectorExecution,
+  StallDetector
 >() {}
 
 export type StallDetectionEvaluation =
@@ -158,8 +162,8 @@ export const CandidateValidationLive = Layer.effect(
     const paths = yield* CandidateValidationPaths;
     const persistence = yield* CandidateValidationExecution;
     const reviewerExecution = yield* CandidateReviewerExecution;
+    const stallDetector = yield* StallDetectorExecution;
     const createSnapshotWorkspace = yield* CandidateValidationWorkspace;
-    const stallDetector = reviewerExecution.stallDetector;
     return makeCandidateValidation({
       ...paths,
       fileSystem,

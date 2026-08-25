@@ -39,15 +39,3 @@ export type RepositoryStorageError =
   | RepositorySqlOperationFailed
   | RepositoryMigrationFailed
   | RepositoryPersistedDataInvalid;
-
-export class StallDetectionBlockerObservationFailed extends Data.TaggedError(
-  "StallDetectionBlockerObservationFailed",
-)<{
-  readonly storageError: RepositoryStorageError;
-  readonly changeId: string;
-  readonly guidance: string;
-}> {}
-
-export type RepositoryCommandError =
-  | RepositoryStorageError
-  | StallDetectionBlockerObservationFailed;

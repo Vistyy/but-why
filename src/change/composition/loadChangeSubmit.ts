@@ -3,7 +3,6 @@ import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adap
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
-import type { RepositoryCommandError } from "../../contracts/repositoryStorageError.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
@@ -34,7 +33,12 @@ import type {
 import { localCandidatePublicationGit } from "../publication/adapters/localCandidatePublicationGit.js";
 import { openCandidatePublication } from "../publication/candidatePublication.js";
 import { makePiAiStallDetector } from "../stallDetection/stallDetector.js";
-import { type ChangeSubmit, type ChangeSubmitResult, openChangeSubmit } from "../submitChange.js";
+import {
+  type ChangeSubmit,
+  type ChangeSubmitError,
+  type ChangeSubmitResult,
+  openChangeSubmit,
+} from "../submitChange.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 
 export type LoadChangeSubmitResult =
@@ -112,7 +116,7 @@ export const loadChangeSubmit = (input: {
   return {
     ok: true,
     submit: {
-      submit: (submitInput): Effect.Effect<ChangeSubmitResult, RepositoryCommandError> =>
+      submit: (submitInput): Effect.Effect<ChangeSubmitResult, ChangeSubmitError> =>
         Effect.all({
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteCandidateValidationExecutionPort(),

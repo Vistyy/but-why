@@ -1,8 +1,5 @@
 import { type StructuredErrorInput, structuredError } from "./cliError.js";
-import {
-  type RepositoryCommandError,
-  StallDetectionBlockerObservationFailed,
-} from "./contracts/repositoryStorageError.js";
+import type { RepositoryStorageError } from "./contracts/repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { StructuredObject } from "./output/structured.js";
 import type { ResolveLocalRepositoryError } from "./repositoryRuntime/repositoryContext.js";
@@ -97,27 +94,9 @@ export const stateStoreUnavailable = (idPrefix: string | undefined): CliResult =
   });
 
 export const repositoryStorageErrorResult = (
-  error: RepositoryCommandError,
+  error: RepositoryStorageError,
   idPrefix?: string,
 ): CliResult => {
-  if (error instanceof StallDetectionBlockerObservationFailed) {
-    const result = repositoryStorageErrorResult(error.storageError, idPrefix);
-    const output = result.stdout as unknown as {
-      readonly error: StructuredObject;
-      readonly help: readonly string[];
-    };
-    return {
-      ...result,
-      stdout: {
-        error: {
-          ...output.error,
-          changeId: error.changeId,
-          storageError: error.storageError._tag,
-        },
-        help: [...output.help, error.guidance],
-      },
-    };
-  }
   const result = (() => {
     switch (error._tag) {
       case "RepositoryIdentityConflict":

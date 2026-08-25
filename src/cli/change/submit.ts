@@ -4,11 +4,10 @@
 import { Effect } from "effect";
 import { loadChangeSubmit } from "../../change/composition/loadChangeSubmit.js";
 import type { CliResult } from "../../cliResults.js";
-import { repositoryStorageErrorResult } from "../../cliResults.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import * as support from "./changeSupport.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
-import { submitResult } from "./submitResult.js";
+import { submitErrorResult, submitResult } from "./submitResult.js";
 
 export const runSubmit = (
   command: { readonly changeId: string | undefined },
@@ -32,6 +31,6 @@ export const runSubmit = (
       })
       .pipe(
         Effect.map((result) => submitResult(result, changeId)),
-        Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+        Effect.catchAll((error) => Effect.succeed(submitErrorResult(error))),
       );
   });
