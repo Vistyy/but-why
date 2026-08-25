@@ -1,5 +1,6 @@
 import { encodeReviewerWireValue } from "../agent/reviewerOutputWire.js";
 import {
+  candidateReviewerExperimentBoundaryInstructions,
   candidateReviewerOutputInstructions,
   completeCandidateReviewInstructions,
   previousFindingsPrompt,
@@ -35,6 +36,7 @@ const acceptanceAuthorityInstructions = [
 export const buildAcceptanceReviewerSystemPrompt = (instructions: string): string =>
   [
     reviewerExecutionInstructions,
+    candidateReviewerExperimentBoundaryInstructions,
     reviewerExperimentInstructions,
     completeCandidateReviewInstructions,
     ...(instructions === defaultAcceptanceInstructions ? [] : [instructions]),

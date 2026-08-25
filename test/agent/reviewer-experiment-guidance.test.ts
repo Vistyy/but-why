@@ -8,7 +8,7 @@ import { buildTaskReviewerSystemPrompt } from "../../src/reviewerPrompts/taskRev
 import { buildTaskSimplificationAdviceSystemPrompt } from "../../src/reviewerPrompts/taskSimplificationAdvicePrompt.js";
 
 const experimentInstruction =
-  "design and perform a bounded real-system experiment before reporting the uncertainty";
+  "design and perform a bounded real-system experiment within the stated permitted-effects boundary";
 
 const expectExperimentGuidance = (prompt: string): void => {
   expect(prompt).toContain(experimentInstruction);
@@ -27,19 +27,27 @@ describe("reviewer experiment guidance", () => {
     });
 
     expectExperimentGuidance(prompt);
+    expect(prompt).toContain("exact Review Base workspace");
+    expect(prompt).toContain("Do not mutate live Shared Repository State");
   });
 
   it("gives Acceptance Reviewers bounded experiment authority", () => {
-    expectExperimentGuidance(buildAcceptanceReviewerSystemPrompt(defaultAcceptanceInstructions));
+    const prompt = buildAcceptanceReviewerSystemPrompt(defaultAcceptanceInstructions);
+
+    expectExperimentGuidance(prompt);
+    expect(prompt).toContain("exact Candidate's Snapshot Workspace");
+    expect(prompt).toContain("Do not mutate live Shared Repository State");
   });
 
   it("gives Specialist Reviewers bounded experiment authority", () => {
-    expectExperimentGuidance(
-      buildSpecialistReviewerSystemPrompt({
-        specialist: "standards",
-        instructions: "Judge the standards concern.",
-      }),
-    );
+    const prompt = buildSpecialistReviewerSystemPrompt({
+      specialist: "standards",
+      instructions: "Judge the standards concern.",
+    });
+
+    expectExperimentGuidance(prompt);
+    expect(prompt).toContain("exact Candidate's Snapshot Workspace");
+    expect(prompt).toContain("Do not mutate live Shared Repository State");
   });
 
   it("does not broaden Task Simplification Advice with experiment duties", () => {

@@ -248,6 +248,7 @@ describe("release package boundary", () => {
       "An integration prototype tests whether several parts work together",
     );
     expect(operator).toContain("A Resolution may replace earlier accepted direction");
+    expect(operator).toContain("change reconcile <change-id>");
     expect(implementer).toContain("use a bounded real-system experiment");
     expect(implementer).toContain("Stall Detection can create that transfer");
     expect(implementer).not.toContain("change blocker resolve");

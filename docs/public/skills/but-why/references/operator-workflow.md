@@ -181,3 +181,19 @@ Automatic continuation waits while the exact current Candidate remains published
 Under the Operator's direct instruction, `/continue-change` resumes revision work for a published Change.
 
 This section is complete when the extension is in the state required for the Operator's next action.
+
+## Reconcile a Change
+
+Candidate Publication is not durable Change completion.
+After a human confirms that the Change's owned pull request was merged, close its Interactive Session manually and run `<but-why> change reconcile <change-id>`.
+Reconciliation observes the exact owned pull request and merge facts before completing the Change and any linked Task, then performs terminal cleanup.
+
+Use the complete structured result to determine whether reconciliation completed, remains pending, or was rejected.
+When reconciliation reports unavailable merge facts, a remote mismatch, in-progress Submission, or pending cleanup, inspect the exact Change and follow only the returned recovery guidance.
+Do not adopt an unrelated pull request or infer completion from a branch, commit, or human report alone.
+
+`--discard-work` is destructive authority for one exact terminal Change and is not part of ordinary merged completion.
+Use it only after the Operator explicitly authorizes discarding that Change's recorded work and the exact target has been verified.
+If discard cleanup remains pending, retry only with the exact command returned by reconciliation.
+
+This section is complete when reconciliation reports the exact Change completed with cleanup complete, or when its structured result identifies the pending evidence, cleanup, or decision that prevents completion.

@@ -48,6 +48,13 @@ export const taskReviewBuiltInInstructions = [
   "Return an empty Findings array only after trying to falsify every material readiness condition reveals no blocker.",
 ].join("\n");
 
+const taskReviewExperimentBoundaryInstructions = [
+  "The current disposable review workspace is the Task Review's exact Review Base workspace.",
+  "Experiment effects may modify only that Review Base workspace and operating-system temporary space.",
+  "Do not mutate live Shared Repository State, a Managed Worktree, another checkout, or an external system.",
+  "When a trustworthy readiness judgment requires an effect outside this boundary, report the unresolved question and missing authority instead of performing that effect.",
+].join("\n");
+
 const taskReviewCurrentJudgmentInstructions = [
   "The mandatory rules below apply to the complete current proposal on every initial or continued review.",
 ].join("\n");
@@ -63,6 +70,7 @@ export const buildTaskReviewerSystemPrompt = (policy: {
 }): string =>
   [
     reviewerExecutionInstructions,
+    taskReviewExperimentBoundaryInstructions,
     reviewerExperimentInstructions,
     taskReviewCurrentJudgmentInstructions,
     policy.builtInInstructions,

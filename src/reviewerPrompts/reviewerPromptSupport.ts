@@ -25,7 +25,7 @@ export const reviewerExecutionInstructions = [
 ].join("\n");
 
 export const reviewerExperimentInstructions = [
-  "When inspection and existing evidence cannot resolve a consequential question for the assigned judgment, design and perform a bounded real-system experiment before reporting the uncertainty when the review boundary permits it.",
+  "When inspection and existing evidence cannot resolve a consequential question for the assigned judgment, design and perform a bounded real-system experiment within the stated permitted-effects boundary before reporting the uncertainty.",
   "A spike tests one important falsifiable hypothesis, while an integration prototype tests whether several parts work together through their real interfaces, owners, lifecycle states, material failures, and recovery paths.",
   "Use an integration prototype when a smaller experiment cannot answer the decision-driving question; testing components separately does not establish that they work together.",
   "Before the experiment, state the decision it informs, the observations that would support or refute the hypothesis, its stopping condition, and its cleanup boundary.",
@@ -33,6 +33,13 @@ export const reviewerExperimentInstructions = [
   "Stop experimenting when the evidence supports the assigned judgment; do not compare credible alternatives merely to prove one is globally optimal.",
   "Remove experiment-only state within the disposable boundary, and use the result only for the judgment it was designed to inform.",
   "When the required experiment cannot run within the review boundary, report the exact unresolved hypothesis, the smallest experiment that could resolve it, and the missing authority or capability.",
+].join("\n");
+
+export const candidateReviewerExperimentBoundaryInstructions = [
+  "The current disposable review workspace is the exact Candidate's Snapshot Workspace.",
+  "Experiment effects may modify only that Snapshot Workspace and operating-system temporary space.",
+  "Do not mutate live Shared Repository State, a Managed Worktree, another checkout, or an external system.",
+  "When a trustworthy judgment requires an effect outside this boundary, report the unresolved question and missing authority instead of performing that effect.",
 ].join("\n");
 
 export const completeCandidateReviewInstructions = [

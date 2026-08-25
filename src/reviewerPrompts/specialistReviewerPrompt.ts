@@ -1,5 +1,6 @@
 import { encodeReviewerWireValue } from "../agent/reviewerOutputWire.js";
 import {
+  candidateReviewerExperimentBoundaryInstructions,
   candidateReviewerOutputInstructions,
   completeCandidateReviewInstructions,
   previousFindingsPrompt,
@@ -40,6 +41,7 @@ export const buildSpecialistReviewerSystemPrompt = (input: {
 }): string =>
   [
     reviewerExecutionInstructions,
+    candidateReviewerExperimentBoundaryInstructions,
     reviewerExperimentInstructions,
     completeCandidateReviewInstructions,
     `Configured concern: ${input.specialist}`,
