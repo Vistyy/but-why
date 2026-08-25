@@ -91,11 +91,11 @@ const decodeSqliteAgentSettlementKind = (value: string): AgentInvocationSettleme
   }
 };
 
-const requiredModel = (value: string): string => {
+export const requiredModel = (value: string): string => {
   if (value.trim().length === 0) throw new Error("Agent model is blank");
   return value;
 };
-const decodeHarness = (value: string): "pi" => {
+export const decodeHarness = (value: string): "pi" => {
   if (value !== "pi") throw new Error(`Unsupported Agent Harness: ${value}`);
   return value;
 };

@@ -12,8 +12,10 @@ import type {
 } from "../../agentSession.js";
 import { piSessionIdForContinuation } from "../../agentSession.js";
 import {
+  decodeHarness,
   decodeSqliteAgentInvocation,
   decodeSqliteAgentThinking,
+  requiredModel,
   type SqliteAgentInvocationRow,
 } from "./sqliteAgentInvocation.js";
 
@@ -331,13 +333,5 @@ const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({
   unusableReason: row.unusableReason,
 });
 
-const requiredModel = (value: string): string => {
-  if (value.trim().length === 0) throw new Error("Agent model is blank");
-  return value;
-};
-const decodeHarness = (value: string): "pi" => {
-  if (value !== "pi") throw new Error(`Unsupported Agent Harness: ${value}`);
-  return "pi";
-};
 const invalid = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
