@@ -10,7 +10,7 @@ export type RuntimeCase = {
   readonly events: readonly SessionEvent[];
   readonly messages: readonly unknown[];
   readonly idle: boolean;
-  readonly continuationState: (Record<string, unknown> & { readonly paused?: boolean }) | undefined;
+  readonly continuationState?: Record<string, unknown> & { readonly paused?: boolean };
   readonly extensionErrors: readonly unknown[];
 };
 

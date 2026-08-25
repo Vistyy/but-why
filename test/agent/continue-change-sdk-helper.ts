@@ -98,13 +98,14 @@ const runRuntimeCase = async (): Promise<RuntimeCase> => {
     if (extensionErrors.length !== 0) {
       throw new Error(`Extension execution failed: ${JSON.stringify(extensionErrors)}`);
     }
+    const state = continuationState(session);
     return {
       blocked,
       providerCalls: faux.state.callCount,
       events,
       messages: session.messages,
       idle: !session.isStreaming,
-      continuationState: continuationState(session),
+      ...(state === undefined ? {} : { continuationState: state }),
       extensionErrors,
     };
   } finally {
