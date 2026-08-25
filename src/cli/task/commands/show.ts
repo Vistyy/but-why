@@ -34,6 +34,9 @@ export const runTaskShowCommand = (
       return yield* withTaskReviewInspection(environment, (reviews) =>
         Effect.gen(function* () {
           const review = yield* reviews.getLatestForTask(taskId.taskId);
+          const simplificationAdvice = yield* reviews.getCompletedSimplificationAdvice(
+            taskId.taskId,
+          );
           const proposalCurrent =
             review === undefined ? undefined : yield* reviews.proposalIsCurrent(review);
           return success({
@@ -45,6 +48,7 @@ export const runTaskShowCommand = (
               prerequisites: task.prerequisites,
               dependents: task.dependents,
               change: projection,
+              ...(simplificationAdvice === undefined ? {} : { simplificationAdvice }),
               review:
                 review === undefined
                   ? null

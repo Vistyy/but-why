@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
 import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
@@ -22,6 +23,7 @@ import {
   type SubmissionRepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewerPrompt.js";
+import { taskSimplificationAdviceBuiltInInstructions } from "../../reviewerPrompts/taskSimplificationAdvicePrompt.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
@@ -35,8 +37,12 @@ import {
   readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../review/adapters/taskReviewGit.js";
-import { resolveTaskReviewPolicy } from "../review/taskReviewConfig.js";
+import {
+  resolveTaskReviewPolicy,
+  resolveTaskSimplificationAdvicePolicy,
+} from "../review/taskReviewConfig.js";
 import type { TaskReviewerOutput } from "../review/taskReviewerOutput.js";
+import type { CompleteTaskReviewSuccess } from "../review/taskReviewPersistence.js";
 import {
   abandonTaskReview,
   inspectTaskReviewIdentity,
@@ -45,6 +51,11 @@ import {
   type TaskReviewRecoveryUseCases,
   type TaskReviewSubmitResult,
 } from "../review/taskReviewUseCases.js";
+import type {
+  TaskSimplificationAdvice,
+  TaskSimplificationAdviceAttempt,
+} from "../review/taskSimplificationAdvice.js";
+import type { TaskSimplificationAdviceOutput } from "../review/taskSimplificationAdviceOutput.js";
 import type { PublicTaskId } from "../taskId.js";
 
 export type LoadTaskReviewError =
@@ -68,6 +79,8 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
     openSqliteTaskReviewPersistence().pipe(
       Effect.flatMap((persistence) =>
         use({
+          getCompletedSimplificationAdvice: (taskId) =>
+            persistence.getCompletedSimplificationAdvice(taskId),
           getById: persistence.getById,
           getLatestForTask: persistence.getLatestForTask,
           listForTask: persistence.listForTask,
@@ -134,6 +147,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
     readonly cwd: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
+    readonly underengineerRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
     readonly progress?: SubmitProgress;
     readonly taskId: PublicTaskId;
     readonly now: string;
@@ -150,16 +164,37 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
   return reuseRuntime.runtime
     .provide(
       openSqliteTaskReviewPersistence().pipe(
-        Effect.flatMap((persistence) => persistence.reuseJudgment(input.taskId, input.now)),
+        Effect.flatMap((persistence) =>
+          Effect.all({
+            judgment: persistence.reuseJudgment(input.taskId, input.now),
+            advice: persistence.getCompletedSimplificationAdvice(input.taskId),
+          }),
+        ),
       ),
     )
     .pipe(
-      Effect.flatMap((judgment) =>
+      Effect.flatMap(({ judgment, advice }) =>
         judgment === undefined
           ? submitFreshTaskReview(input, use)
-          : use(judgment).pipe(Effect.map((value) => ({ ok: true as const, value }))),
+          : use(
+              submissionResultWithAdvice(
+                judgment,
+                advice,
+                judgment.review.simplificationAdviceAttempt,
+              ),
+            ).pipe(Effect.map((value) => ({ ok: true as const, value }))),
       ),
     );
+};
+
+const submissionResultWithAdvice = (
+  judgment: CompleteTaskReviewSuccess,
+  advice: TaskSimplificationAdvice | undefined,
+  attempt: TaskSimplificationAdviceAttempt | undefined,
+): TaskReviewSubmitResult => {
+  if (advice !== undefined) return { ...judgment, simplificationAdvice: advice };
+  if (attempt !== undefined) return { ...judgment, simplificationAdviceAttempt: attempt };
+  return judgment;
 };
 
 const submitFreshTaskReview = <A, E, R>(
@@ -167,6 +202,7 @@ const submitFreshTaskReview = <A, E, R>(
     readonly cwd: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
+    readonly underengineerRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
     readonly progress?: SubmitProgress;
     readonly taskId: PublicTaskId;
     readonly now: string;
@@ -240,10 +276,21 @@ const submitFreshTaskReview = <A, E, R>(
               },
             });
           },
+          resolveSimplificationAdvicePolicy: (repoConfig, _commit) => {
+            const global = readGlobalConfig(input.globalConfigPath);
+            if (!global.ok) return { ok: false, message: global.error.message };
+            return resolveTaskSimplificationAdvicePolicy({
+              repoConfig,
+              globalConfig: global.config,
+              globalConfigDirectory: dirname(input.globalConfigPath),
+              builtInInstructions: taskSimplificationAdviceBuiltInInstructions,
+            });
+          },
           admission,
           persistence,
           agentPersistence,
           reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
+          underengineerRuntime: input.underengineerRuntime ?? piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
           readReviewBase: readCurrentWorktreeReviewBase,
           verifyReviewBase: verifyRecordedTaskReviewBase,

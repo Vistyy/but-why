@@ -4,6 +4,7 @@ import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import type { TaskReviewRepositorySubmitResult } from "../../../task/composition/loadTaskReviewUseCases.js";
 import { type TaskCommandEnvironment, withTaskReviewSubmission } from "../taskCliSupport.js";
+import { taskSimplificationAdviceAttemptView } from "./taskReviewView.js";
 export type TaskSubmitCommand = {
   readonly taskId: string;
 };
@@ -20,6 +21,18 @@ export const runTaskSubmitCommand = (
   );
 };
 
+const simplificationAdviceView = (result: TaskReviewRepositorySubmitResult) => {
+  if (result.ok && result.simplificationAdvice !== undefined) {
+    return { simplificationAdvice: result.simplificationAdvice };
+  }
+  if (result.ok && result.simplificationAdviceAttempt != null) {
+    return {
+      simplificationAdvice: taskSimplificationAdviceAttemptView(result.simplificationAdviceAttempt),
+    };
+  }
+  return {};
+};
+
 const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string): CliResult => {
   if (!result.ok && result.code === "remote_tasks_not_supported") {
     return taskIdResolutionError(result);
@@ -32,6 +45,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
         return success({
           review: { id: review.id, state: review.state, outcome: result.outcome },
           task: result.task,
+          ...simplificationAdviceView(result),
           help: [
             `Run \`by task show ${review.taskId}\` to inspect its startability and next action.`,
           ],
@@ -48,6 +62,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
               findings: review.findings,
             },
             task: result.task,
+            ...simplificationAdviceView(result),
           },
           help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
         });
@@ -63,6 +78,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
               toolingFailure: review.toolingFailure,
             },
             task: result.task,
+            ...simplificationAdviceView(result),
           },
           help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
         });

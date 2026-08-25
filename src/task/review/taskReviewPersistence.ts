@@ -12,10 +12,17 @@ import type {
   TaskReviewRecord,
   TaskReviewToolingFailure,
 } from "./taskReview.js";
+import type {
+  TaskSimplificationAdvice,
+  TaskSimplificationAdvicePolicy,
+} from "./taskSimplificationAdvice.js";
 
 export type AdmitTaskReviewInput = {
   readonly taskId: PublicTaskId;
   readonly policy: TaskReviewPolicySnapshot;
+  readonly simplificationAdvice?: {
+    readonly configuration?: TaskSimplificationAdvicePolicy;
+  };
   readonly baseRef: string;
   readonly baseCommit: string;
   readonly now: string;
@@ -40,6 +47,18 @@ export type AdmitTaskReviewResult =
       readonly dependencyEvidence: readonly TaskReviewDependencyEvidence[];
     }
   | TaskReviewAdmissionRejection;
+
+export type SettleSimplificationAdviceInput =
+  | {
+      readonly reviewId: number;
+      readonly complete: true;
+      readonly advice: TaskSimplificationAdvice;
+    }
+  | {
+      readonly reviewId: number;
+      readonly complete: false;
+      readonly failure: TaskReviewToolingFailure;
+    };
 
 export type CompleteTaskReviewInput = {
   readonly reviewId: number;
@@ -94,6 +113,19 @@ export type CompleteTaskReviewResult =
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" };
 
 export type TaskReviewPersistence = {
+  readonly getCompletedSimplificationAdvice: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
+  readonly recordSimplificationAdviceFailure: (
+    reviewId: number,
+    failure: TaskReviewToolingFailure,
+  ) => Effect.Effect<void, RepositoryStorageError>;
+  readonly linkSimplificationAdviceInvocation: (input: {
+    readonly reviewId: number;
+  }) => AgentSessionSqlLink;
+  readonly settleSimplificationAdvice: (
+    input: SettleSimplificationAdviceInput,
+  ) => AgentSessionSqlLink;
   readonly reuseJudgment: (
     taskId: PublicTaskId,
     now: string,

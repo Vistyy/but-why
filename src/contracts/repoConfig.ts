@@ -74,6 +74,9 @@ const configurableReviewRoleSchema = Schema.Struct({
 const repoReviewConfigSchema = Schema.Struct({
   task: Schema.optional(configurableReviewRoleSchema),
   acceptance: Schema.optional(configurableReviewRoleSchema),
+  underengineer: Schema.optional(
+    Schema.Struct({ agentProfile: Schema.optional(agentProfileReferenceSchema) }),
+  ),
   specialists: Schema.optional(Schema.Array(configNameSchema)),
 });
 

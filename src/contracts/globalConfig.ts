@@ -41,6 +41,9 @@ const globalConfigSchema = Schema.Struct({
     Schema.Struct({
       task: Schema.optional(globalConfigurableReviewRoleSchema),
       acceptance: Schema.optional(globalConfigurableReviewRoleSchema),
+      underengineer: Schema.optional(
+        Schema.Struct({ agentProfile: Schema.optional(agentProfileReferenceSchema) }),
+      ),
       specialists: Schema.optional(Schema.Array(configNameSchema)),
     }),
   ),

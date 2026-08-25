@@ -4,6 +4,7 @@ import type {
   TaskReviewRecord,
 } from "../../../task/review/taskReview.js";
 import type { TaskReviewIdentityInspection } from "../../../task/review/taskReviewUseCases.js";
+import type { TaskSimplificationAdviceAttempt } from "../../../task/review/taskSimplificationAdvice.js";
 import { agentInvocationView } from "../../agentInvocationView.js";
 
 export const taskReviewHistoryView = (review: TaskReviewRecord) => ({
@@ -60,6 +61,13 @@ export const taskReviewView = (
     id: review.agentSessionId ?? null,
     invocations: (review.agentInvocations ?? []).map(agentInvocationView),
   },
+  ...(review.simplificationAdviceAttempt === undefined
+    ? {}
+    : {
+        simplificationAdviceAttempt: taskSimplificationAdviceAttemptView(
+          review.simplificationAdviceAttempt,
+        ),
+      }),
 });
 
 const taskReviewRecoveryActions = (
@@ -75,6 +83,23 @@ const taskReviewRecoveryActions = (
     `Run \`by task review abandon ${review.id} --reason "..."\` after the process stops.`,
   ];
 };
+
+export const taskSimplificationAdviceAttemptView = (attempt: TaskSimplificationAdviceAttempt) => ({
+  state: attempt.state,
+  advice: attempt.advice,
+  unavailable: attempt.unavailable,
+  configuration:
+    attempt.configuration === null
+      ? null
+      : {
+          profile: taskReviewProfileView(attempt.configuration.profile),
+          builtInInstructions: attempt.configuration.builtInInstructions,
+        },
+  agentSession: {
+    id: attempt.agentSessionId ?? null,
+    invocations: (attempt.agentInvocations ?? []).map(agentInvocationView),
+  },
+});
 
 const taskReviewPolicyView = (policy: TaskReviewPolicySnapshot) => ({
   profile: taskReviewProfileView(policy.profile),

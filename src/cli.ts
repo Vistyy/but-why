@@ -11,6 +11,7 @@ import type {
   TaskReviewRecoveryUseCases,
   TaskReviewSubmissionUseCases,
 } from "./task/review/taskReviewUseCases.js";
+import type { TaskSimplificationAdviceOutput } from "./task/review/taskSimplificationAdviceOutput.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 import type { CancellationUseCases } from "./taskChange/cancelTaskChange.js";
 import type { TaskChangeTaskUseCases } from "./taskChange/composition/loadTaskChangeTaskUseCases.js";
@@ -32,6 +33,7 @@ export type CliEnvironment = {
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
+  readonly underengineerAgentRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly writeStderr?: (message: string) => void;
 };

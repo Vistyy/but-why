@@ -11,6 +11,7 @@ import { type CliResult, runCli } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
+import type { TaskSimplificationAdviceOutput } from "../../src/task/review/taskSimplificationAdviceOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import type { CancellationUseCases } from "../../src/taskChange/cancelTaskChange.js";
@@ -122,6 +123,21 @@ type InProcessCliResult = {
   readonly stderr: string;
 };
 
+const unavailableUnderengineerAgentRuntime: ReviewerAgentRuntime<TaskSimplificationAdviceOutput> = {
+  review: () =>
+    Effect.succeed({
+      ok: false as const,
+      failure: {
+        kind: "process_execution" as const,
+        operationName: "test_underengineer",
+        message: "Test Underengineer is intentionally unavailable.",
+      },
+      sessionUsability: "unknown" as const,
+      attempts: 1,
+      stdout: "",
+    }),
+};
+
 type InProcessCliOptions = {
   readonly globalConfigPath?: string;
   readonly stdin?: TextInputStdin;
@@ -130,6 +146,7 @@ type InProcessCliOptions = {
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
+  readonly underengineerAgentRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly writeStderr?: (message: string) => void;
 };
@@ -166,6 +183,13 @@ const runByInProcessEffectRaw = (
     ...(options.taskReviewerAgentRuntime === undefined
       ? {}
       : { taskReviewerAgentRuntime: options.taskReviewerAgentRuntime }),
+    ...(options.underengineerAgentRuntime === undefined &&
+    options.taskReviewerAgentRuntime === undefined
+      ? {}
+      : {
+          underengineerAgentRuntime:
+            options.underengineerAgentRuntime ?? unavailableUnderengineerAgentRuntime,
+        }),
     ...(options.interactiveSessionHost === undefined
       ? {}
       : { interactiveSessionHost: options.interactiveSessionHost }),

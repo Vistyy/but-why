@@ -263,6 +263,10 @@ it.effect("observes final Task Review restoration and restoration failure", () =
         let restoredUntracked = true;
         let reviewerCalls = 0;
         const persistence: TaskReviewPersistence = {
+          getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
+          recordSimplificationAdviceFailure: () => Effect.void,
+          linkSimplificationAdviceInvocation: defaultAgentLink,
+          settleSimplificationAdvice: () => () => Effect.void,
           reuseJudgment: () => Effect.succeed(undefined),
           checkAdmission: () => Effect.succeed(undefined),
           admit: () =>
@@ -332,9 +336,27 @@ it.effect("observes final Task Review restoration and restoration failure", () =
             ok: true as const,
             policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
           }),
+          resolveSimplificationAdvicePolicy: () => ({
+            ok: false as const,
+            message: "Test Underengineer is unavailable.",
+          }),
           persistence,
           agentSessionStorageRoot: createTestWorkspace(),
           agentPersistence: defaultAgentPersistence(),
+          underengineerRuntime: {
+            review: () =>
+              Effect.succeed({
+                ok: false as const,
+                failure: {
+                  kind: "process_execution" as const,
+                  operationName: "test_underengineer",
+                  message: "Test Underengineer is unavailable.",
+                },
+                sessionUsability: "unknown" as const,
+                attempts: 1,
+                stdout: "",
+              }),
+          },
           reviewerRuntime: {
             review: (input) =>
               Effect.gen(function* () {
@@ -447,6 +469,10 @@ it.effect("returns a reused judgment before every repository and reviewer collab
     };
     const unused = () => Effect.die("Unexpected persistence operation");
     const persistence: TaskReviewPersistence = {
+      getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
+      recordSimplificationAdviceFailure: () => Effect.void,
+      linkSimplificationAdviceInvocation: defaultAgentLink,
+      settleSimplificationAdvice: () => () => Effect.void,
       reuseJudgment: () =>
         Effect.succeed({
           ok: true,
@@ -486,9 +512,16 @@ it.effect("returns a reused judgment before every repository and reviewer collab
         calls.policy += 1;
         return { ok: false, message: "must not resolve" };
       },
+      resolveSimplificationAdvicePolicy: () => ({
+        ok: false as const,
+        message: "must not resolve",
+      }),
       persistence,
       agentSessionStorageRoot: createTestWorkspace(),
       agentPersistence: defaultAgentPersistence(),
+      underengineerRuntime: {
+        review: () => Effect.die("must not review"),
+      },
       reviewerRuntime: {
         review: () => {
           calls.reviewer += 1;
@@ -573,6 +606,10 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
     const submit = (completion: "missing" | "inactive") => {
       const unused = () => Effect.die("Unexpected persistence operation");
       const persistence: TaskReviewPersistence = {
+        getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
+        recordSimplificationAdviceFailure: () => Effect.void,
+        linkSimplificationAdviceInvocation: defaultAgentLink,
+        settleSimplificationAdvice: () => () => Effect.void,
         reuseJudgment: () => Effect.succeed(undefined),
         checkAdmission: () => Effect.succeed(undefined),
         admit: () =>
@@ -609,9 +646,16 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
           ok: true as const,
           policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
         }),
+        resolveSimplificationAdvicePolicy: () => ({
+          ok: false as const,
+          message: "must not resolve",
+        }),
         persistence,
         agentSessionStorageRoot: createTestWorkspace(),
         agentPersistence: defaultAgentPersistence(),
+        underengineerRuntime: {
+          review: () => Effect.die("must not review"),
+        },
         reviewerRuntime: passingReviewer,
         reviewerExecutor: { execute: () => Effect.die("unused") },
         readReviewBase: () =>
@@ -1193,10 +1237,11 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
     });
     expect(submitted.status, submitted.stdout).toBe(0);
     const output = JSON.parse(submitted.stdout) as { review: { id: number } };
-    expect(output).toEqual({
+    expect(output).toMatchObject({
       review: { id: output.review.id, state: "complete", outcome: "passed" },
       task: { id: "BY-1", state: "todo" },
       help: ["Run `by task show BY-1` to inspect its startability and next action."],
+      simplificationAdvice: { state: "unavailable" },
     });
     const shown = yield* runByInProcessEffect(root, [
       "task",
@@ -1319,7 +1364,7 @@ it.effect(
       });
       expect(second.status, second.stdout).toBe(1);
       expect(observed).toHaveLength(2);
-      expect(observed[1]?.resumeSession).toBe("by-agent-1");
+      expect(observed[1]?.resumeSession).toBe("by-agent-2");
       expect(observed[1]?.prompt).toContain("Changed proposal");
 
       const secondId = (JSON.parse(second.stdout) as { error: { review: { id: number } } }).error

@@ -52,6 +52,14 @@ const expectedColumns = {
     "cleanup_blocking_reason:TEXT:0:0",
   ],
   task_review_agent_invocations: ["task_review_id:INTEGER:1:1", "agent_invocation_id:INTEGER:1:2"],
+  task_review_simplification_advice: [
+    "task_review_id:INTEGER:0:1",
+    "outcome:TEXT:1:0",
+    "advice:TEXT:0:0",
+    "unavailable:TEXT:0:0",
+    "configuration:TEXT:0:0",
+    "agent_invocation_id:INTEGER:0:0",
+  ],
   changes: [
     "id:INTEGER:0:1",
     "branch_ref:TEXT:1:0",
@@ -133,6 +141,10 @@ const expectedForeignKeys = {
   task_dependencies: ["dependent_task_id->tasks.id", "prerequisite_task_id->tasks.id"],
   task_reviews: ["task_id->tasks.id"],
   task_review_agent_invocations: [
+    "agent_invocation_id->agent_invocations.id",
+    "task_review_id->task_reviews.id",
+  ],
+  task_review_simplification_advice: [
     "agent_invocation_id->agent_invocations.id",
     "task_review_id->task_reviews.id",
   ],
@@ -262,6 +274,7 @@ const expectedImplicitUniqueIndexes = {
   task_change_links: ["u:change_id"],
   task_dependencies: ["pk:dependent_task_id,prerequisite_task_id"],
   task_review_agent_invocations: ["pk:task_review_id,agent_invocation_id", "u:agent_invocation_id"],
+  task_review_simplification_advice: ["u:agent_invocation_id"],
   tasks: ["u:reviewer_agent_session_id"],
   validation_phase_agent_invocations: [
     "pk:validation_run_id,phase,producer,agent_invocation_id",
@@ -297,7 +310,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       const tables = objects.filter((object) => object.type === "table");
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
-      expect(tables).toHaveLength(18);
+      expect(tables).toHaveLength(19);
 
       const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
         sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),
@@ -673,7 +686,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
           SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id
         `,
       );
-      expect(migrations).toEqual([{ migrationId: 1 }]);
+      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
     }),
   ),
 );

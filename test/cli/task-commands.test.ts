@@ -82,6 +82,7 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
 const taskReviewInspection = (
   latest: TaskReviewRecord | undefined = undefined,
 ): TaskReviewInspectionUseCases => ({
+  getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
   getById: () => Effect.succeed(undefined),
   getLatestForTask: () => Effect.succeed(latest),
   listForTask: () => Effect.succeed(latest === undefined ? [] : [latest]),
