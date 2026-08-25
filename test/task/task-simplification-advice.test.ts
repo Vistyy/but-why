@@ -60,6 +60,7 @@ it.effect("runs one separate advice attempt and retains its first completion", (
       }),
     );
     const proposal = join(root, "proposal.txt");
+    const progress: string[] = [];
     writeFileSync(proposal, "Exact proposal");
     yield* runByInProcessEffect(root, ["task", "create", "--title", "Advice", "--file", proposal]);
 
@@ -67,8 +68,15 @@ it.effect("runs one separate advice attempt and retains its first completion", (
       globalConfigPath,
       taskReviewerAgentRuntime: passingReviewer,
       underengineerAgentRuntime: adviceReviewer,
+      writeStderr: (message) => progress.push(message),
     });
     expect(submitted.status, submitted.stdout).toBe(0);
+    expect(progress).toEqual([
+      "Underengineer started: profile=review model=test-model thinking=default\n",
+      expect.stringMatching(/^Underengineer passed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
+      "Task Review started: profile=review model=test-model thinking=default\n",
+      expect.stringMatching(/^Task Review passed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
+    ]);
     expect(JSON.parse(submitted.stdout)).toMatchObject({
       simplificationAdvice: advice,
       task: { state: "todo" },

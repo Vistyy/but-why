@@ -8,6 +8,7 @@ export type SubmitProgressProfile = {
 
 export type SubmitProgressPhase =
   | { readonly kind: "repositoryPreparation" }
+  | { readonly kind: "underengineer"; readonly profile: SubmitProgressProfile }
   | { readonly kind: "taskReview"; readonly profile: SubmitProgressProfile }
   | { readonly kind: "prepare" }
   | { readonly kind: "check"; readonly id: string }
@@ -105,6 +106,8 @@ const startLabel = (phase: SubmitProgressPhase): string => {
   switch (phase.kind) {
     case "repositoryPreparation":
       return "Repository Preparation started";
+    case "underengineer":
+      return `Underengineer started: ${profileFacts(phase.profile)}`;
     case "taskReview":
       return `Task Review started: ${profileFacts(phase.profile)}`;
     case "prepare":
@@ -122,6 +125,8 @@ const completionLabel = (phase: SubmitProgressPhase): string => {
   switch (phase.kind) {
     case "repositoryPreparation":
       return "Repository Preparation";
+    case "underengineer":
+      return "Underengineer";
     case "taskReview":
       return "Task Review";
     case "prepare":
