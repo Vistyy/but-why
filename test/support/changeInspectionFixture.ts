@@ -14,7 +14,7 @@ import {
 } from "../../src/sqlite/sqliteChangeAuthorityHistory.js";
 import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { internalTaskId } from "../../src/task/taskId.js";
-import { runBuiltByWithEnv } from "./by-cli.js";
+import { runByWithEnv } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 
@@ -62,7 +62,7 @@ export const runInspectionCommand = (
   _now = "2026-06-30T12:00:00.000Z",
 ) =>
   Effect.sync(() =>
-    runBuiltByWithEnv(
+    runByWithEnv(
       root,
       { PATH: `${join(root, ".inspection-bin")}:${process.env["PATH"] ?? ""}` },
       ...args,

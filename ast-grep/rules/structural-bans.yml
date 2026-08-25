@@ -167,6 +167,7 @@ ignores:
   - test/repository/quality-interface.test.ts
   - test/task/task-cli-process.test.ts
   - test/change/change-implement-process.test.ts
+  - test/support/changeInspectionFixture.ts
 rule:
   any:
     - pattern: runBuiltByWithEnv($$$ARGS)
