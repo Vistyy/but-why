@@ -52,6 +52,12 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 
 Obtain Task Submission Authorization for the selected Task and intended outcome before running Task Submission.
 Run `<but-why> task submit <task-id>` for the exact authorized New Task proposal.
+Task Submission is a long-running command, as classified by its CLI help.
+Run it without a caller timeout when the execution harness supports that behavior.
+When the execution harness requires a finite timeout, allow at least 30 minutes.
+Increase the timeout when Repository Preparation or agent duration requires more time.
+If the caller times out or loses the response, inspect the Task Review and active processes before abandonment or retry.
+Do not assume that Task Submission stopped when its caller ended.
 Ordinary Task Submission selects the newest completed Review for an unchanged New Task proposal and reuses it only when it passed.
 Finding-blocked and tooling-failed Reviews remain history and are not reusable judgments.
 A later authorized submission of an unchanged New Task proposal runs a new Task Review.
