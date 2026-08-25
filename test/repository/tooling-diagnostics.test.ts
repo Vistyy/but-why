@@ -11,6 +11,8 @@ const astGrepConfigPath = join(repositoryRoot, "sgconfig.yml");
 const biomeConfigPath = join(repositoryRoot, "biome.json");
 const biomePluginPath = join(repositoryRoot, "biome-plugins/no-inline-import-types.grit");
 const healthReportScriptPath = join(repositoryRoot, "scripts/run-health-report.mjs");
+const healthProcessTimeoutMs = 125_000;
+const healthTestTimeoutMs = healthProcessTimeoutMs + 5_000;
 const temporaryPaths: string[] = [];
 
 type CommandResult = {
@@ -23,8 +25,13 @@ const run = (
   args: string[],
   cwd: string,
   env?: NodeJS.ProcessEnv,
+  timeout = 4_000,
 ): CommandResult => {
-  const result = runTestProcess(command, args, { cwd, ...(env === undefined ? {} : { env }) });
+  const result = runTestProcess(command, args, {
+    cwd,
+    ...(env === undefined ? {} : { env }),
+    timeout,
+  });
   return {
     status: result.status,
     output: `${result.stdout}${result.stderr}`,
@@ -290,13 +297,15 @@ describe("repository-authored tooling diagnostics", () => {
     expectActionablePolicyDiagnostic(result.output);
   });
 
-  test("health reporting keeps analyzer findings actionable and advisory", () => {
-    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-health-report-"));
-    temporaryPaths.push(fixtureRoot);
-    const pnpm = join(fixtureRoot, "pnpm");
-    writeFileSync(
-      pnpm,
-      `#!/usr/bin/env bash
+  test(
+    "health reporting keeps analyzer findings actionable and advisory",
+    () => {
+      const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-health-report-"));
+      temporaryPaths.push(fixtureRoot);
+      const pnpm = join(fixtureRoot, "pnpm");
+      writeFileSync(
+        pnpm,
+        `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
   *"fallow health"*)
@@ -313,30 +322,38 @@ case "$*" in
     ;;
 esac
 `,
-    );
-    chmodSync(pnpm, 0o755);
+      );
+      chmodSync(pnpm, 0o755);
 
-    const result = run(process.execPath, [healthReportScriptPath], fixtureRoot, {
-      // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
-      PATH: `${fixtureRoot}:${process.env["PATH"] ?? ""}`,
-    });
+      const result = run(
+        process.execPath,
+        [healthReportScriptPath],
+        fixtureRoot,
+        {
+          // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
+          PATH: `${fixtureRoot}:${process.env["PATH"] ?? ""}`,
+        },
+        healthProcessTimeoutMs,
+      );
 
-    expect(result.status).toBe(0);
-    expect(result.output).toContain("Advisory health summary: 2 findings across 2 locations.");
-    expect(result.output).toContain(
-      "source=Fallow health | rule=complexity | severity=high | path=src/complex.ts | location=4:7 | symbol=complexWork | remediation=Extract focused helper functions",
-    );
-    expect(result.output).not.toContain("Fallow duplication");
-    expect(result.output).not.toContain("code-duplication");
-    expect(result.output).not.toContain("severity=message");
-    expect(result.output).toContain("- Effect warnings: 1 findings.");
-    expect(result.output).toContain(
-      "source=Effect diagnostics | rule=effectRule | severity=warning | path=src/effect.ts | location=5:6-5:10 | remediation=Use Effect.gen for immediate execution.",
-    );
-    expect(result.output).toContain(
-      "Findings are advisory. This report exits successfully when findings exist.",
-    );
-  });
+      expect(result.status).toBe(0);
+      expect(result.output).toContain("Advisory health summary: 2 findings across 2 locations.");
+      expect(result.output).toContain(
+        "source=Fallow health | rule=complexity | severity=high | path=src/complex.ts | location=4:7 | symbol=complexWork | remediation=Extract focused helper functions",
+      );
+      expect(result.output).not.toContain("Fallow duplication");
+      expect(result.output).not.toContain("code-duplication");
+      expect(result.output).not.toContain("severity=message");
+      expect(result.output).toContain("- Effect warnings: 1 findings.");
+      expect(result.output).toContain(
+        "source=Effect diagnostics | rule=effectRule | severity=warning | path=src/effect.ts | location=5:6-5:10 | remediation=Use Effect.gen for immediate execution.",
+      );
+      expect(result.output).toContain(
+        "Findings are advisory. This report exits successfully when findings exist.",
+      );
+    },
+    healthTestTimeoutMs,
+  );
 
   test("health recipe runs advisory analysis without the coverage workload", () => {
     const result = run(

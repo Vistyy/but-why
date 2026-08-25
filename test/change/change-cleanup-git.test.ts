@@ -447,7 +447,7 @@ if (deletesBranch) {
   const moved = spawnSync(
     ${JSON.stringify(realGit)},
     [${JSON.stringify(`--git-dir=${commonDirectory}`)}, "update-ref", "refs/heads/feature", ${JSON.stringify(movedHead)}],
-    { timeout: 4_000 },
+    { stdio: "ignore", timeout: 4_000 },
   );
   if (moved.status !== 0) process.exit(moved.status ?? 1);
 }

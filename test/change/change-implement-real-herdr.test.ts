@@ -6,6 +6,8 @@ import { runTestProcess, startTestProcess } from "../support/testProcess.js";
 
 const { BY_RUN_REAL_HERDR_INTEGRATION } = process.env;
 const realHerdrEnabled = BY_RUN_REAL_HERDR_INTEGRATION === "1";
+const realHerdrProcessTimeoutMs = 180_000;
+const realHerdrTestTimeoutMs = 240_000;
 
 const execute = (
   command: string,
@@ -18,7 +20,7 @@ const execute = (
     cwd,
     isolatedHome,
     env: { HERDR_SOCKET_PATH: socketPath },
-    timeout: 180_000,
+    timeout: realHerdrProcessTimeoutMs,
   });
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) {
@@ -194,5 +196,5 @@ describe.skipIf(!realHerdrEnabled)("Change Implement with installed Herdr", () =
       }
       rmSync(temporaryRoot, { force: true, recursive: true });
     }
-  }, 240_000);
+  }, realHerdrTestTimeoutMs);
 });
