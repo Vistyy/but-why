@@ -56,6 +56,10 @@ type ProfileResolutionInput = {
   readonly globalConfigDirectory?: string;
 };
 
+type ReviewerProfileResolutionInput = Omit<ProfileResolutionInput, "requireModel"> & {
+  readonly requireModel?: true;
+};
+
 export const resolveInteractiveSessionAgentProfile = (input: {
   readonly repoConfig: RepoConfig;
   readonly globalConfig: GlobalConfig;
@@ -99,7 +103,7 @@ export function resolveAgentProfile(
   | { readonly ok: true; readonly resolved: InteractiveSessionAgentProfile }
   | { readonly ok: false; readonly error: AgentProfileResolutionError };
 export function resolveAgentProfile(
-  input: ProfileResolutionInput,
+  input: ReviewerProfileResolutionInput,
 ):
   | { readonly ok: true; readonly resolved: ResolvedReviewerPiAgentProfile }
   | { readonly ok: false; readonly error: AgentProfileResolutionError };
