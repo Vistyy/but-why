@@ -5,7 +5,7 @@ import {
   type TaskSimplificationAdvice,
 } from "./taskSimplificationAdvice.js";
 
-export class TaskSimplificationAdviceOutputContractFailed extends Data.TaggedError(
+class TaskSimplificationAdviceOutputContractFailed extends Data.TaggedError(
   "TaskSimplificationAdviceOutputContractFailed",
 )<{
   readonly operationName: "decode_task_simplification_advice_output";

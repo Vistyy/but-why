@@ -749,7 +749,7 @@ const readCompletedSimplificationAdvice = (
       return row === undefined
         ? Effect.succeed(undefined)
         : Effect.try({
-            try: () => decodeTaskSimplificationAdvice(JSON.parse(row.advice)),
+            try: () => decodeTaskSimplificationAdvice(JSON.parse(row.advice) as unknown),
             catch: (cause) =>
               new RepositoryPersistedDataInvalid({
                 operationName: "read Task Simplification Advice",
@@ -894,15 +894,15 @@ const readSimplificationAdviceAttempt = (
         advice:
           attempt.advice === null
             ? null
-            : decodeTaskSimplificationAdvice(JSON.parse(attempt.advice)),
+            : decodeTaskSimplificationAdvice(JSON.parse(attempt.advice) as unknown),
         unavailable:
           attempt.unavailable === null
             ? null
-            : decodeTaskReviewToolingFailure(JSON.parse(attempt.unavailable)),
+            : decodeTaskReviewToolingFailure(JSON.parse(attempt.unavailable) as unknown),
         configuration:
           attempt.configuration === null
             ? null
-            : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration)),
+            : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration) as unknown),
         ...(attempt.agentSessionId === null ? {} : { agentSessionId: attempt.agentSessionId }),
         ...(invocations.length === 0
           ? {}

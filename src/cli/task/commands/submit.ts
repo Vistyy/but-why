@@ -4,6 +4,7 @@ import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import type { StructuredValue } from "../../../output/structured.js";
 import type { TaskReviewRepositorySubmitResult } from "../../../task/composition/loadTaskReviewUseCases.js";
+import { agentInvocationView } from "../../agentInvocationView.js";
 import { type TaskCommandEnvironment, withTaskReviewSubmission } from "../taskCliSupport.js";
 export type TaskSubmitCommand = {
   readonly taskId: string;
@@ -35,7 +36,50 @@ const adviceAttemptView = (
   attempt: NonNullable<
     Extract<TaskReviewRepositorySubmitResult, { readonly ok: true }>["simplificationAdviceAttempt"]
   >,
-) => JSON.parse(JSON.stringify(attempt)) as StructuredValue;
+): StructuredValue => ({
+  state: attempt.state,
+  advice: attempt.advice,
+  unavailable: attempt.unavailable,
+  configuration:
+    attempt.configuration === null
+      ? null
+      : {
+          profile: {
+            agentProfile: attempt.configuration.profile.agentProfile,
+            scope: attempt.configuration.profile.scope,
+            profile: {
+              agentRuntime: attempt.configuration.profile.profile.agentRuntime,
+              runtimeConfig: {
+                model: attempt.configuration.profile.profile.runtimeConfig.model,
+                ...(attempt.configuration.profile.profile.runtimeConfig.thinking === undefined
+                  ? {}
+                  : { thinking: attempt.configuration.profile.profile.runtimeConfig.thinking }),
+                ...(attempt.configuration.profile.profile.runtimeConfig.extensions === undefined
+                  ? {}
+                  : { extensions: attempt.configuration.profile.profile.runtimeConfig.extensions }),
+                ...(attempt.configuration.profile.profile.runtimeConfig.skills === undefined
+                  ? {}
+                  : { skills: attempt.configuration.profile.profile.runtimeConfig.skills }),
+                ...(attempt.configuration.profile.profile.runtimeConfig.tools === undefined
+                  ? {}
+                  : { tools: attempt.configuration.profile.profile.runtimeConfig.tools }),
+                ...(attempt.configuration.profile.profile.runtimeConfig.contextFileDiscovery ===
+                undefined
+                  ? {}
+                  : {
+                      contextFileDiscovery:
+                        attempt.configuration.profile.profile.runtimeConfig.contextFileDiscovery,
+                    }),
+              },
+            },
+          },
+          builtInInstructions: attempt.configuration.builtInInstructions,
+        },
+  agentSession: {
+    id: attempt.agentSessionId ?? null,
+    invocations: (attempt.agentInvocations ?? []).map(agentInvocationView),
+  },
+});
 
 const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string): CliResult => {
   if (!result.ok && result.code === "remote_tasks_not_supported") {
