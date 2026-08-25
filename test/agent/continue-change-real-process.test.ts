@@ -17,6 +17,40 @@ const decodeEventObjects = (stdout: string): readonly Record<string, unknown>[] 
       return parsed as Record<string, unknown>;
     });
 
+const eventType = (event: Record<string, unknown>): unknown => Reflect.get(event, "type");
+
+const runPi = (worktreePath: string, callsPath: string) =>
+  runTestProcess(
+    process.execPath,
+    [
+      join(repoRoot, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js"),
+      "--mode",
+      "json",
+      "--print",
+      "--no-session",
+      "--offline",
+      "--no-extensions",
+      "--no-context-files",
+      "--no-skills",
+      "--thinking",
+      "off",
+      "--tools",
+      "bash",
+      "--model",
+      "but-why-test/deterministic-tool",
+      "--extension",
+      join(repoRoot, "test/fixtures/pi/deterministic-tool-provider.mjs"),
+      "--extension",
+      join(repoRoot, "extensions/continue-change.ts"),
+      "Change identity: BY-C1.",
+    ],
+    {
+      cwd: worktreePath,
+      env: { PI_TEST_PROVIDER_CALLS: callsPath },
+      timeout: processTimeoutMs,
+    },
+  );
+
 describe("packaged Change Implement continuation extension process boundary", () => {
   it("aborts a real Pi turn after its tool batch when the installed Change is blocked", () => {
     const repositoryRoot = createGitRepo();
@@ -40,6 +74,15 @@ describe("packaged Change Implement continuation extension process boundary", ()
     const worktreePath = Reflect.get(startedValue, "worktreePath");
     if (typeof worktreePath !== "string") throw new Error("Change Start omitted worktreePath.");
 
+    const normalCallsPath = join(repositoryRoot, "normal-provider-calls.log");
+    const normalRun = runPi(worktreePath, normalCallsPath);
+    expect(normalRun.status, normalRun.stderr || normalRun.stdout).toBe(0);
+    const normalEvents = decodeEventObjects(normalRun.stdout);
+    expect(normalEvents.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(
+      1,
+    );
+    expect(readFileSync(normalCallsPath, "utf8").trim().split("\n").length).toBeGreaterThan(1);
+
     const blocker = runTestProcess("by", ["change", "blocker", "raise", "BY-C1", "--file", "-"], {
       cwd: worktreePath,
       input:
@@ -48,45 +91,12 @@ describe("packaged Change Implement continuation extension process boundary", ()
     });
     expect(blocker.status, blocker.stderr || blocker.stdout).toBe(0);
 
-    const pi = join(repoRoot, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
-    const provider = join(repoRoot, "test/fixtures/pi/deterministic-tool-provider.mjs");
-    const extension = join(repoRoot, "extensions/continue-change.ts");
-    const run = runTestProcess(
-      process.execPath,
-      [
-        pi,
-        "--mode",
-        "json",
-        "--print",
-        "--no-session",
-        "--offline",
-        "--no-extensions",
-        "--no-context-files",
-        "--no-skills",
-        "--thinking",
-        "off",
-        "--tools",
-        "bash",
-        "--model",
-        "but-why-test/deterministic-tool",
-        "--extension",
-        provider,
-        "--extension",
-        extension,
-        "Change identity: BY-C1.",
-      ],
-      {
-        cwd: worktreePath,
-        env: { PI_TEST_PROVIDER_CALLS: callsPath },
-        timeout: processTimeoutMs,
-      },
-    );
-
+    const run = runPi(worktreePath, callsPath);
     expect(run.status, run.stderr || run.stdout).toBe(0);
     const events = decodeEventObjects(run.stdout);
-    expect(events.filter((event) => event["type"] === "tool_execution_end")).toHaveLength(1);
-    expect(events.some((event) => event["type"] === "turn_end")).toBe(true);
-    expect(events.some((event) => event["type"] === "agent_end")).toBe(true);
+    expect(events.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(1);
+    expect(events.some((event) => eventType(event) === "turn_end")).toBe(true);
+    expect(events.some((event) => eventType(event) === "agent_end")).toBe(true);
     expect(readFileSync(callsPath, "utf8").trim().split("\n")).toEqual(["1"]);
   }, 30_000);
 });
