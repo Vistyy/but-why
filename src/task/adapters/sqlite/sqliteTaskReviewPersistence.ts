@@ -801,7 +801,7 @@ const readCompletedSimplificationAdvice = (
       return row === undefined
         ? Effect.succeed(undefined)
         : Effect.try({
-            try: () => decodeTaskSimplificationAdvice(JSON.parse(row.advice) as unknown),
+            try: () => decodeTaskSimplificationAdvice(row.advice),
             catch: (cause) =>
               new RepositoryPersistedDataInvalid({
                 operationName: "read Task Simplification Advice",
@@ -912,7 +912,7 @@ const settleSimplificationAdvice = (
     if (input.complete) {
       yield* sql`
         UPDATE task_review_simplification_advice
-        SET outcome = 'completed', advice = ${JSON.stringify(input.advice)}, unavailable = NULL
+        SET outcome = 'completed', advice = ${input.advice}, unavailable = NULL
         WHERE task_review_id = ${input.reviewId}
           AND agent_invocation_id = ${input.invocationId}
           AND outcome = 'unavailable'
@@ -1012,7 +1012,7 @@ const readSimplificationAdviceAttempt = (
             [firstInvocation, ...decodedInvocations.slice(1)];
           return {
             state: "completed" as const,
-            advice: decodeTaskSimplificationAdvice(JSON.parse(attempt.advice) as unknown),
+            advice: decodeTaskSimplificationAdvice(attempt.advice),
             unavailable: null,
             configuration,
             agentSessionId: firstPersistedInvocation.agentSessionId,

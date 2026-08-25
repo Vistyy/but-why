@@ -48,11 +48,8 @@ const simplificationAdviceConfiguration = {
   builtInInstructions: "Task Simplification Advice test instructions",
 };
 
-const simplificationAdvice: TaskSimplificationAdvice = {
-  practicalCoreOutcome: "Deliver the requested result.",
-  options: [],
-  noSafeSimplificationReason: "No safe simplification is supported by this test advice.",
-};
+const simplificationAdvice: TaskSimplificationAdvice =
+  "No safe simplification is supported by this test advice because the requested result is already the smallest supported outcome.";
 
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
   withTemporaryRepositoryState(() =>

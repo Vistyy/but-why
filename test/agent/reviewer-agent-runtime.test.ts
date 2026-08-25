@@ -14,6 +14,7 @@ import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
 } from "../../src/agent/reviewerOutput.js";
+import { parseTaggedReviewerTextOutput } from "../../src/agent/reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/reviewerPrompts/reviewerPromptSupport.js";
 
 const decodeEmptyFindings = (output: unknown) =>
@@ -91,6 +92,41 @@ describe("Pi reviewer agent runtime", () => {
       });
       expect(systemPrompt).toBe("Act as the Acceptance Reviewer.");
       expect(prompt).toBe("Judge only approved intent for the exact Candidate.");
+    }),
+  );
+
+  it.effect("supports caller-owned raw text output parsing", () =>
+    Effect.gen(function* () {
+      const result = yield* piReviewerAgentRuntime.review({
+        reviewerExecutor: {
+          execute: () =>
+            Effect.succeed(
+              processResult(
+                "<reviewer-output>Keep the supported result and remove the optional integration.</reviewer-output>",
+              ),
+            ),
+        },
+        reviewer: "underengineer",
+        systemPrompt: "Return plain Markdown Advice.",
+        prompt: "Review the Task.",
+        parseOutput: parseTaggedReviewerTextOutput,
+        decodeOutput: (output) =>
+          typeof output === "string"
+            ? Effect.succeed(output)
+            : Effect.fail(
+                new ReviewerExecutionFailed({
+                  kind: "output_contract",
+                  operationName: "decode_advice",
+                  message: "Expected plain text Advice.",
+                }),
+              ),
+        profile,
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        report: "Keep the supported result and remove the optional integration.",
+      });
     }),
   );
 

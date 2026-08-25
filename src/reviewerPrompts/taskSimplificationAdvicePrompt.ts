@@ -3,11 +3,10 @@ import { reviewerExecutionInstructions } from "./reviewerPromptSupport.js";
 
 export const taskSimplificationAdviceBuiltInInstructions = [
   "TASK SIMPLIFICATION ADVICE",
-  "Identify the practical core outcome of the exact Task Review Proposal.",
-  "Make one underengineer attempt. The advice is non-authoritative: do not add requirements, create Findings, change the Task Review outcome, approve the Task, or prevent a valid New-to-Todo transition.",
-  "Offer zero, one, or two safe subtractive scope cuts or subtractive integrations.",
-  "For every option state the retained outcome, removed complexity, lost behavior, credible adverse consequence, repository evidence, and material uncertainty.",
-  "If no substantial safe simplification is supported, return no options and explain why.",
+  "Recommend the best supported safe simplification of the exact Task Review Proposal, or explain why no safe simplification is supported.",
+  "The advice is non-authoritative: do not add requirements, create Findings, change the Task Review outcome, approve the Task, or prevent a valid New-to-Todo transition.",
+  "Make the complete advice understandable by explaining what would be removed and why the retained result remains sufficient, including material trade-offs or uncertainty.",
+  "Use one nonblank Markdown block as the complete Advice. Do not require separate titles, options, evidence fields, semantic headings, or parsed properties.",
   "Use only the exact proposal, captured dependency evidence, Review Base, and repository evidence supplied by the review workspace.",
   "Do not propose additive scope, custom guidance, retries, or a different Task outcome.",
 ].join("\n");
@@ -16,21 +15,22 @@ export const buildTaskSimplificationAdviceSystemPrompt = (builtInInstructions: s
   [
     reviewerExecutionInstructions,
     builtInInstructions,
-    `Return only one JSON object inside <${reviewerOutputTag}> with exactly practicalCoreOutcome, options, and noSafeSimplificationReason.`,
-    "Use noSafeSimplificationReason as null when options are present, and a non-blank explanation when options is empty.",
+    `Return exactly one nonblank Markdown block inside <${reviewerOutputTag}>...</${reviewerOutputTag}>.`,
+    `<${reviewerOutputTag}>`,
+    "Your complete Markdown Advice.",
+    `</${reviewerOutputTag}>`,
   ].join("\n\n");
 
 export const buildTaskSimplificationAdviceOutputCorrectionPrompt = (failure: {
   readonly message: string;
 }): string =>
   [
-    "Your Underengineer output did not satisfy the required Task Simplification Advice contract.",
+    "Your Underengineer output did not satisfy the required nonblank Markdown Task Simplification Advice contract.",
     failure.message,
-    `Return only one JSON object inside <${reviewerOutputTag}>...</${reviewerOutputTag}> with exactly this complete form:`,
-    '{"practicalCoreOutcome":"...","options":[],"noSafeSimplificationReason":"..."}',
-    "options must contain zero, one, or two objects.",
-    "Each option must contain exactly retainedOutcome, removedComplexity, lostBehavior, adverseConsequence, repositoryEvidence, and materialUncertainty.",
-    "Use a non-blank noSafeSimplificationReason when options is empty, or null when options are present.",
+    `Return exactly one nonblank Markdown block inside <${reviewerOutputTag}>...</${reviewerOutputTag}> in this complete form:`,
+    `<${reviewerOutputTag}>`,
+    "Your complete Markdown Advice.",
+    `</${reviewerOutputTag}>`,
   ].join("\n");
 
 export const buildTaskSimplificationAdvicePrompt = (input: {

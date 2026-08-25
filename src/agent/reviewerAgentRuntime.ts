@@ -51,6 +51,7 @@ export type ReviewerAgentInput<Output> = {
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly reviewer: string;
   readonly decodeOutput: ReviewerOutputDecoder<Output>;
+  readonly parseOutput?: (stdout: string) => unknown;
   readonly systemPrompt: string;
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
@@ -151,7 +152,7 @@ const failedOutputResult = (
 const validateRunResult = <Output>(
   input: ReviewerAgentInput<Output>,
   result: ReviewerProcessResult,
-) => input.decodeOutput(parseTaggedReviewerOutput(result.stdout));
+) => input.decodeOutput((input.parseOutput ?? parseTaggedReviewerOutput)(result.stdout));
 
 const runReviewerProcess = (
   executor: ReviewerProcessExecutor,

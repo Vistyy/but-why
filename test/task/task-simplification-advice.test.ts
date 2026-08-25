@@ -15,20 +15,8 @@ import {
 } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 
-const advice: TaskSimplificationAdviceOutput = {
-  practicalCoreOutcome: "Deliver the requested result.",
-  options: [
-    {
-      retainedOutcome: "Deliver the requested result.",
-      removedComplexity: "Remove a nonessential integration.",
-      lostBehavior: "The optional integration is no longer available.",
-      adverseConsequence: "Users relying on it must use another path.",
-      repositoryEvidence: "The integration is not part of the core path.",
-      materialUncertainty: "Its external consumers are not fully known.",
-    },
-  ],
-  noSafeSimplificationReason: null,
-};
+const advice: TaskSimplificationAdviceOutput =
+  "Keep the core result and remove the optional integration because repository evidence shows it is not part of the supported path. The retained result remains sufficient; users of that integration would need another route.";
 
 const passingReviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
   review: () =>
@@ -92,8 +80,8 @@ it.effect("corrects malformed advice output in the same workspace and Agent Sess
             failure: {
               kind: "output_contract" as const,
               operationName: "decode_task_simplification_advice_output",
-              message: "The advice object has the wrong fields.",
-              correctionPrompt: "Return the complete advice form.",
+              message: "The advice must be one nonblank Markdown block.",
+              correctionPrompt: "Return the complete Markdown advice form.",
               sessionReference: "underengineer-session",
             },
             sessionUsability: "unknown" as const,
@@ -128,7 +116,7 @@ it.effect("corrects malformed advice output in the same workspace and Agent Sess
     expect(submitted.status, submitted.stdout).toBe(0);
     expect(adviceCalls).toBe(2);
     expect(observed[1]?.resumeSession).toBe("by-agent-1");
-    expect(observed[1]?.prompt).toBe("Return the complete advice form.");
+    expect(observed[1]?.prompt).toBe("Return the complete Markdown advice form.");
     const output = JSON.parse(submitted.stdout) as { review: { id: number } };
     const shown = yield* runByInProcessEffect(
       root,

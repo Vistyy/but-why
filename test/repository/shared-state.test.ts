@@ -157,8 +157,74 @@ describe("shared repository state", () => {
         ),
       );
 
-      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
+      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
     }),
+  );
+
+  it.effect(
+    "removes completed legacy Task Simplification Advice and its Underengineer session graph",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* initializedRepo();
+        const statePath = sharedStatePath(root);
+        const database = new DatabaseSync(statePath);
+        database.exec(`
+        DELETE FROM effect_sql_migrations WHERE migration_id = 3;
+        INSERT INTO tasks (id, title, description, state)
+        VALUES (1, 'Legacy', 'Legacy task', 'new');
+        INSERT INTO task_reviews (
+          id, task_id, proposal, dependency_evidence, base_ref, base_commit,
+          findings, cleanup_pending
+        ) VALUES (1, 1, '{}', '[]', 'main', 'head', '[]', 0);
+        INSERT INTO agent_sessions (id) VALUES (1);
+        INSERT INTO agent_continuations (
+          id, agent_session_id, harness, model, transcript_path
+        ) VALUES (1, 1, 'pi', 'legacy-model', 'legacy/transcript.jsonl');
+        INSERT INTO agent_invocations (
+          id, continuation_id, created_at, settled_at, settlement_kind
+        ) VALUES (1, 1, '2026-06-30T12:00:00.000Z', '2026-06-30T12:01:00.000Z', 'returned');
+        INSERT INTO task_review_simplification_advice (
+          task_review_id, outcome, advice, configuration, agent_invocation_id
+        ) VALUES (1, 'completed', '{"legacy":true}', '{}', 1);
+      `);
+        database.close();
+
+        const remaining = yield* Effect.scoped(
+          Effect.flatMap(RepositorySql, (repository) =>
+            repository.operation("inspect legacy advice cleanup", (sql) =>
+              Effect.all({
+                advice: sql<{ readonly count: number }>`
+                SELECT COUNT(*) AS count FROM task_review_simplification_advice
+                WHERE outcome = 'completed'
+              `,
+                sessions: sql<{ readonly count: number }>`
+                SELECT COUNT(*) AS count FROM agent_sessions WHERE id = 1
+              `,
+                continuations: sql<{ readonly count: number }>`
+                SELECT COUNT(*) AS count FROM agent_continuations WHERE id = 1
+              `,
+                invocations: sql<{ readonly count: number }>`
+                SELECT COUNT(*) AS count FROM agent_invocations WHERE id = 1
+              `,
+              }),
+            ),
+          ).pipe(
+            Effect.provide(
+              repositorySqlLayer({
+                statePath,
+                commonDirectory: join(root, ".git"),
+              }),
+            ),
+          ),
+        );
+
+        expect(remaining).toEqual({
+          advice: [{ count: 0 }],
+          sessions: [{ count: 0 }],
+          continuations: [{ count: 0 }],
+          invocations: [{ count: 0 }],
+        });
+      }),
   );
 
   it.effect("rejects incomplete and unknown migration ledgers without changing them", () =>
@@ -167,17 +233,17 @@ describe("shared repository state", () => {
         {
           corrupt: (sql: SqlClient.SqlClient) =>
             sql`DELETE FROM effect_sql_migrations WHERE migration_id = 1`,
-          expected: [2],
+          expected: [2, 3],
         },
         {
           corrupt: (sql: SqlClient.SqlClient) =>
             sql`UPDATE effect_sql_migrations SET migration_id = 0 WHERE migration_id = 1`,
-          expected: [0, 2],
+          expected: [0, 2, 3],
         },
         {
           corrupt: (sql: SqlClient.SqlClient) =>
             sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (99, 'unknown')`,
-          expected: [1, 2, 99],
+          expected: [1, 2, 3, 99],
         },
       ] as const;
       for (const scenario of cases) {

@@ -686,7 +686,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
           SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id
         `,
       );
-      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
+      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
     }),
   ),
 );

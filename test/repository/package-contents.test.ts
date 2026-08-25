@@ -357,7 +357,7 @@ describe("release package boundary", () => {
             ORDER BY migration_id
           `,
         );
-        expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
+        expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
 
         const tables = yield* repository.operation(
           "inspect installed product tables",

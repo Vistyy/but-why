@@ -4,34 +4,10 @@ import type { AgentInvocationRecord } from "../../agent/agentSession/agentSessio
 import { nonBlankStringSchema } from "../../contracts/agentConfig.js";
 import type { TaskReviewToolingFailure } from "./taskReview.js";
 
-const simplificationOptionSchema = Schema.Struct({
-  retainedOutcome: nonBlankStringSchema,
-  removedComplexity: nonBlankStringSchema,
-  lostBehavior: nonBlankStringSchema,
-  adverseConsequence: nonBlankStringSchema,
-  repositoryEvidence: nonBlankStringSchema,
-  materialUncertainty: nonBlankStringSchema,
-});
+export type TaskSimplificationAdvice = string;
 
-const simplificationAdviceSchema = Schema.Struct({
-  practicalCoreOutcome: nonBlankStringSchema,
-  options: Schema.Array(simplificationOptionSchema).pipe(Schema.maxItems(2)),
-  noSafeSimplificationReason: Schema.NullOr(nonBlankStringSchema),
-});
-
-export type TaskSimplificationAdvice = Schema.Schema.Type<typeof simplificationAdviceSchema>;
-
-export const decodeTaskSimplificationAdvice = (value: unknown): TaskSimplificationAdvice => {
-  const advice = Schema.decodeUnknownSync(simplificationAdviceSchema, {
-    onExcessProperty: "error",
-  })(value);
-  if ((advice.options.length === 0) !== (advice.noSafeSimplificationReason !== null)) {
-    throw new Error(
-      "Task Simplification Advice must explain an empty option set or omit that explanation when options exist.",
-    );
-  }
-  return advice;
-};
+export const decodeTaskSimplificationAdvice = (value: unknown): TaskSimplificationAdvice =>
+  Schema.decodeUnknownSync(nonBlankStringSchema)(value);
 
 const simplificationAdvicePolicySchema = Schema.Struct({
   profile: resolvedReviewerPiAgentProfileSchema,
