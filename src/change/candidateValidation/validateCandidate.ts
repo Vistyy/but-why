@@ -8,8 +8,15 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { RestoreDisposableWorkspace } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import type { ChangePolicy } from "../changePolicy.js";
 import type { ChangeAgentSessionPort } from "../changePorts.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
+import {
+  makePiAiStallDetector,
+  type StallDetectionRunGroup,
+  type StallDetector,
+  type StallDetectorResult,
+} from "../stallDetection/stallDetector.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckPhase.js";
@@ -25,6 +32,7 @@ import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type {
   CandidateValidationAuthority,
   CandidateValidationOutcome,
+  CandidateValidationRunRecord,
 } from "./candidateValidationRunStore.js";
 import { runCandidateValidationGate } from "./runCandidateValidationGate.js";
 
@@ -88,12 +96,27 @@ export class CandidateValidationWorkspace extends Context.Tag("CandidateValidati
 type CandidateReviewerExecutionValue = {
   readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly processExecutor: ReviewerProcessExecutor;
+  readonly stallDetector?: StallDetector;
 };
 
 export class CandidateReviewerExecution extends Context.Tag("CandidateReviewerExecution")<
   CandidateReviewerExecution,
   CandidateReviewerExecutionValue
 >() {}
+
+export type StallDetectionEvaluation =
+  | { readonly kind: "not_qualified" }
+  | { readonly kind: "continue" }
+  | {
+      readonly kind: "stop";
+      readonly reason: string;
+      readonly validationRunIds: readonly number[];
+    }
+  | {
+      readonly kind: "unavailable";
+      readonly message: string;
+      readonly validationRunIds: readonly number[];
+    };
 
 export type CandidateValidationService = {
   readonly validateCandidate: (
@@ -102,6 +125,17 @@ export type CandidateValidationService = {
   readonly validateAcceptanceContextCandidate: (
     input: ValidateAcceptanceContextCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
+  readonly evaluateStallDetection?: (input: {
+    readonly changeId: string;
+    readonly validationRunId: number;
+    readonly policy: NonNullable<ChangePolicy["reviewerConfiguration"]["stallDetector"]>;
+    readonly acceptanceContext: NonNullable<
+      CandidateValidationAuthority["validationInput"]["acceptanceContext"]
+    >;
+    readonly acceptanceReview: NonNullable<
+      ChangePolicy["reviewerConfiguration"]["acceptanceReview"]
+    >;
+  }) => Effect.Effect<StallDetectionEvaluation, RepositoryStorageError>;
   readonly listFindings: CandidateValidationExecutionPort["listFindings"];
   readonly listToolingFailures: CandidateValidationExecutionPort["listToolingFailures"];
   readonly listPhaseResults: (validationRunId: number) => Effect.Effect<
@@ -126,12 +160,14 @@ export const CandidateValidationLive = Layer.effect(
     const persistence = yield* CandidateValidationExecution;
     const reviewerExecution = yield* CandidateReviewerExecution;
     const createSnapshotWorkspace = yield* CandidateValidationWorkspace;
+    const stallDetector = reviewerExecution.stallDetector ?? makePiAiStallDetector();
     return makeCandidateValidation({
       ...paths,
       fileSystem,
       persistence,
       reviewerExecution,
       createSnapshotWorkspace,
+      stallDetector,
     });
   }),
 );
@@ -149,6 +185,7 @@ const makeCandidateValidation = (dependencies: {
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
   readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
+  readonly stallDetector: StallDetector;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
@@ -263,6 +300,7 @@ const makeCandidateValidation = (dependencies: {
   return {
     validateCandidate: (input) => validate(input),
     validateAcceptanceContextCandidate: (input) => validate(input),
+    evaluateStallDetection: (input) => evaluateStallDetection(dependencies, input),
     listFindings: dependencies.persistence.listFindings,
     listToolingFailures: dependencies.persistence.listToolingFailures,
     listPhaseResults: (validationRunId) =>
@@ -271,6 +309,95 @@ const makeCandidateValidation = (dependencies: {
       ),
   };
 };
+
+const evaluateStallDetection = (
+  dependencies: {
+    readonly persistence: CandidateValidationExecutionPort;
+    readonly stallDetector: StallDetector;
+  },
+  input: {
+    readonly changeId: string;
+    readonly validationRunId: number;
+    readonly policy: NonNullable<ChangePolicy["reviewerConfiguration"]["stallDetector"]>;
+    readonly acceptanceContext: NonNullable<
+      CandidateValidationAuthority["validationInput"]["acceptanceContext"]
+    >;
+    readonly acceptanceReview: NonNullable<
+      ChangePolicy["reviewerConfiguration"]["acceptanceReview"]
+    >;
+  },
+): Effect.Effect<StallDetectionEvaluation, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if (dependencies.persistence.listRunsForChange === undefined) {
+      return { kind: "not_qualified" } as const;
+    }
+    const runs = yield* dependencies.persistence.listRunsForChange(input.changeId);
+    const current = runs.find((run) => run.id === input.validationRunId);
+    if (current === undefined || current.outcome !== "blocked") {
+      return { kind: "not_qualified" } as const;
+    }
+
+    let previousContext: string | undefined;
+    const qualifying: CandidateValidationRunRecord[] = [];
+    for (const run of runs) {
+      const context = run.validationInput.acceptanceContext;
+      const encodedContext = context === undefined ? undefined : JSON.stringify(context);
+      if (
+        encodedContext !== undefined &&
+        previousContext !== undefined &&
+        encodedContext !== previousContext
+      ) {
+        qualifying.length = 0;
+      }
+      if (encodedContext !== undefined) previousContext = encodedContext;
+      if (run.outcome === "passed") {
+        qualifying.length = 0;
+      } else if (run.outcome === "blocked") {
+        qualifying.push(run);
+      }
+    }
+    if (qualifying.length < 3) return { kind: "not_qualified" } as const;
+
+    const selected = qualifying.slice(-3);
+    const groups: StallDetectionRunGroup[] = yield* Effect.forEach(selected, (run) =>
+      dependencies.persistence.listFindings(run.id).pipe(
+        Effect.map((findings) => ({
+          validationRunId: run.id,
+          findings: findings.map(({ producer, title, description, evidence, files }) => ({
+            producer,
+            title,
+            description,
+            evidence,
+            files,
+          })),
+        })),
+      ),
+    );
+    const judgment: StallDetectorResult = yield* dependencies.stallDetector.judge({
+      acceptanceContext: input.acceptanceContext,
+      runs: groups,
+      model: input.acceptanceReview.profile.profile.runtimeConfig.model,
+      ...(input.acceptanceReview.profile.profile.runtimeConfig.thinking === undefined ||
+      input.acceptanceReview.profile.profile.runtimeConfig.thinking === "off"
+        ? {}
+        : { thinking: input.acceptanceReview.profile.profile.runtimeConfig.thinking }),
+      policy: input.policy,
+    });
+    if (!judgment.ok) {
+      return {
+        kind: "unavailable",
+        message: judgment.message,
+        validationRunIds: selected.map((run) => run.id),
+      } as const;
+    }
+    return judgment.decision === "stop"
+      ? {
+          kind: "stop",
+          reason: judgment.reason,
+          validationRunIds: selected.map((run) => run.id),
+        }
+      : { kind: "continue" as const };
+  });
 
 const runCandidatePhases = (
   dependencies: {

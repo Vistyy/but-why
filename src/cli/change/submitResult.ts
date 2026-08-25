@@ -141,6 +141,9 @@ const renderValidationFailure = (result: SubmitFailureResult): CliResult | undef
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
         findings: result.findings,
+        ...(result.stallDetectionUnavailable === undefined
+          ? {}
+          : { stallDetectionUnavailable: result.stallDetectionUnavailable }),
         recovery: submitRecovery(
           result.changeId,
           "fix_validation_findings",
@@ -148,6 +151,22 @@ const renderValidationFailure = (result: SubmitFailureResult): CliResult | undef
         ),
       },
       help: ["Fix the Findings in the Managed Worktree, commit them, then retry Change Submit."],
+    });
+  }
+  if (result.code === "stall_detection_blocker_failed") {
+    return runtimeError({
+      code: result.code,
+      message: "Stall Detection could not persist its Implementation Blocker.",
+      details: {
+        changeId: result.changeId,
+        candidateId: result.candidateId,
+        validationRunId: result.validationRunId,
+        validationRunIds: result.validationRunIds,
+        change: structuredValue(result.change),
+      },
+      help: [
+        "Restore access to valid repository state, inspect the blocker with `by change blocker list <change-id>`, then retry Change Submit.",
+      ],
     });
   }
   if (result.code === "validation_tooling_failed") {

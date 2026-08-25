@@ -27,6 +27,13 @@ const changeReviewerConfigurationSchema = Schema.Struct({
   agentEnvironment: Schema.optionalWith(Schema.NonEmptyArray(nonBlankStringSchema), {
     exact: true,
   }),
+  stallDetector: Schema.optionalWith(
+    Schema.Struct({
+      prompt: nonBlankStringSchema,
+      responseContract: nonBlankStringSchema,
+    }),
+    { exact: true },
+  ),
 }).pipe(
   Schema.filter(
     (configuration) => {

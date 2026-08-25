@@ -11,6 +11,7 @@ import type { RepositoryStorageError } from "../../../contracts/repositoryStorag
 import { restoreDisposableWorkspace } from "../../../disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import type { ChangeAgentSessionPort } from "../../changePorts.js";
+import type { StallDetector } from "../../stallDetection/stallDetector.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
 import { makeCreateSnapshotWorkspace } from "../../validation/createSnapshotWorkspace.js";
 import {
@@ -35,6 +36,7 @@ export const candidateValidationLayer = (input: {
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
   readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
+  readonly stallDetector?: StallDetector;
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
     Layer.provideMerge(
@@ -58,6 +60,7 @@ export const candidateValidationLayer = (input: {
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
           processExecutor: piReviewerProcessExecutor,
+          ...(input.stallDetector === undefined ? {} : { stallDetector: input.stallDetector }),
         }),
       ),
     ),

@@ -20,7 +20,7 @@ import {
   type CandidateValidationService,
 } from "./candidateValidation/validateCandidate.js";
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
-import type { ChangeSubmissionPort, SubmissionChange } from "./changePorts.js";
+import type { ChangeAuthorityPort, ChangeSubmissionPort, SubmissionChange } from "./changePorts.js";
 import { validateChangeReviewerConfigurationResources } from "./changeReviewerConfiguration.js";
 import {
   type OwnedPublication,
@@ -65,6 +65,19 @@ export type ChangeSubmitResult =
       readonly candidateId: number;
       readonly validationRunId: number;
       readonly findings: readonly CandidateValidationFinding[];
+      readonly stallDetectionUnavailable?: {
+        readonly code: "stall_detection_unavailable";
+        readonly message: string;
+      };
+    }
+  | {
+      readonly ok: false;
+      readonly code: "stall_detection_blocker_failed";
+      readonly changeId: string;
+      readonly candidateId: number;
+      readonly validationRunId: number;
+      readonly validationRunIds: readonly number[];
+      readonly change: ChangeRecord;
     }
   | {
       readonly ok: false;
@@ -147,6 +160,7 @@ type CaptureCandidate = (
 export const openChangeSubmit = (dependencies: {
   readonly repositoryPath: string;
   readonly persistence: ChangeSubmissionPort;
+  readonly authority?: ChangeAuthorityPort;
   readonly github: GitHubPullRequestReader;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
@@ -434,6 +448,48 @@ const validateAndPublish = (
       } as const;
     }
     if (validationResult.outcome !== "passed") {
+      if (
+        validationResult.outcome === "blocked" &&
+        change.acceptanceContext !== null &&
+        change.policy.reviewerConfiguration.stallDetector !== undefined &&
+        change.policy.reviewerConfiguration.acceptanceReview !== null
+      ) {
+        if (validation.evaluateStallDetection === undefined) {
+          return yield* blockedValidationResult(validation, change, candidate, {
+            validationRunId: validationResult.validationRunId,
+            outcome: "blocked",
+          });
+        }
+        const stall = yield* validation.evaluateStallDetection({
+          changeId: change.id,
+          validationRunId: validationResult.validationRunId,
+          policy: change.policy.reviewerConfiguration.stallDetector,
+          acceptanceContext: change.acceptanceContext,
+          acceptanceReview: change.policy.reviewerConfiguration.acceptanceReview,
+        });
+        if (stall.kind === "stop") {
+          return yield* raiseStallDetectionBlocker(
+            dependencies,
+            change,
+            candidate,
+            validationResult.validationRunId,
+            stall,
+            now,
+          );
+        }
+        return yield* blockedValidationResult(
+          validation,
+          change,
+          candidate,
+          {
+            validationRunId: validationResult.validationRunId,
+            outcome: "blocked",
+          },
+          stall.kind === "unavailable"
+            ? { code: "stall_detection_unavailable", message: stall.message }
+            : undefined,
+        );
+      }
       return yield* blockedValidationResult(validation, change, candidate, {
         validationRunId: validationResult.validationRunId,
         outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
@@ -470,6 +526,10 @@ const blockedValidationResult = (
     readonly outcome: "blocked" | "tooling_failed";
     readonly validationRunId: number;
   },
+  stallDetectionUnavailable?: {
+    readonly code: "stall_detection_unavailable";
+    readonly message: string;
+  },
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     return validation.outcome === "blocked"
@@ -480,6 +540,7 @@ const blockedValidationResult = (
           candidateId: candidate.candidateId,
           validationRunId: validation.validationRunId,
           findings: yield* candidateValidation.listFindings(validation.validationRunId),
+          ...(stallDetectionUnavailable === undefined ? {} : { stallDetectionUnavailable }),
         }
       : {
           ok: false,
@@ -491,6 +552,65 @@ const blockedValidationResult = (
             validation.validationRunId,
           ),
         };
+  });
+
+const raiseStallDetectionBlocker = (
+  dependencies: Parameters<typeof openChangeSubmit>[0],
+  change: OpenChangeWithWorktree,
+  candidate: CapturedCandidate,
+  validationRunId: number,
+  stall: {
+    readonly reason: string;
+    readonly validationRunIds: readonly number[];
+  },
+  now: string,
+): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if (dependencies.authority === undefined) {
+      const outputChange = yield* dependencies.persistence.getChangeForOutputById(change.id);
+      if (outputChange === undefined) return { ok: false, code: "change_not_found" } as const;
+      return {
+        ok: false,
+        code: "stall_detection_blocker_failed",
+        changeId: change.id,
+        candidateId: candidate.candidateId,
+        validationRunId,
+        validationRunIds: stall.validationRunIds,
+        change: outputChange,
+      } as const;
+    }
+    const content = [
+      "Stall Detection requested Operator investigation after repeated blocked Validation Runs.",
+      `Automatic continuation is unsafe because: ${stall.reason}`,
+      `Review Validation Runs ${stall.validationRunIds.join(", ")} and decide whether to continue the current approach, provide revised implementation direction, or cancel the Change.`,
+    ].join("\n");
+    const mutation = yield* Effect.either(
+      dependencies.authority.raiseImplementationBlocker({
+        changeId: change.id,
+        content,
+        now,
+      }),
+    );
+    if (mutation._tag === "Right" && mutation.right.ok) {
+      return { ok: false, code: "change_blocked" } as const;
+    }
+
+    const observed = yield* Effect.either(dependencies.persistence.getChangeById(change.id));
+    if (observed._tag === "Left") return yield* observed.left;
+    if (observed.right?.activeBlocker !== null && observed.right !== undefined) {
+      return { ok: false, code: "change_blocked" } as const;
+    }
+    const outputChange = yield* dependencies.persistence.getChangeForOutputById(change.id);
+    if (outputChange === undefined) return { ok: false, code: "change_not_found" } as const;
+    return {
+      ok: false,
+      code: "stall_detection_blocker_failed",
+      changeId: change.id,
+      candidateId: candidate.candidateId,
+      validationRunId,
+      validationRunIds: stall.validationRunIds,
+      change: outputChange,
+    } as const;
   });
 
 const githubTargetFailure = (

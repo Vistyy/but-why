@@ -12,6 +12,10 @@ import {
 } from "../changePolicy.js";
 import { validateChangeReviewerConfigurationResources } from "../changeReviewerConfiguration.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
+import {
+  stallDetectorPrompt,
+  stallDetectorResponseContract,
+} from "../stallDetection/stallDetector.js";
 
 const invalidChangePolicy = (message: string): ChangePolicyResolutionFailure => ({
   ok: false,
@@ -109,6 +113,14 @@ export const resolveChangePolicyAtCommit = (input: {
         profile: snapshotProfile(policy.profile),
       })),
       ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+      ...(input.acceptanceContextSupplied
+        ? {
+            stallDetector: {
+              prompt: stallDetectorPrompt,
+              responseContract: stallDetectorResponseContract,
+            },
+          }
+        : {}),
     };
     const resources = validateChangeReviewerConfigurationResources(
       reviewerConfiguration,

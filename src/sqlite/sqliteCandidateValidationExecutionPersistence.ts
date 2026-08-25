@@ -205,6 +205,10 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         repository.transaction("list Validation Phase Results", (sql) =>
           listValidationPhaseResults(sql, validationRunId, repository.idPrefix),
         ),
+      listRunsForChange: (changeId) =>
+        repository.transaction("list Change Validation Runs", (sql) =>
+          listRunsForChange(sql, changeId, repository.idPrefix),
+        ),
       listFindings: (validationRunId) =>
         repository.transaction("list Candidate validation Findings", (sql) =>
           listValidationFindings(sql, validationRunId, repository.idPrefix),
@@ -563,6 +567,30 @@ const requirePreDispatchReviewerIntegrityFailure = (
       );
     }
   }).pipe(Effect.asVoid);
+
+const listRunsForChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
+  Effect.gen(function* () {
+    const selected = yield* sql<{ readonly id: number }>`
+      SELECT run.id
+      FROM validation_runs AS run
+      JOIN candidates AS candidate ON candidate.id = run.candidate_id
+      WHERE candidate.change_id = ${internalChangeId(changeId, idPrefix)}
+      ORDER BY run.id
+    `;
+    return yield* Effect.forEach(selected, ({ id }) =>
+      readValidationRunById(sql, id, "decode Change Validation Run", idPrefix).pipe(
+        Effect.flatMap((run) => {
+          if (run === undefined) {
+            return invalidData(
+              "decode Change Validation Run",
+              "Validation Run history contains an unknown Run",
+            );
+          }
+          return Effect.succeed(run);
+        }),
+      ),
+    );
+  });
 
 const listPreviousCandidateReviewerFindings = (
   sql: SqlClient.SqlClient,
