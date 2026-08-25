@@ -103,52 +103,15 @@ const createChangeEnvironment = (): ChangeEnvironment => {
   return { repositoryRoot, worktreePath, inheritedPath: path, runBy };
 };
 
-const writeNoBlockerBy = (directory: string): string => {
-  const path = join(directory, "by");
-  const snapshot = JSON.stringify({
-    change: {
-      state: "open",
-      closeReason: null,
-      acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
-    },
-    currentCandidate: null,
-    currentValidationRun: null,
-    findingCount: 0,
-    toolingFailureCount: 0,
-    pullRequest: null,
-  });
-  const blockerHistory = JSON.stringify({ blockers: [], resolutions: [], active: null });
-  writeFileSync(
-    path,
-    `#!/bin/sh
-if [ "$1" = "change" ] && [ "$2" = "show" ]; then
-  printf '%s\\n' ${shellQuote(snapshot)}
-  exit 0
-fi
-if [ "$1" = "change" ] && [ "$2" = "blocker" ] && [ "$3" = "list" ]; then
-  printf '%s\\n' ${shellQuote(blockerHistory)}
-  exit 0
-fi
-exit 2
-`,
-    { mode: 0o755 },
-  );
-  return path;
-};
-
 describe("packaged Change Implement continuation extension process boundary", () => {
   it("continues a real Pi tool turn when blocker inspection reports no blocker", () => {
     const environment = createChangeEnvironment();
-    const normalByDirectory = join(environment.repositoryRoot, "normal-by-bin");
-    mkdirSync(normalByDirectory);
-    writeNoBlockerBy(normalByDirectory);
-    const path = `${normalByDirectory}:${environment.inheritedPath}`;
     const callsPath = join(environment.repositoryRoot, "normal-provider-calls.log");
     const run = runPi(
       environment.worktreePath,
       callsPath,
       join(environment.repositoryRoot, "normal-session.jsonl"),
-      path,
+      environment.inheritedPath,
     );
 
     expect(run.status, run.stderr || run.stdout).toBe(0);
