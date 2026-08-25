@@ -253,7 +253,7 @@ Later Change Base advancement does not alter a completed Submission or invalidat
 _Avoid_: Push, Candidate, Validation Run, continuous merge gate
 
 **Terminal Cleanup**:
-The one idempotent Change-owned cleanup operation that runs for a Closed Change after completion or cancellation and retries on repeated cancellation and reconciliation.
+The one idempotent Change-owned cleanup operation that runs for a Closed Change when explicitly triggered by reconciliation after completion or cancellation and retries on repeated reconciliation.
 It cleans the Managed Worktree, local Repository Branch, and Remote Change Branch and invokes the Artifact lifecycle owner to remove Artifact Content for the exact terminal Change.
 Cleanup stays pending and retryable when resource or Artifact Content cleanup cannot complete.
 _Avoid_: Generic cleanup framework, per-caller cleanup orchestration, worktree removal alone
