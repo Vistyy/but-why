@@ -1241,7 +1241,8 @@ export default function continueChange(pi: ExtensionAPI): void {
     activeInspectionAbortController = undefined;
   });
 
-  pi.on("turn_end", async (_event, ctx) => {
+  pi.on("turn_end", async (event, ctx) => {
+    if (event.toolResults !== undefined && event.toolResults.length === 0) return;
     if (changeId === undefined || shutDown || persisted?.paused || blockerAbortRequested) return;
     const observed = await inspectBlockerHistory(ctx, changeId, ctx.signal);
     if (shutDown || persisted?.paused || ctx.signal?.aborted) return;
