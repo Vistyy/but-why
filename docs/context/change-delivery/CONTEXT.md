@@ -137,6 +137,14 @@ Change Submit uses only this stored policy.
 Later configuration changes do not alter it.
 _Avoid_: Mutable current config, Candidate-controlled policy, Validation Run snapshot, policy correction
 
+**Stall Detection**:
+A Change-owned bounded detector for linked Changes whose frozen Change Policy contains Stall Detector policy.
+It judges only the current Acceptance Context and the newest three qualifying blocked Validation Runs after the third qualifying Run.
+It uses the frozen Acceptance Reviewer model and thinking level through a workspace-free Pi model request.
+`continue` leaves ordinary Findings correction in control, while `stop` requests Operator direction through an Implementation Blocker.
+Unavailable or malformed detector execution does not create a blocker.
+_Avoid_: Stall record, detector attempt, automatic Change cancellation
+
 **Validation Input Snapshot**:
 The immutable Run-specific input stored for one Validation Run.
 It contains the current Acceptance Context when one applies and does not duplicate Change Policy.

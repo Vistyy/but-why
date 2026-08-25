@@ -97,16 +97,19 @@ export const repositoryStorageErrorResult = (
   error: RepositoryStorageError,
   idPrefix?: string,
 ): CliResult => {
-  switch (error._tag) {
-    case "RepositoryIdentityConflict":
-      return sharedStateIdentityConflict();
-    case "RepositoryIdPrefixConflict":
-      return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
-    case "RepositoryPersistedDataInvalid":
-      return persistedDataInvalid(error.operationName);
-    default:
-      return stateStoreUnavailable(idPrefix);
-  }
+  const result = (() => {
+    switch (error._tag) {
+      case "RepositoryIdentityConflict":
+        return sharedStateIdentityConflict();
+      case "RepositoryIdPrefixConflict":
+        return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
+      case "RepositoryPersistedDataInvalid":
+        return persistedDataInvalid(error.operationName);
+      default:
+        return stateStoreUnavailable(idPrefix);
+    }
+  })();
+  return result;
 };
 
 const persistedDataInvalid = (operation: string): CliResult =>

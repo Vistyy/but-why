@@ -1,7 +1,16 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
-import type { ChangeSubmitResult } from "../../change/submitChange.js";
-import { type CliResult, runtimeError, success } from "../../cliResults.js";
+import {
+  type ChangeSubmitError,
+  type ChangeSubmitResult,
+  StallDetectionBlockerObservationFailed,
+} from "../../change/submitChange.js";
+import {
+  type CliResult,
+  repositoryStorageErrorResult,
+  runtimeError,
+  success,
+} from "../../cliResults.js";
 
 type SubmitRecoveryAction =
   | "resolve_dirty_work"
@@ -11,8 +20,34 @@ type SubmitRecoveryAction =
 type SubmitSuccessResult = Extract<ChangeSubmitResult, { readonly ok: true }>;
 type SubmitFailureResult = Extract<ChangeSubmitResult, { readonly ok: false }>;
 
+import type { StructuredObject } from "../../output/structured.js";
 import { structuredValue } from "../../output/structuredValue.js";
 import { remoteChangeBaseError } from "./sharedResults.js";
+
+export const submitErrorResult = (error: ChangeSubmitError): CliResult => {
+  if (!(error instanceof StallDetectionBlockerObservationFailed)) {
+    return repositoryStorageErrorResult(error);
+  }
+  const result = repositoryStorageErrorResult(error.storageError);
+  const output = result.stdout as unknown as {
+    readonly error: StructuredObject;
+    readonly help: readonly string[];
+  };
+  return {
+    ...result,
+    stdout: {
+      error: {
+        ...output.error,
+        changeId: error.changeId,
+        storageError: error.storageError._tag,
+      },
+      help: [
+        ...output.help,
+        `Restore access to valid repository state, inspect the blocker with \`by change blocker list ${error.changeId}\`, then retry \`by change submit ${error.changeId}\`.`,
+      ],
+    },
+  };
+};
 
 export const submitRecovery = (
   changeId: string,
@@ -141,6 +176,9 @@ const renderValidationFailure = (result: SubmitFailureResult): CliResult | undef
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
         findings: result.findings,
+        ...(result.stallDetectionUnavailable === undefined
+          ? {}
+          : { stallDetectionUnavailable: result.stallDetectionUnavailable }),
         recovery: submitRecovery(
           result.changeId,
           "fix_validation_findings",
@@ -148,6 +186,22 @@ const renderValidationFailure = (result: SubmitFailureResult): CliResult | undef
         ),
       },
       help: ["Fix the Findings in the Managed Worktree, commit them, then retry Change Submit."],
+    });
+  }
+  if (result.code === "stall_detection_blocker_failed") {
+    return runtimeError({
+      code: result.code,
+      message: "Stall Detection could not persist its Implementation Blocker.",
+      details: {
+        changeId: result.changeId,
+        candidateId: result.candidateId,
+        validationRunId: result.validationRunId,
+        validationRunIds: result.validationRunIds,
+        change: structuredValue(result.change),
+      },
+      help: [
+        `Restore access to valid repository state, inspect the blocker with \`by change blocker list ${result.changeId}\`, then retry \`by change submit ${result.changeId}\`.`,
+      ],
     });
   }
   if (result.code === "validation_tooling_failed") {

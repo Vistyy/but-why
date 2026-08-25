@@ -66,6 +66,9 @@ export type CandidateValidationExecutionPort = {
   readonly listPhaseResults: (
     validationRunId: number,
   ) => StorageEffect<readonly CandidateValidationPhaseResult[]>;
+  readonly listRunsForChange: (
+    changeId: string,
+  ) => StorageEffect<readonly CandidateValidationRunRecord[]>;
   readonly listFindings: (
     validationRunId: number,
   ) => StorageEffect<readonly CandidateValidationFinding[]>;

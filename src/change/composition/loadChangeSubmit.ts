@@ -3,7 +3,6 @@ import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adap
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
-import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
@@ -11,6 +10,7 @@ import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandid
 import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../sqlite/sqliteChangeAgentSessionPersistence.js";
+import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
@@ -27,11 +27,18 @@ import { candidateValidationLayer } from "../candidateValidation/composition/can
 import type {
   CandidatePublicationPort,
   ChangeAgentSessionPort,
+  ChangeAuthorityPort,
   ChangeSubmissionPort,
 } from "../changePorts.js";
 import { localCandidatePublicationGit } from "../publication/adapters/localCandidatePublicationGit.js";
 import { openCandidatePublication } from "../publication/candidatePublication.js";
-import { type ChangeSubmit, type ChangeSubmitResult, openChangeSubmit } from "../submitChange.js";
+import { makePiAiStallDetector } from "../stallDetection/stallDetector.js";
+import {
+  type ChangeSubmit,
+  type ChangeSubmitError,
+  type ChangeSubmitResult,
+  openChangeSubmit,
+} from "../submitChange.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 
 export type LoadChangeSubmitResult =
@@ -51,6 +58,7 @@ export const loadChangeSubmit = (input: {
 
   const programFor = (
     capturePersistence: CandidateCapturePersistence,
+    authority: ChangeAuthorityPort,
     submissionOwner: ChangeSubmissionPort,
     submissionCompletion: ChangeSubmissionPort["completeMergedChange"],
     publication: CandidatePublicationPort,
@@ -66,6 +74,7 @@ export const loadChangeSubmit = (input: {
       github,
       repositoryPath: context.root,
       persistence: submission,
+      authority,
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence: publication,
@@ -101,15 +110,17 @@ export const loadChangeSubmit = (input: {
       agentPersistence,
       getAgentSession: agentSessions.getAgentSession,
       linkAgentInvocation: agentSessions.linkAgentInvocation,
+      stallDetector: makePiAiStallDetector(),
     });
 
   return {
     ok: true,
     submit: {
-      submit: (submitInput): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
+      submit: (submitInput): Effect.Effect<ChangeSubmitResult, ChangeSubmitError> =>
         Effect.all({
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteCandidateValidationExecutionPort(),
+          authority: openSqliteChangeAuthorityPort(),
           submissionOwner: openSqliteChangeSubmissionPort(),
           submissionCompletion: openSqliteTaskChangeSubmissionCompletion(
             taskChangeCompletionOperations,
@@ -122,13 +133,14 @@ export const loadChangeSubmit = (input: {
             ({
               capture,
               validation,
+              authority,
               submissionOwner,
               submissionCompletion,
               agentSessions,
               agentPersistence,
               publication,
             }) =>
-              programFor(capture, submissionOwner, submissionCompletion, publication)
+              programFor(capture, authority, submissionOwner, submissionCompletion, publication)
                 .submit(submitInput)
                 .pipe(Effect.provide(layerFor(validation, agentSessions, agentPersistence))),
           ),

@@ -218,6 +218,31 @@ const cases = {
       { changeId, blockerCommand: "by change blocker list change-1" },
     ),
   },
+  stall_detection_blocker_failed: {
+    result: {
+      ok: false,
+      code: "stall_detection_blocker_failed",
+      changeId,
+      candidateId: 1,
+      validationRunId: 3,
+      validationRunIds: [1, 2, 3],
+      change,
+    },
+    expected: errorResult(
+      "stall_detection_blocker_failed",
+      "Stall Detection could not persist its Implementation Blocker.",
+      [
+        "Restore access to valid repository state, inspect the blocker with `by change blocker list change-1`, then retry `by change submit change-1`.",
+      ],
+      {
+        changeId,
+        candidateId: 1,
+        validationRunId: 3,
+        validationRunIds: [1, 2, 3],
+        change: structuredValue(change),
+      },
+    ),
+  },
   dirty_work: {
     result: { ok: false, code: "dirty_work" },
     expected: errorResult(

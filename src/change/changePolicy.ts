@@ -8,11 +8,13 @@ import {
   encodeSqliteChangeReviewerConfiguration,
 } from "./changeReviewerConfiguration.js";
 import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";
+import type { StallDetectorPolicy } from "./stallDetection/stallDetector.js";
 
 export type ChangeReviewerConfiguration = {
   readonly acceptanceReview: AcceptanceReviewPolicy | null;
   readonly specialistReviews: readonly SpecialistReviewPolicy[];
   readonly agentEnvironment?: AgentEnvironmentCommand;
+  readonly stallDetector?: StallDetectorPolicy;
 };
 
 export type ChangePrepareDefinition = {

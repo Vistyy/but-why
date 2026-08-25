@@ -1,6 +1,8 @@
 import { expect } from "@effect/vitest";
 import { describe, it as ordinaryIt } from "vitest";
 
+import { StallDetectionBlockerObservationFailed } from "../../src/change/submitChange.js";
+import { submitErrorResult } from "../../src/cli/change/submitResult.js";
 import { repositoryStorageErrorResult } from "../../src/cliResults.js";
 import {
   RepositoryIdentityConflict,
@@ -57,6 +59,34 @@ describe("Shared Repository State error classification", () => {
           error: { code: "state_store_unavailable" },
         });
       }
+    },
+  );
+
+  ordinaryIt(
+    "adds Stall Detection observation guidance without changing storage classification",
+    () => {
+      const error = new StallDetectionBlockerObservationFailed({
+        storageError: new RepositoryStateUnavailable({
+          statePath: "state.sqlite",
+          cause: new Error("missing"),
+        }),
+        changeId: "BY-1",
+      });
+      const result = submitErrorResult(error);
+
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({
+        error: {
+          code: "state_store_unavailable",
+          message: "Shared But Why? state is unavailable.",
+          changeId: "BY-1",
+          storageError: "RepositoryStateUnavailable",
+        },
+        help: [
+          "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --id-prefix <prefix>`.",
+          "Restore access to valid repository state, inspect the blocker with `by change blocker list BY-1`, then retry `by change submit BY-1`.",
+        ],
+      });
     },
   );
 

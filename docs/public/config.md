@@ -167,6 +167,18 @@ The same conditional behavior applies to initial and continuation Specialist pro
 Each configured Specialist instruction file must positively define exactly one concern and state its applicable authority, review lenses, materiality, and concern-specific exclusions.
 But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, and output contract remain controlling.
 
+### Stall Detection
+
+A Change linked to a Task freezes the built-in Stall Detector prompt and response contract in its Change Policy when Change Start captures Acceptance Context.
+The detector runs after the third and each later newly completed blocked Validation Run since the later of the latest full Validation Gate pass or latest Acceptance Context change.
+It receives the current Acceptance Context and Findings from only the newest three qualifying Validation Runs, ordered oldest to newest.
+The detector uses the model and thinking level from the frozen Acceptance Reviewer configuration.
+It runs directly through the installed Pi model and authentication configuration without a workspace or Agent Session.
+A `continue` decision returns the ordinary `validation_findings` result.
+A `stop` decision records an Implementation Blocker and returns `change_blocked`, requesting Operator direction rather than cancelling or approving the Change.
+An unavailable, incompatible, or malformed detector result returns `validation_findings` with a `stall_detection_unavailable` diagnostic and does not create a blocker.
+Changes started before Stall Detection support, Changes without Acceptance Context, and unlinked Changes do not use Stall Detection.
+
 ## Agent Environment
 
 Repo Config may define one `agentEnvironment.command` argument list.
