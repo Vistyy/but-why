@@ -610,7 +610,6 @@ const runTaskSimplificationAdvice = (input: {
           reviewBase: input.base,
         }),
         continuationPrompt: "",
-        maxOutputContractAttempts: 3,
         commandCwd: input.active.worktreePath,
         resourceRoot: input.active.worktreePath,
         profile,
