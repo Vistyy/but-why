@@ -81,18 +81,14 @@ const executePiReviewerProcess = (
         .join("\n");
       const sessionMetadata = sessionMetadataAfterFailure(input, commandResult.stdout);
       const parsedEvidence = parsePiInvocationEvidence(commandResult.stdout);
-      return yield* Effect.fail(
-        reviewerProcessExecutionFailed(
-          diagnostic.length > 0
-            ? diagnostic
-            : `Pi reviewer exited with status ${commandResult.exitCode}.`,
-          {
-            ...sessionMetadata,
-            ...(parsedEvidence.usage === undefined
-              ? {}
-              : { invocationUsage: parsedEvidence.usage }),
-          },
-        ),
+      return yield* reviewerProcessExecutionFailed(
+        diagnostic.length > 0
+          ? diagnostic
+          : `Pi reviewer exited with status ${commandResult.exitCode}.`,
+        {
+          ...sessionMetadata,
+          ...(parsedEvidence.usage === undefined ? {} : { invocationUsage: parsedEvidence.usage }),
+        },
       );
     }
     const parsed = yield* Effect.try({

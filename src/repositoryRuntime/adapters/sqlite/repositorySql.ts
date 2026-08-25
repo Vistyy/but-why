@@ -206,14 +206,14 @@ const migrateRepositoryStateWithContention = (
 
   const attempt = Effect.gen(function* () {
     yield* migration.pipe(
-      Effect.catchTag("SqlError", (error) =>
-        isMigrationContentionError(error)
-          ? Effect.void
-          : Effect.fail(migrationFailureToStorageError(Cause.fail(error), config.statePath)),
-      ),
-      Effect.catchTag("MigrationError", (error) =>
-        Effect.fail(migrationFailureToStorageError(Cause.fail(error), config.statePath)),
-      ),
+      Effect.catchTags({
+        SqlError: (error) =>
+          isMigrationContentionError(error)
+            ? Effect.void
+            : Effect.fail(migrationFailureToStorageError(Cause.fail(error), config.statePath)),
+        MigrationError: (error) =>
+          Effect.fail(migrationFailureToStorageError(Cause.fail(error), config.statePath)),
+      }),
       Effect.catchAllDefect((defect) =>
         Effect.fail(migrationFailureToStorageError(Cause.die(defect), config.statePath)),
       ),
