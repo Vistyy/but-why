@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -15,6 +15,7 @@ import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sq
 import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
 import {
   commitButWhyConfigAndRecordDefault,
+  createGitRepo,
   passTaskReviewFixture,
   runByInProcessEffect,
 } from "../support/by-cli.js";
@@ -33,13 +34,13 @@ import {
   resolveImplementationBlockerFixture,
   runInspectionCommand,
 } from "../support/changeInspectionFixture.js";
-import {
-  cloneInitializedTestRepository,
-  createInitializedRepo,
-} from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
-import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
+import {
+  acquireTestWorkspace,
+  createTestWorkspace,
+  releaseTestWorkspace,
+} from "../support/testWorkspace.js";
 
 const firstNow = "2026-07-18T10:00:00.000Z";
 const secondNow = "2026-07-18T10:05:00.000Z";
@@ -48,14 +49,24 @@ let initializedRepoTemplate: string;
 
 beforeAll(() => {
   initializedRepoTemplate = acquireTestWorkspace();
-  createInitializedRepo(initializedRepoTemplate);
+  createGitRepo(initializedRepoTemplate);
 });
 
 afterAll(() => {
   releaseTestWorkspace(initializedRepoTemplate);
 });
 
-const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepoTemplate);
+const initializedRepoCopy = () =>
+  Effect.gen(function* () {
+    const root = yield* Effect.sync(() => {
+      const workspace = createTestWorkspace();
+      cpSync(initializedRepoTemplate, workspace, { recursive: true });
+      return workspace;
+    });
+    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+    if (initialized.status !== 0) throw new Error(initialized.stdout || initialized.stderr);
+    return root;
+  });
 
 // Retained evidence owners after broad workflow setup was removed:
 // - Change Submit Candidate selection: change-submit-orchestration.test.ts.
