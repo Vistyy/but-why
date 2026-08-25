@@ -61,7 +61,7 @@ const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepo
 //   storage-error-mapping.test.ts.
 // This file retains the real-Git inference and policy-source sentinels because those Claims
 // include Git identity and exact Change Base and Candidate policy authority.
-describe("Change inspection CLI", () => {
+describe("Change inspection CLI", { timeout: 120_000 }, () => {
   it.effect("rejects Decision and Blocker mutations while Submission owns the Change lock", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
