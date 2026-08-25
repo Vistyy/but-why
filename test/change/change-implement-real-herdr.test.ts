@@ -65,139 +65,143 @@ const waitForHerdr = (cwd: string, isolatedHome: string, socketPath: string): vo
 };
 
 describe.skipIf(!realHerdrEnabled)("compiled Candidate executable with installed Herdr", () => {
-  it("launches the exact normal flow in a standalone workspace rooted at the Managed Worktree", () => {
-    const temporaryRoot = mkdtempSync(join(tmpdir(), "but-why-real-herdr-"));
-    const repositoryPath = join(temporaryRoot, "repository");
-    const isolatedHome = join(temporaryRoot, "home");
-    const socketPath = join(isolatedHome, ".config/herdr/herdr.sock");
-    const candidatePath = resolve("dist/main.js");
-    const globalConfigDirectory = join(isolatedHome, ".config/but-why");
-    mkdirSync(globalConfigDirectory, { recursive: true });
-    const profile = {
-      agentRuntime: "pi",
-      runtimeConfig: { model: "openai-codex/gpt-5.6-luna" },
-    } as const;
-    writeFileSync(
-      join(globalConfigDirectory, "config.json"),
-      JSON.stringify({
-        defaultAgentProfile: { scope: "global", name: "pi" },
-        interactiveSession: { agentProfile: { scope: "global", name: "implementer" } },
-        review: {
-          acceptance: { agentProfile: { scope: "global", name: "reviewer" } },
-          task: { agentProfile: { scope: "global", name: "task-reviewer" } },
-        },
-        agentProfiles: {
-          pi: profile,
-          implementer: profile,
-          reviewer: profile,
-          "task-reviewer": profile,
-        },
-      }),
-      "utf8",
-    );
-
-    const server = startTestProcess(
-      "env",
-      [
-        "-u",
-        "HERDR_SOCKET_PATH",
-        `XDG_CONFIG_HOME=${join(isolatedHome, ".config")}`,
-        "herdr",
-        "server",
-      ],
-      { cwd: temporaryRoot, isolatedHome },
-    );
-    server.stdout.resume();
-    server.stderr.resume();
-    let createdWorkspaceId: string | undefined;
-
-    try {
-      waitForHerdr(temporaryRoot, isolatedHome, socketPath);
-      expect(workspaceList(temporaryRoot, isolatedHome, socketPath)).toEqual([]);
-      mkdirSync(repositoryPath);
-      createGitRepo(repositoryPath);
-      execute(
-        process.execPath,
-        [candidatePath, "init", "--id-prefix", "BY"],
-        repositoryPath,
-        isolatedHome,
-        socketPath,
+  it(
+    "launches the exact normal flow in a standalone workspace rooted at the Managed Worktree",
+    () => {
+      const temporaryRoot = mkdtempSync(join(tmpdir(), "but-why-real-herdr-"));
+      const repositoryPath = join(temporaryRoot, "repository");
+      const isolatedHome = join(temporaryRoot, "home");
+      const socketPath = join(isolatedHome, ".config/herdr/herdr.sock");
+      const candidatePath = resolve("dist/main.js");
+      const globalConfigDirectory = join(isolatedHome, ".config/but-why");
+      mkdirSync(globalConfigDirectory, { recursive: true });
+      const profile = {
+        agentRuntime: "pi",
+        runtimeConfig: { model: "openai-codex/gpt-5.6-luna" },
+      } as const;
+      writeFileSync(
+        join(globalConfigDirectory, "config.json"),
+        JSON.stringify({
+          defaultAgentProfile: { scope: "global", name: "pi" },
+          interactiveSession: { agentProfile: { scope: "global", name: "implementer" } },
+          review: {
+            acceptance: { agentProfile: { scope: "global", name: "reviewer" } },
+            task: { agentProfile: { scope: "global", name: "task-reviewer" } },
+          },
+          agentProfiles: {
+            pi: profile,
+            implementer: profile,
+            reviewer: profile,
+            "task-reviewer": profile,
+          },
+        }),
+        "utf8",
       );
-      commitButWhyConfigAndRecordDefault(repositoryPath);
-      const started = JSON.parse(
-        execute(
-          process.execPath,
-          [candidatePath, "change", "start"],
-          repositoryPath,
-          isolatedHome,
-          socketPath,
-        ),
-      ) as { readonly change?: { readonly id?: unknown } };
-      const changeId = started.change?.id;
-      expect(typeof changeId).toBe("string");
-      if (typeof changeId !== "string")
-        throw new Error("Candidate Change Start did not return an ID.");
-      const implementation = JSON.parse(
-        execute(
-          process.execPath,
-          [candidatePath, "change", "implement", String(changeId)],
-          repositoryPath,
-          isolatedHome,
-          socketPath,
-        ),
-      ) as Readonly<Record<string, unknown>> & { readonly worktreePath?: unknown };
 
-      expect(implementation).toMatchObject({
-        changeId: "BY-C1",
-        host: "herdr",
-        status: "started",
-      });
-      const worktreePath = implementation.worktreePath;
-      expect(typeof worktreePath).toBe("string");
-
-      const createdWorkspaces = workspaceList(temporaryRoot, isolatedHome, socketPath);
-      expect(createdWorkspaces).toHaveLength(1);
-      const workspace = createdWorkspaces[0];
-      createdWorkspaceId = String(workspace?.workspace_id);
-      expect(workspace).toMatchObject({ label: "by-c1" });
-      expect(workspace).not.toHaveProperty("worktree");
-
-      const paneResponse = JSON.parse(
-        execute(
+      const server = startTestProcess(
+        "env",
+        [
+          "-u",
+          "HERDR_SOCKET_PATH",
+          `XDG_CONFIG_HOME=${join(isolatedHome, ".config")}`,
           "herdr",
-          ["pane", "list", "--workspace", createdWorkspaceId],
-          temporaryRoot,
+          "server",
+        ],
+        { cwd: temporaryRoot, isolatedHome },
+      );
+      server.stdout.resume();
+      server.stderr.resume();
+      let createdWorkspaceId: string | undefined;
+
+      try {
+        waitForHerdr(temporaryRoot, isolatedHome, socketPath);
+        expect(workspaceList(temporaryRoot, isolatedHome, socketPath)).toEqual([]);
+        mkdirSync(repositoryPath);
+        createGitRepo(repositoryPath);
+        execute(
+          process.execPath,
+          [candidatePath, "init", "--id-prefix", "BY"],
+          repositoryPath,
           isolatedHome,
           socketPath,
-        ),
-      ) as { readonly result?: { readonly type?: string; readonly panes?: unknown } };
-      expect(paneResponse.result?.type).toBe("pane_list");
-      expect(paneResponse.result?.panes).toEqual([
-        expect.objectContaining({ cwd: worktreePath, workspace_id: createdWorkspaceId }),
-      ]);
-      console.info(
-        `real Herdr normal flow verified isolated socket ${socketPath} with standalone workspace ${createdWorkspaceId}`,
-      );
-    } finally {
-      if (createdWorkspaceId !== undefined) {
-        try {
+        );
+        commitButWhyConfigAndRecordDefault(repositoryPath);
+        const started = JSON.parse(
+          execute(
+            process.execPath,
+            [candidatePath, "change", "start"],
+            repositoryPath,
+            isolatedHome,
+            socketPath,
+          ),
+        ) as { readonly change?: { readonly id?: unknown } };
+        const changeId = started.change?.id;
+        expect(typeof changeId).toBe("string");
+        if (typeof changeId !== "string")
+          throw new Error("Candidate Change Start did not return an ID.");
+        const implementation = JSON.parse(
+          execute(
+            process.execPath,
+            [candidatePath, "change", "implement", String(changeId)],
+            repositoryPath,
+            isolatedHome,
+            socketPath,
+          ),
+        ) as Readonly<Record<string, unknown>> & { readonly worktreePath?: unknown };
+
+        expect(implementation).toMatchObject({
+          changeId: "BY-C1",
+          host: "herdr",
+          status: "started",
+        });
+        const worktreePath = implementation.worktreePath;
+        expect(typeof worktreePath).toBe("string");
+
+        const createdWorkspaces = workspaceList(temporaryRoot, isolatedHome, socketPath);
+        expect(createdWorkspaces).toHaveLength(1);
+        const workspace = createdWorkspaces[0];
+        createdWorkspaceId = String(workspace?.workspace_id);
+        expect(workspace).toMatchObject({ label: "by-c1" });
+        expect(workspace).not.toHaveProperty("worktree");
+
+        const paneResponse = JSON.parse(
           execute(
             "herdr",
-            ["workspace", "close", createdWorkspaceId],
+            ["pane", "list", "--workspace", createdWorkspaceId],
             temporaryRoot,
             isolatedHome,
             socketPath,
-          );
-        } catch {
-          // Stopping the dedicated server below contains remaining isolated state.
+          ),
+        ) as { readonly result?: { readonly type?: string; readonly panes?: unknown } };
+        expect(paneResponse.result?.type).toBe("pane_list");
+        expect(paneResponse.result?.panes).toEqual([
+          expect.objectContaining({ cwd: worktreePath, workspace_id: createdWorkspaceId }),
+        ]);
+        console.info(
+          `real Herdr normal flow verified isolated socket ${socketPath} with standalone workspace ${createdWorkspaceId}`,
+        );
+      } finally {
+        if (createdWorkspaceId !== undefined) {
+          try {
+            execute(
+              "herdr",
+              ["workspace", "close", createdWorkspaceId],
+              temporaryRoot,
+              isolatedHome,
+              socketPath,
+            );
+          } catch {
+            // Stopping the dedicated server below contains remaining isolated state.
+          }
         }
+        try {
+          execute("herdr", ["server", "stop"], temporaryRoot, isolatedHome, socketPath);
+        } catch {
+          if (server.exitCode === null) server.kill("SIGTERM");
+        }
+        rmSync(temporaryRoot, { force: true, recursive: true });
       }
-      try {
-        execute("herdr", ["server", "stop"], temporaryRoot, isolatedHome, socketPath);
-      } catch {
-        if (server.exitCode === null) server.kill("SIGTERM");
-      }
-      rmSync(temporaryRoot, { force: true, recursive: true });
-    }
-  }, realHerdrTestTimeoutMs);
+    },
+    realHerdrTestTimeoutMs,
+  );
 });
