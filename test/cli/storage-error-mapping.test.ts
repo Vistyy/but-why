@@ -71,8 +71,6 @@ describe("Shared Repository State error classification", () => {
           cause: new Error("missing"),
         }),
         changeId: "BY-1",
-        guidance:
-          "Restore access to valid repository state, inspect the blocker with `by change blocker list BY-1`, then retry `by change submit BY-1`.",
       });
       const result = submitErrorResult(error);
 

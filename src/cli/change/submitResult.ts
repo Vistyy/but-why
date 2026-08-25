@@ -41,7 +41,10 @@ export const submitErrorResult = (error: ChangeSubmitError): CliResult => {
         changeId: error.changeId,
         storageError: error.storageError._tag,
       },
-      help: [...output.help, error.guidance],
+      help: [
+        ...output.help,
+        `Restore access to valid repository state, inspect the blocker with \`by change blocker list ${error.changeId}\`, then retry \`by change submit ${error.changeId}\`.`,
+      ],
     },
   };
 };

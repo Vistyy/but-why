@@ -146,7 +146,6 @@ export class StallDetectionBlockerObservationFailed extends Data.TaggedError(
 )<{
   readonly storageError: RepositoryStorageError;
   readonly changeId: string;
-  readonly guidance: string;
 }> {}
 
 export type ChangeSubmitError = RepositoryStorageError | StallDetectionBlockerObservationFailed;
@@ -591,7 +590,6 @@ const raiseStallDetectionBlocker = (
       return yield* new StallDetectionBlockerObservationFailed({
         storageError: observed.left,
         changeId: change.id,
-        guidance: `Restore access to valid repository state, inspect the blocker with \`by change blocker list ${change.id}\`, then retry \`by change submit ${change.id}\`.`,
       });
     }
     if (observed.right?.activeBlocker !== null && observed.right !== undefined) {
