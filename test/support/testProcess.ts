@@ -13,6 +13,13 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const synchronousTestProcessTimeoutMs = 4_000;
 const testProcessMaxBufferBytes = 50 * 1024 * 1024;
 
+const positiveFinite = (value: number, label: string): number => {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be finite and positive.`);
+  }
+  return value;
+};
+
 const isInDirectory = (directory: string, path: string): boolean => {
   const relativePath = relative(directory, path);
   return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
@@ -103,6 +110,10 @@ const checkedOutsideSharedCheckout = (
 };
 
 const processOptions = (options: TestProcessOptions) => {
+  const checkedTimeout =
+    options.timeout === undefined
+      ? undefined
+      : positiveFinite(options.timeout, "Test process timeout");
   const cwd = checkedOutsideSharedCheckout(realpathSync(options.cwd), "Test subprocess cwd");
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
   const inheritedHome = options.env?.["HOME"];
@@ -127,7 +138,7 @@ const processOptions = (options: TestProcessOptions) => {
     options: {
       cwd,
       env: environment,
-      ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+      ...(checkedTimeout === undefined ? {} : { timeout: checkedTimeout }),
       ...(options.detached === undefined ? {} : { detached: options.detached }),
     },
     cleanup: processEnvironment.cleanup,
@@ -145,7 +156,10 @@ export const runTestProcess = (
       ...prepared.options,
       ...(options.input === undefined ? {} : { input: options.input }),
       encoding: "utf8",
-      maxBuffer: options.maxBuffer ?? testProcessMaxBufferBytes,
+      maxBuffer:
+        options.maxBuffer === undefined
+          ? testProcessMaxBufferBytes
+          : positiveFinite(options.maxBuffer, "Test process maxBuffer"),
       timeout: options.timeout ?? synchronousTestProcessTimeoutMs,
     });
   } finally {
