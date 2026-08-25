@@ -91,7 +91,7 @@ const startJust = (
 
 const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
   startJust(lockFile, args, {
-    PATH: `${dirname(lockFile)}:${Reflect.get(process.env, "PATH") ?? ""}`,
+    PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
   }).done;
 
 const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
@@ -418,7 +418,7 @@ describe("quality interface", () => {
     try {
       await waitForFile(readyFile);
       unselected = startJust(lockFile, ["test", "--reporter=dot"], {
-        PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
       });
       await waitForOutput(unselected, "waiting: test is waiting for capacity");
       expect(unselected.child.exitCode).toBeNull();
@@ -563,7 +563,7 @@ describe("quality interface", () => {
     const descendantPidFile = join(directory, "just-descendant-pid");
     createBlockingPnpm(directory, readyFile, descendantPidFile);
     const justProcess = startJust(lockFile, ["test"], {
-      PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+      PATH: `${directory}:${process.env["PATH"] ?? ""}`,
     });
 
     try {
@@ -597,7 +597,7 @@ describe("quality interface", () => {
       lockFile,
       ["quality"],
       {
-        PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
       },
       directory,
     );

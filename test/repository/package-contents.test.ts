@@ -86,12 +86,13 @@ type PreparedPackage = {
   readonly manifest: PackageManifest;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const decodeSourceMapSources = (source: string): readonly string[] => {
   const parsed: unknown = JSON.parse(source);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("Generated source map must be an object");
-  }
-  const sources = Reflect.get(parsed, "sources");
+  if (!isRecord(parsed)) throw new Error("Generated source map must be an object");
+  const sources = parsed["sources"];
   if (!Array.isArray(sources) || !sources.every((entry) => typeof entry === "string")) {
     throw new Error("Generated source map must contain string sources");
   }

@@ -27,11 +27,15 @@ const runAnalyzer = (label, args) => {
  */
 const decodeObject = (label, source) => {
   const parsed = JSON.parse(source);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`${label} returned an invalid JSON result`);
-  }
+  if (!isRecord(parsed)) throw new Error(`${label} returned an invalid JSON result`);
   return parsed;
 };
+
+/**
+ * @param {unknown} value
+ * @returns {value is Readonly<Record<string, unknown>>}
+ */
+const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
  * @param {unknown} result
@@ -39,10 +43,8 @@ const decodeObject = (label, source) => {
  * @param {string} label
  */
 const property = (result, field, label) => {
-  if (typeof result !== "object" || result === null || Array.isArray(result)) {
-    throw new Error(`${label} result is not an object`);
-  }
-  return Reflect.get(result, field);
+  if (!isRecord(result)) throw new Error(`${label} result is not an object`);
+  return result[field];
 };
 
 /**
@@ -65,9 +67,7 @@ const requiredArray = (result, field, label) => {
  */
 const requiredObject = (result, field, label) => {
   const value = property(result, field, label);
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${label} result is missing ${field}`);
-  }
+  if (!isRecord(value)) throw new Error(`${label} result is missing ${field}`);
   return value;
 };
 
