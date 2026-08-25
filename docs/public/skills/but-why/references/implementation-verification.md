@@ -1,6 +1,8 @@
 # Implementation verification
 
-Accepted intent defines the required result.
+The Change's current implementation direction defines the required result.
+For a Change linked to a Task, that direction is its current Acceptance Context.
+For a Change without a Task, it is the authorized outcome established in the current session or supplied through the Implementer Prompt.
 Implementation creates that result.
 Implementation verification establishes whether the exact Candidate is ready for Submission.
 A test is one possible source of evidence, not the default output.
@@ -21,7 +23,7 @@ Tests of components, interruption, cleanup, or failure behavior do not prove tha
 If no supported operation can establish the integration, report the behavior that remains unverified.
 Treat missing, malformed, unavailable, or ambiguous observations as unknown rather than success.
 
-Read the accepted intent and applicable repository verification policy.
+Read the current implementation direction and applicable repository verification policy.
 Do not strengthen the product guarantee merely to make verification easier or more comprehensive.
 Use a broader system boundary only when the behavior being established depends on that boundary.
 When several mechanisms are credible, prefer the reliable one with lower execution, diagnosis, coupling, and maintenance cost.
