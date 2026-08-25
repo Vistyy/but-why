@@ -185,7 +185,7 @@ This section is complete when the extension is in the state required for the Ope
 ## Reconcile a Change
 
 Candidate Publication is not durable Change completion.
-After a human confirms that the Change's owned pull request was merged, close its Interactive Session manually and run `<but-why> change reconcile <change-id>`.
+After a human confirms that the Change's owned pull request was merged, close its Interactive Session manually when one exists, then run `<but-why> change reconcile <change-id>`.
 Reconciliation observes the exact owned pull request and merge facts before completing the Change and any linked Task, then performs terminal cleanup.
 
 Use the complete structured result to determine whether reconciliation completed, remains pending, or was rejected.
