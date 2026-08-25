@@ -52,7 +52,6 @@ const initializeState = async (statePath: string, commonDirectory: string): Prom
               statePath,
               commonDirectory,
               lifecycle: "initialize",
-              sqliteBusyTimeoutMs: 50,
               migrationContentionTimeoutMs: 2_000,
               migrationContentionRetryDelayMs: 20,
             }),
