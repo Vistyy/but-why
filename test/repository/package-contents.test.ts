@@ -91,7 +91,7 @@ const decodeSourceMapSources = (source: string): readonly string[] => {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("Generated source map must be an object");
   }
-  const sources = Reflect.get(parsed, "sources");
+  const sources = (parsed as Record<string, unknown>)["sources"];
   if (!Array.isArray(sources) || !sources.every((entry) => typeof entry === "string")) {
     throw new Error("Generated source map must contain string sources");
   }
