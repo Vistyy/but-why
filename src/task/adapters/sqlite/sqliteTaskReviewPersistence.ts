@@ -924,7 +924,8 @@ const readSimplificationAdviceAttempt = (
           ) {
             throw new Error("Completed Task Simplification Advice has inconsistent result fields.");
           }
-          const completedInvocations = requireNonEmptyAgentInvocations(decodedInvocations);
+          const completedInvocations: readonly [AgentInvocationRecord, ...AgentInvocationRecord[]] =
+            [firstInvocation, ...decodedInvocations.slice(1)];
           return {
             state: "completed" as const,
             advice: decodeTaskSimplificationAdvice(JSON.parse(attempt.advice) as unknown),
@@ -1208,16 +1209,6 @@ const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string, idPrefix: 
         id: publicTaskIdFromInternal(dependency.id, idPrefix),
       })),
   );
-
-const requireNonEmptyAgentInvocations = (
-  invocations: readonly AgentInvocationRecord[],
-): readonly [AgentInvocationRecord, ...AgentInvocationRecord[]] => {
-  const firstInvocation = invocations[0];
-  if (firstInvocation === undefined) {
-    throw new Error("Completed Task Simplification Advice has no Agent Invocation evidence.");
-  }
-  return [firstInvocation, ...invocations.slice(1)];
-};
 
 const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord => {
   const settlementKind = decodeAgentInvocationSettlementKind(row.settlementKind);
