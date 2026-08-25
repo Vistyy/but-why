@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -23,6 +23,7 @@ const decodeEventObjects = (stdout: string): readonly Record<string, unknown>[] 
     });
 
 const eventType = (event: Record<string, unknown>): unknown => Reflect.get(event, "type");
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 const runPi = (worktreePath: string, callsPath: string, sessionPath: string, path: string) =>
   runTestProcess(
@@ -63,11 +64,16 @@ describe("packaged Change Implement continuation extension process boundary", ()
     const callsPath = join(repositoryRoot, "provider-calls.log");
     const byDirectory = join(repositoryRoot, "by-bin");
     mkdirSync(byDirectory);
-    symlinkSync(builtByExecutable(), join(byDirectory, "by"));
+    const candidateExecutable = builtByExecutable();
+    writeFileSync(
+      join(byDirectory, "by"),
+      `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(candidateExecutable)} "$@"\n`,
+      { mode: 0o755 },
+    );
     const inheritedPath = Reflect.get(process.env, "PATH");
     const path = `${byDirectory}:${typeof inheritedPath === "string" ? inheritedPath : ""}`;
     const runBy = (cwd: string, args: readonly string[], input?: string) =>
-      runTestProcess(process.execPath, [builtByExecutable(), ...args], {
+      runTestProcess(process.execPath, [candidateExecutable, ...args], {
         cwd,
         ...(input === undefined ? {} : { input }),
         timeout: processTimeoutMs,
