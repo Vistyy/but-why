@@ -442,7 +442,6 @@ export const admitTaskReview = (
       policy,
       proposal,
       dependencyEvidence: dependencies,
-      simplificationAdviceAttempt,
     };
   });
 

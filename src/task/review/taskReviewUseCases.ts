@@ -277,7 +277,8 @@ const submitTaskReview = (
     });
     if (!admitted.ok) return admitted;
     const reviewId = admitted.review.id;
-    const ownsSimplificationAdviceAttempt = admitted.simplificationAdviceAttempt;
+    const ownsSimplificationAdviceAttempt =
+      admitted.review.simplificationAdviceAttempt !== undefined;
     const completedAdvice = ownsSimplificationAdviceAttempt
       ? undefined
       : yield* input.persistence.getCompletedSimplificationAdvice(taskId);

@@ -276,7 +276,6 @@ it.effect("observes final Task Review restoration and restoration failure", () =
               policy: reviewerPolicy,
               proposal: review.proposal,
               dependencyEvidence: [],
-              simplificationAdviceAttempt: true,
             }),
           recordCleanup: () => Effect.void,
           complete: (completion) =>
@@ -620,7 +619,6 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
             policy: reviewerPolicy,
             proposal: review.proposal,
             dependencyEvidence: [],
-            simplificationAdviceAttempt: true,
           }),
         recordCleanup: () => Effect.void,
         complete: () =>
