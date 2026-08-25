@@ -79,9 +79,7 @@ export const decodeSqliteAgentThinking = (value: string): AgentThinking => {
   }
 };
 
-export const decodeSqliteAgentSettlementKind = (
-  value: string,
-): AgentInvocationSettlement["kind"] => {
+const decodeSqliteAgentSettlementKind = (value: string): AgentInvocationSettlement["kind"] => {
   switch (value) {
     case "returned":
     case "launch_failed":
