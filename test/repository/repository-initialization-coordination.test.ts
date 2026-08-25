@@ -20,9 +20,9 @@ const operationDeadlineMs = 1_500;
 const initializerOperationDeadlineMs = 2_000;
 const readinessDeadlineMs = 2_500;
 const childSettlementDeadlineMs = 100;
-const cleanupDeadlineMs = 250;
-const observationDeadlineMs = 250;
-const outerTestDeadline = "5 seconds";
+const cleanupDeadlineMs = 200;
+const observationDeadlineMs = 100;
+const outerTestDeadline = "4750 millis";
 
 type ChildResult = {
   readonly status: number | null;
