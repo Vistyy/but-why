@@ -5,6 +5,7 @@ import { settleUnsettledAgentInvocations } from "../../../agent/agentSession/ada
 import type {
   AgentInvocationRecord,
   AgentSessionSqlLink,
+  AgentThinking,
 } from "../../../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { decodeReviewerFindingCore } from "../../../contracts/reviewerFinding.js";
@@ -902,31 +903,35 @@ const readSimplificationAdviceAttempt = (
             ? null
             : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration) as unknown);
         const decodedInvocations = invocations.map(decodeAgentInvocation);
-        const invocationEvidence = {
-          ...(invocations[0] === undefined
+        const firstInvocation = decodedInvocations[0];
+        const firstPersistedInvocation = invocations[0];
+        const invocationEvidence =
+          firstInvocation === undefined
             ? {}
-            : { agentSessionId: invocations[0].agentSessionId }),
-          ...(decodedInvocations.length === 0 ? {} : { agentInvocations: decodedInvocations }),
-        };
+            : {
+                ...(invocations[0] === undefined
+                  ? {}
+                  : { agentSessionId: invocations[0].agentSessionId }),
+                agentInvocations: decodedInvocations,
+              };
         if (attempt.outcome === "completed") {
           if (
             attempt.advice === null ||
             attempt.unavailable !== null ||
             configuration === null ||
-            invocations[0] === undefined
+            firstInvocation === undefined ||
+            firstPersistedInvocation === undefined
           ) {
             throw new Error("Completed Task Simplification Advice has inconsistent result fields.");
           }
+          const completedInvocations = requireNonEmptyAgentInvocations(decodedInvocations);
           return {
             state: "completed" as const,
             advice: decodeTaskSimplificationAdvice(JSON.parse(attempt.advice) as unknown),
             unavailable: null,
             configuration,
-            agentSessionId: invocations[0].agentSessionId,
-            agentInvocations: decodedInvocations as unknown as readonly [
-              AgentInvocationRecord,
-              ...AgentInvocationRecord[],
-            ],
+            agentSessionId: firstPersistedInvocation.agentSessionId,
+            agentInvocations: completedInvocations,
           };
         }
         if (attempt.outcome === "unavailable") {
@@ -1204,11 +1209,18 @@ const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string, idPrefix: 
       })),
   );
 
-const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord => {
-  const kinds = ["returned", "launch_failed", "failed", "return_unknown"] as const;
-  if (row.settlementKind !== null && !kinds.includes(row.settlementKind as never)) {
-    throw new Error(`Invalid Agent Invocation settlement kind: ${row.settlementKind}`);
+const requireNonEmptyAgentInvocations = (
+  invocations: readonly AgentInvocationRecord[],
+): readonly [AgentInvocationRecord, ...AgentInvocationRecord[]] => {
+  const firstInvocation = invocations[0];
+  if (firstInvocation === undefined) {
+    throw new Error("Completed Task Simplification Advice has no Agent Invocation evidence.");
   }
+  return [firstInvocation, ...invocations.slice(1)];
+};
+
+const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord => {
+  const settlementKind = decodeAgentInvocationSettlementKind(row.settlementKind);
   const tokenValues = [
     row.inputTokens,
     row.cachedInputTokens,
@@ -1221,13 +1233,13 @@ const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord =
     throw new Error("Incomplete Agent Invocation token evidence");
   }
   if (row.harness !== "pi") throw new Error(`Invalid Agent Harness: ${row.harness}`);
-  const thinking = row.thinking === null ? null : decodeAgentThinking(row.thinking);
+  const thinking = decodeAgentThinking(row.thinking);
   return {
     id: row.id,
     continuationId: row.continuationId,
     createdAt: row.createdAt,
     settledAt: row.settledAt,
-    settlementKind: row.settlementKind as AgentInvocationRecord["settlementKind"],
+    settlementKind,
     usage: hasTokens
       ? {
           inputTokens: row.inputTokens as number,
@@ -1250,10 +1262,34 @@ const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord =
   };
 };
 
-const decodeAgentThinking = (value: string) => {
-  const values = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
-  if (!values.includes(value as never)) throw new Error(`Invalid Agent thinking level: ${value}`);
-  return value as (typeof values)[number];
+const decodeAgentThinking = (value: string | null): AgentThinking | null => {
+  if (value === null) return null;
+  switch (value) {
+    case "off":
+    case "minimal":
+    case "low":
+    case "medium":
+    case "high":
+    case "xhigh":
+      return value;
+    default:
+      throw new Error(`Invalid Agent thinking level: ${value}`);
+  }
+};
+
+const decodeAgentInvocationSettlementKind = (
+  value: string | null,
+): AgentInvocationRecord["settlementKind"] => {
+  if (value === null) return null;
+  switch (value) {
+    case "returned":
+    case "launch_failed":
+    case "failed":
+    case "return_unknown":
+      return value;
+    default:
+      throw new Error(`Invalid Agent Invocation settlement kind: ${value}`);
+  }
 };
 
 const parseReviewOutcome = (value: string | null): TaskReviewRecord["outcome"] => {

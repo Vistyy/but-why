@@ -19,6 +19,7 @@ import {
   taskReviewAdmissionRejection,
 } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
+import type { TaskSimplificationAdvice } from "../../src/task/review/taskSimplificationAdvice.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
@@ -40,6 +41,17 @@ const policy = {
   },
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,
+};
+
+const simplificationAdviceConfiguration = {
+  profile: policy.profile,
+  builtInInstructions: "Task Simplification Advice test instructions",
+};
+
+const simplificationAdvice: TaskSimplificationAdvice = {
+  practicalCoreOutcome: "Deliver the requested result.",
+  options: [],
+  noSafeSimplificationReason: "No safe simplification is supported by this test advice.",
 };
 
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
@@ -194,6 +206,105 @@ it.scoped("derives an admitted Task Review workspace from the Git Common Directo
           workspacePath: expectedTaskReviewWorkspacePath(input.commonDirectory, 1),
         },
       });
+    }),
+  ),
+);
+
+it.scoped("decodes persisted Task Simplification Advice Invocation evidence before use", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const agents = yield* openSqliteAgentSessionPersistence();
+      const repository = yield* RepositorySql;
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      const admitted = yield* reviews.admit({
+        taskId: publicTaskId("BY-1"),
+        policy,
+        simplificationAdvice: { configuration: simplificationAdviceConfiguration },
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!admitted.ok) throw new Error(admitted.code);
+
+      const invocation = yield* agents.beginInvocation({
+        configuration: { harness: "pi", model: "test-model" },
+        createdAt: now,
+        linkInvocation: reviews.linkSimplificationAdviceInvocation({
+          reviewId: admitted.review.id,
+        }),
+      });
+      if (!invocation.ok) throw new Error(invocation.code);
+      yield* agents.settleInvocation({
+        invocationId: invocation.dispatch.invocation.id,
+        continuationId: invocation.dispatch.continuation.id,
+        settlement: { settledAt: later, kind: "returned" },
+        settleDomain: reviews.settleSimplificationAdvice({
+          reviewId: admitted.review.id,
+          complete: true,
+          advice: simplificationAdvice,
+        }),
+      });
+
+      const decoded = yield* reviews.getById(admitted.review.id);
+      expect(decoded).toMatchObject({
+        simplificationAdviceAttempt: {
+          state: "completed",
+          agentInvocations: [{ id: invocation.dispatch.invocation.id }],
+        },
+      });
+
+      yield* repository.operation(
+        "inject invalid Task Review settlement kind",
+        (sql) => sql`
+          UPDATE agent_invocations SET settlement_kind = 'unsupported'
+          WHERE id = ${invocation.dispatch.invocation.id}
+        `,
+      );
+      expect(yield* reviews.getById(admitted.review.id).pipe(Effect.flip)).toBeInstanceOf(
+        RepositoryPersistedDataInvalid,
+      );
+
+      yield* repository.operation(
+        "restore Task Review settlement kind",
+        (sql) => sql`
+          UPDATE agent_invocations SET settlement_kind = 'returned'
+          WHERE id = ${invocation.dispatch.invocation.id}
+        `,
+      );
+      yield* repository.operation(
+        "inject invalid Task Review thinking level",
+        (sql) => sql`
+          UPDATE agent_continuations SET thinking = 'unsupported'
+          WHERE id = ${invocation.dispatch.continuation.id}
+        `,
+      );
+      expect(yield* reviews.getById(admitted.review.id).pipe(Effect.flip)).toBeInstanceOf(
+        RepositoryPersistedDataInvalid,
+      );
+
+      yield* repository.operation(
+        "restore Task Review thinking level",
+        (sql) => sql`
+          UPDATE agent_continuations SET thinking = NULL
+          WHERE id = ${invocation.dispatch.continuation.id}
+        `,
+      );
+      yield* repository.operation("allow malformed Task Review evidence", (sql) =>
+        sql.unsafe("PRAGMA ignore_check_constraints = ON").pipe(Effect.asVoid),
+      );
+      yield* repository.operation(
+        "remove completed advice Invocation evidence",
+        (sql) => sql`
+          UPDATE task_review_simplification_advice
+          SET agent_invocation_id = NULL
+          WHERE task_review_id = ${admitted.review.id}
+        `,
+      );
+      expect(yield* reviews.getById(admitted.review.id).pipe(Effect.flip)).toBeInstanceOf(
+        RepositoryPersistedDataInvalid,
+      );
     }),
   ),
 );
