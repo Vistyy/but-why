@@ -32,6 +32,13 @@ type BlockerResolution = JsonObject & {
   readonly content: string;
 };
 
+type ImplementationBlocker = JsonObject & {
+  readonly id: number;
+  readonly changeId: string;
+  readonly content: string;
+  readonly resolution: BlockerResolution | null;
+};
+
 export type ChangeInspectionSnapshot = {
   readonly change: {
     readonly state: ChangeState;
@@ -53,9 +60,9 @@ export type ChangeInspectionSnapshot = {
 };
 
 type BlockerHistory = {
-  readonly blockers: readonly JsonObject[];
-  readonly resolutions: readonly JsonObject[];
-  readonly active: JsonObject | null;
+  readonly blockers: readonly ImplementationBlocker[];
+  readonly resolutions: readonly BlockerResolution[];
+  readonly active: ImplementationBlocker | null;
 };
 
 export type ContinuationDecision =
@@ -117,6 +124,10 @@ type InspectionResult =
     }
   | { readonly ok: false; readonly transient: boolean; readonly message: string };
 
+type BlockerInspectionResult =
+  | { readonly ok: true; readonly blockerHistory: BlockerHistory }
+  | { readonly ok: false; readonly message: string };
+
 const stateEntry = "but-why-change-continuation";
 const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
@@ -152,6 +163,10 @@ type ContinueChangeInputEvent = {
   readonly source: "interactive" | "rpc" | "extension";
 };
 
+type ContinueChangeTurnEndEvent = {
+  readonly toolResults: readonly unknown[];
+};
+
 type ContinueChangeToolCallResult = { readonly block: true; readonly reason: string };
 
 export type ContinueChangeContext = {
@@ -164,6 +179,8 @@ export type ContinueChangeContext = {
     readonly notify: (message: string, type?: "info" | "warning" | "error") => void;
     readonly setWidget: (content: ContinueChangeWidgetFactory | undefined) => void;
   };
+  readonly signal: AbortSignal | undefined;
+  readonly abort: () => void;
 };
 
 type ContinueChangeExecOptions = {
@@ -203,6 +220,12 @@ export type ContinueChangeCapabilities = {
       context: ContinueChangeContext,
     ) => void | Promise<void>,
   ) => void;
+  readonly onTurnEnd: (
+    handler: (
+      event: ContinueChangeTurnEndEvent,
+      context: ContinueChangeContext,
+    ) => void | Promise<void>,
+  ) => void;
   readonly registerCommand: (
     name: string,
     options: {
@@ -226,6 +249,8 @@ const adaptExtensionContext = (context: ExtensionContext): ContinueChangeContext
   cwd: context.cwd,
   sessionManager: { getBranch: () => context.sessionManager.getBranch() },
   isIdle: () => context.isIdle(),
+  signal: context.signal,
+  abort: () => context.abort(),
   ui: {
     notify: (message, type) => context.ui.notify(message, type),
     setWidget: (content) =>
@@ -265,6 +290,10 @@ const adaptExtensionApi = (api: ExtensionAPI): ContinueChangeCapabilities => ({
   onInput: (handler) =>
     api.on("input", (event, context) =>
       handler({ text: event.text, source: event.source }, adaptExtensionContext(context)),
+    ),
+  onTurnEnd: (handler) =>
+    api.on("turn_end", (event, context) =>
+      handler({ toolResults: event.toolResults }, adaptExtensionContext(context)),
     ),
   registerCommand: (name, options) =>
     api.registerCommand(name, {
@@ -630,6 +659,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
   let settling = false;
   let pauseGeneration = 0;
   let shutDown = false;
+  let blockerAbortRequested = false;
   let activeInspectionAbortController: AbortController | undefined;
   let pollingTimer: ReturnType<typeof setTimeout> | undefined;
   let watcherDisplay: WatcherDisplay = { kind: "implementing", pullRequestUrl: null };
@@ -796,6 +826,35 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
     signal?: AbortSignal,
   ): Promise<RunResult> => run("by", commandArgs, cwd, signal);
 
+  const inspectBlockerHistory = async (
+    ctx: ContinueChangeContext,
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<BlockerInspectionResult> => {
+    const result = await inspectCommand(["change", "blocker", "list", id], ctx.cwd, signal);
+    if (!result.ok) {
+      return {
+        ok: false,
+        message:
+          result.stdout.trim() === ""
+            ? result.message
+            : `${result.message}: ${result.stdout.trim().slice(0, 500)}`,
+      };
+    }
+    try {
+      const value = JSON.parse(result.stdout) as unknown;
+      if (!isBlockerHistory(value, id)) {
+        return {
+          ok: false,
+          message: "But Why inspection returned an unsupported blocker history shape",
+        };
+      }
+      return { ok: true, blockerHistory: value };
+    } catch {
+      return { ok: false, message: "But Why inspection returned malformed blocker JSON" };
+    }
+  };
+
   const inspect = async (
     ctx: ContinueChangeContext,
     id: string,
@@ -874,7 +933,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
         message: "But Why inspection returned an unsupported Change state shape",
       };
     }
-    if (!isBlockerHistory(blockerValue)) {
+    if (!isBlockerHistory(blockerValue, id)) {
       return {
         ok: false,
         transient: false,
@@ -986,10 +1045,8 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
     return { block: true, reason: initialSubmissionReassessmentMessage };
   });
 
-  const latestResolution = (history: BlockerHistory): BlockerResolution | null => {
-    const latest = history.resolutions.at(-1);
-    return latest !== undefined && isResolution(latest) ? latest : null;
-  };
+  const latestResolution = (history: BlockerHistory): BlockerResolution | null =>
+    history.resolutions.at(-1) ?? null;
 
   const resolutionBlockerId = (resolution: BlockerResolution | null): number | null =>
     resolution?.blockerId ?? null;
@@ -1353,7 +1410,33 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
     activeInspectionAbortController = undefined;
   });
 
-  pi.onAgentEnd((event, ctx) => {
+  pi.onTurnEnd(async (event, ctx) => {
+    if (event.toolResults.length === 0) return;
+    if (changeId === undefined || shutDown || persisted?.paused || blockerAbortRequested) return;
+    const observed = await inspectBlockerHistory(ctx, changeId, ctx.signal);
+    if (shutDown || persisted?.paused || ctx.signal?.aborted) return;
+    if (!observed.ok) {
+      blockerAbortRequested = true;
+      pause(ctx);
+      showWatcher(ctx, { kind: "inspection-failed" });
+      ctx.ui.notify(
+        `But Why trusted blocker inspection failed and automatic continuation is paused: ${observed.message}`,
+        "warning",
+      );
+      ctx.abort();
+      return;
+    }
+    if (observed.blockerHistory.active !== null) {
+      blockerAbortRequested = true;
+      showWatcher(ctx, { kind: "blocked" });
+      ctx.abort();
+    }
+  });
+
+  pi.onAgentEnd(async (event, ctx) => {
+    const blockerAbortWasRequested = blockerAbortRequested;
+    blockerAbortRequested = false;
+    if (blockerAbortWasRequested) return;
     if (
       event.messages.some(
         (message) => message.role === "assistant" && message.stopReason === "aborted",
@@ -1459,18 +1542,78 @@ const isResolution = (value: unknown): value is BlockerResolution =>
   isPositiveInteger(recordValue(value, "blockerId")) &&
   typeof recordValue(value, "content") === "string";
 
-const isBlockerHistory = (value: unknown): value is BlockerHistory => {
+const isImplementationBlocker = (value: unknown): value is ImplementationBlocker =>
+  isRecord(value) &&
+  isPositiveInteger(recordValue(value, "id")) &&
+  typeof recordValue(value, "changeId") === "string" &&
+  typeof recordValue(value, "content") === "string" &&
+  (recordValue(value, "resolution") === null || isResolution(recordValue(value, "resolution")));
+
+const sameResolution = (left: BlockerResolution, right: BlockerResolution): boolean =>
+  left.blockerId === right.blockerId && left.content === right.content;
+
+const sameBlocker = (left: ImplementationBlocker, right: ImplementationBlocker): boolean =>
+  left.id === right.id &&
+  left.changeId === right.changeId &&
+  left.content === right.content &&
+  ((left.resolution === null && right.resolution === null) ||
+    (left.resolution !== null &&
+      right.resolution !== null &&
+      sameResolution(left.resolution, right.resolution)));
+
+const isBlockerHistory = (value: unknown, changeId: string): value is BlockerHistory => {
   if (!isRecord(value)) return false;
-  const blockers = recordValue(value, "blockers");
-  const resolutions = recordValue(value, "resolutions");
-  const active = recordValue(value, "active");
+  const blockersValue = recordValue(value, "blockers");
+  const resolutionsValue = recordValue(value, "resolutions");
+  const activeValue = recordValue(value, "active");
+  if (
+    !Array.isArray(blockersValue) ||
+    !blockersValue.every(isImplementationBlocker) ||
+    !Array.isArray(resolutionsValue) ||
+    !resolutionsValue.every(isResolution) ||
+    (activeValue !== null && !isImplementationBlocker(activeValue))
+  ) {
+    return false;
+  }
+  const blockers = blockersValue;
+  const resolutions = resolutionsValue;
+  if (blockers.some((blocker) => blocker.changeId !== changeId)) return false;
+  if (new Set(blockers.map((blocker) => blocker.id)).size !== blockers.length) return false;
+  if (
+    blockers.some((blocker, index) => {
+      const previous = index > 0 ? blockers[index - 1] : undefined;
+      return previous !== undefined && previous.id >= blocker.id;
+    })
+  ) {
+    return false;
+  }
+  if (new Set(resolutions.map((resolution) => resolution.blockerId)).size !== resolutions.length) {
+    return false;
+  }
+  if (
+    resolutions.some((resolution, index) => {
+      const previous = index > 0 ? resolutions[index - 1] : undefined;
+      return previous !== undefined && previous.blockerId >= resolution.blockerId;
+    })
+  ) {
+    return false;
+  }
+  const resolvedBlockers = blockers.filter((blocker) => blocker.resolution !== null);
+  const activeBlockers = blockers.filter((blocker) => blocker.resolution === null);
+  if (activeBlockers.length > 1 || resolutions.length !== resolvedBlockers.length) return false;
+  for (const blocker of blockers) {
+    if (blocker.resolution === null) continue;
+    if (blocker.resolution.blockerId !== blocker.id) return false;
+    const resolution = resolutions.find((item) => item.blockerId === blocker.id);
+    if (resolution === undefined || !sameResolution(resolution, blocker.resolution)) return false;
+  }
+  if (activeValue === null) return activeBlockers.length === 0;
+  const activeBlocker = activeBlockers[0];
   return (
-    Array.isArray(blockers) &&
-    blockers.every(isRecord) &&
-    Array.isArray(resolutions) &&
-    resolutions.every(isRecord) &&
-    (resolutions.length === 0 || isResolution(resolutions.at(-1))) &&
-    (active === null || isRecord(active))
+    activeBlocker !== undefined &&
+    activeValue.changeId === changeId &&
+    activeValue.resolution === null &&
+    sameBlocker(activeValue, activeBlocker)
   );
 };
 
