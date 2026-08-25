@@ -58,9 +58,9 @@ export type ChangeInspectionSnapshot = {
 };
 
 type BlockerHistory = {
-  readonly blockers: readonly JsonObject[];
-  readonly resolutions: readonly JsonObject[];
-  readonly active: JsonObject | null;
+  readonly blockers: readonly ImplementationBlocker[];
+  readonly resolutions: readonly BlockerResolution[];
+  readonly active: ImplementationBlocker | null;
 };
 
 export type ContinuationDecision =
@@ -874,10 +874,8 @@ export default function continueChange(pi: ExtensionAPI): void {
     return { block: true, reason: initialSubmissionReassessmentMessage };
   });
 
-  const latestResolution = (history: BlockerHistory): BlockerResolution | null => {
-    const latest = history.resolutions.at(-1);
-    return latest !== undefined && isResolution(latest) ? latest : null;
-  };
+  const latestResolution = (history: BlockerHistory): BlockerResolution | null =>
+    history.resolutions.at(-1) ?? null;
 
   const resolutionBlockerId = (resolution: BlockerResolution | null): number | null =>
     resolution?.blockerId ?? null;
