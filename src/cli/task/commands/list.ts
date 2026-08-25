@@ -39,7 +39,7 @@ export const runListCommand = (
             ? loadTaskChangeProjection(taskRepositoryInput(environment))
             : undefined;
         if (changeInspection !== undefined && !changeInspection.ok) {
-          return Effect.succeed(stateStoreUnavailable(taskUseCases.idPrefix));
+          return Effect.succeed<CliResult>(stateStoreUnavailable(taskUseCases.idPrefix));
         }
         return Effect.map(
           taskSummaryRows(
