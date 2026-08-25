@@ -24,4 +24,4 @@ For Operator responsibility:
 For Implementer responsibility:
 
 - Before inspecting or changing a Managed Worktree, implementing a Change, correcting Findings, or submitting a Candidate, read [Implement a Change](references/implement-change.md) completely and follow it.
-- When selecting implementation evidence, read [Task verification](references/task-verification.md) completely under the condition stated by Implement a Change.
+- When selecting implementation evidence, read [Implementation verification](references/implementation-verification.md) completely under the condition stated by Implement a Change.

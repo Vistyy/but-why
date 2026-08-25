@@ -218,7 +218,7 @@ describe("release package boundary", () => {
       "docs/public/skills/but-why/references/implement-change.md",
       "docs/public/skills/but-why/references/operator-workflow.md",
       "docs/public/skills/but-why/references/task-authoring.md",
-      "docs/public/skills/but-why/references/task-verification.md",
+      "docs/public/skills/but-why/references/implementation-verification.md",
     ]) {
       expect(files).toContain(required);
     }
@@ -238,7 +238,10 @@ describe("release package boundary", () => {
     const skill = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
     const operator = readFileSync(join(skillRoot, "references/operator-workflow.md"), "utf8");
     const implementer = readFileSync(join(skillRoot, "references/implement-change.md"), "utf8");
-    const verification = readFileSync(join(skillRoot, "references/task-verification.md"), "utf8");
+    const verification = readFileSync(
+      join(skillRoot, "references/implementation-verification.md"),
+      "utf8",
+    );
 
     expect(skill).toContain("Select guidance from the responsibility of the next action.");
     expect(skill).toContain("Do not infer the current responsibility from a Change association");

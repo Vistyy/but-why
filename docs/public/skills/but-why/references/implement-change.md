@@ -34,7 +34,7 @@ This step is complete when the Change, implementation direction, and Managed Wor
 
 Follow the repository instructions in the Managed Worktree.
 Use explicit verification constraints in accepted Acceptance Context when present.
-Before selecting or adding implementation evidence, read [Task verification](task-verification.md) completely.
+Before selecting or adding implementation evidence, read [Implementation verification](implementation-verification.md) completely.
 Select proportionate evidence after the implementation shape is known.
 
 Inspect repository evidence before selecting an approach.

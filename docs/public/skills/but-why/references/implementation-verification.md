@@ -1,10 +1,9 @@
-# Task verification
+# Implementation verification
 
 Accepted intent defines the required result.
 Implementation creates that result.
 Implementation verification establishes whether the exact Candidate is ready for Submission.
 A test is one possible source of evidence, not the default output.
-Task Context has no required verification section or template.
 
 ## Select implementation evidence
 
