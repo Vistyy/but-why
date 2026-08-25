@@ -1011,6 +1011,31 @@ describe("packaged Change Implement continuation extension", () => {
         },
       },
     ],
+    [
+      "Resolution order",
+      undefined,
+      {
+        blockers: [
+          {
+            id: 1,
+            changeId,
+            content: "First blocker.",
+            resolution: { blockerId: 1, content: "First resolution." },
+          },
+          {
+            id: 2,
+            changeId,
+            content: "Second blocker.",
+            resolution: { blockerId: 2, content: "Second resolution." },
+          },
+        ],
+        resolutions: [
+          { blockerId: 2, content: "Second resolution." },
+          { blockerId: 1, content: "First resolution." },
+        ],
+        active: null,
+      },
+    ],
   ])("rejects malformed %s control data without continuing", async (_name, malformedSnapshot, malformedHistory) => {
     const harness = createHarness();
     if (malformedSnapshot !== undefined) harness.setSnapshot(malformedSnapshot);

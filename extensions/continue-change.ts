@@ -1405,7 +1405,23 @@ const isBlockerHistory = (value: unknown, changeId: string): value is BlockerHis
   const resolutions = resolutionsValue;
   if (blockers.some((blocker) => blocker.changeId !== changeId)) return false;
   if (new Set(blockers.map((blocker) => blocker.id)).size !== blockers.length) return false;
+  if (
+    blockers.some((blocker, index) => {
+      const previous = index > 0 ? blockers[index - 1] : undefined;
+      return previous !== undefined && previous.id >= blocker.id;
+    })
+  ) {
+    return false;
+  }
   if (new Set(resolutions.map((resolution) => resolution.blockerId)).size !== resolutions.length) {
+    return false;
+  }
+  if (
+    resolutions.some((resolution, index) => {
+      const previous = index > 0 ? resolutions[index - 1] : undefined;
+      return previous !== undefined && previous.blockerId >= resolution.blockerId;
+    })
+  ) {
     return false;
   }
   const resolvedBlockers = blockers.filter((blocker) => blocker.resolution !== null);
