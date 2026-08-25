@@ -29,7 +29,8 @@ type CommandResult = {
 };
 
 type StartedCommand = {
-  readonly child: { readonly exitCode: number | null };
+  readonly child: ReturnType<typeof startTestProcess>;
+  readonly closed: boolean;
   readonly done: Promise<CommandResult>;
 };
 
@@ -49,9 +50,34 @@ const awaitProcessDone = (process: StartedCommand, description: string): Promise
   });
 };
 
+const signalProcessGroup = (process: StartedCommand, signal: NodeJS.Signals): void => {
+  if (process.child.pid === undefined) {
+    process.child.kill(signal);
+    return;
+  }
+  try {
+    globalThis.process.kill(-process.child.pid, signal);
+  } catch {
+    process.child.kill(signal);
+  }
+};
+
+const stopProcess = async (process: StartedCommand, description: string): Promise<void> => {
+  if (process.closed) return;
+  signalProcessGroup(process, "SIGTERM");
+  try {
+    await awaitProcessDone(process, description);
+  } catch (error) {
+    signalProcessGroup(process, "SIGKILL");
+    await awaitProcessDone(process, `${description} after SIGKILL`);
+    throw error;
+  }
+};
+
 const startRunner = (lockFile: string, args: string[]) => {
   const child = startTestProcess("bash", [runner, ...args], {
     cwd: dirname(lockFile),
+    detached: true,
     env: {
       BY_CAPACITY_LOCK_FILE: lockFile,
       BY_CAPACITY_LOCK_HELD: "0",
@@ -64,11 +90,18 @@ const startRunner = (lockFile: string, args: string[]) => {
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
+  let closed = false;
   const done = new Promise<CommandResult>((resolveResult) => {
-    child.on("close", (status) => resolveResult({ status, output }));
+    child.on("close", (status) => {
+      closed = true;
+      resolveResult({ status, output });
+    });
   });
   return {
     child,
+    get closed() {
+      return closed;
+    },
     done,
     get output() {
       return output;
@@ -107,11 +140,18 @@ const startJust = (
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
+  let closed = false;
   const done = new Promise<CommandResult>((resolveResult) => {
-    child.on("close", (status) => resolveResult({ status, output }));
+    child.on("close", (status) => {
+      closed = true;
+      resolveResult({ status, output });
+    });
   });
   return {
     child,
+    get closed() {
+      return closed;
+    },
     done,
     get output() {
       return output;
@@ -130,26 +170,22 @@ const runJust = async (lockFile: string, args: string[]): Promise<CommandResult>
   }
 };
 
-const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
-  if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
-  await awaitProcessDone(runnerProcess, "runner process cleanup");
-};
+const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> =>
+  stopProcess(runnerProcess, "runner process cleanup");
 
 const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Signals): void => {
   if (justProcess.child.pid === undefined) throw new Error("The Just process has no PID");
   process.kill(-justProcess.child.pid, signal);
 };
 
-const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> => {
-  if (justProcess.child.exitCode === null) signalJust(justProcess, "SIGTERM");
-  await awaitProcessDone(justProcess, "Just process cleanup");
-};
+const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> =>
+  stopProcess(justProcess, "Just process cleanup");
 
 const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult> => {
   const child = startTestProcess(
     join(repositoryRoot, "node_modules/.bin/vitest"),
     ["run", "--config", join(repositoryRoot, "vitest.config.ts"), "--root", fixtureRoot, fixture],
-    { cwd: fixtureRoot },
+    { cwd: fixtureRoot, detached: true },
   );
   let output = "";
   child.stdout.on("data", (chunk: Buffer) => {
@@ -158,14 +194,23 @@ const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult>
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
+  let closed = false;
   const done = new Promise<CommandResult>((resolveResult) => {
-    child.on("close", (status) => resolveResult({ status, output }));
+    child.on("close", (status) => {
+      closed = true;
+      resolveResult({ status, output });
+    });
   });
-  const process = { child, done };
-  return awaitProcessDone(process, "Vitest process to exit").finally(async () => {
-    if (child.exitCode === null) child.kill("SIGTERM");
-    await awaitProcessDone(process, "Vitest process cleanup");
-  });
+  const process = {
+    child,
+    get closed() {
+      return closed;
+    },
+    done,
+  };
+  return awaitProcessDone(process, "Vitest process to exit").finally(() =>
+    stopProcess(process, "Vitest process cleanup"),
+  );
 };
 
 const waitForFile = (file: string): Promise<string> =>
