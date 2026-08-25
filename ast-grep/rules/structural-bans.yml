@@ -304,3 +304,129 @@ rule:
   any:
     - pattern: environment.taskUseCases.editTaskDependencies
     - pattern: environment.taskUseCases.reviseTask
+---
+# Reflect.get hides the type or validation that makes property access safe.
+id: direct-reflect-get-is-validated
+language: TypeScript
+severity: error
+message: Do not call Reflect.get(...) directly because it hides the value's established shape; use typed property access or validated indexed access instead.
+files:
+  - src/**/*.ts
+  - test/**/*.ts
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+rule:
+  pattern: Reflect.get($$$ARGS)
+---
+# Keep the same direct-call guardrail for JavaScript source files.
+id: direct-reflect-get-is-validated-javascript
+language: JavaScript
+severity: error
+message: Do not call Reflect.get(...) directly because it hides the value's established shape; use typed property access or validated indexed access instead.
+files:
+  - src/**/*.js
+  - src/**/*.jsx
+  - src/**/*.mjs
+  - src/**/*.cjs
+  - test/**/*.js
+  - test/**/*.jsx
+  - test/**/*.mjs
+  - test/**/*.cjs
+  - extensions/**/*.js
+  - extensions/**/*.jsx
+  - extensions/**/*.mjs
+  - extensions/**/*.cjs
+  - scripts/**/*.js
+  - scripts/**/*.jsx
+  - scripts/**/*.mjs
+  - scripts/**/*.cjs
+rule:
+  pattern: Reflect.get($$$ARGS)
+---
+# Reflect.apply obscures a direct typed call or an intentional dispatch interface.
+id: direct-reflect-apply-is-typed
+language: TypeScript
+severity: error
+message: Do not call Reflect.apply(...) directly because it hides the invocation interface; use a direct typed call or a named dynamic-dispatch interface instead.
+files:
+  - src/**/*.ts
+  - test/**/*.ts
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+rule:
+  pattern: Reflect.apply($$$ARGS)
+---
+# Keep the same direct-call guardrail for JavaScript source files.
+id: direct-reflect-apply-is-typed-javascript
+language: JavaScript
+severity: error
+message: Do not call Reflect.apply(...) directly because it hides the invocation interface; use a direct typed call or a named dynamic-dispatch interface instead.
+files:
+  - src/**/*.js
+  - src/**/*.jsx
+  - src/**/*.mjs
+  - src/**/*.cjs
+  - test/**/*.js
+  - test/**/*.jsx
+  - test/**/*.mjs
+  - test/**/*.cjs
+  - extensions/**/*.js
+  - extensions/**/*.jsx
+  - extensions/**/*.mjs
+  - extensions/**/*.cjs
+  - scripts/**/*.js
+  - scripts/**/*.jsx
+  - scripts/**/*.mjs
+  - scripts/**/*.cjs
+rule:
+  pattern: Reflect.apply($$$ARGS)
+---
+# Module mocking hides the Effect dependency boundary and its lifecycle.
+id: direct-module-mocking-uses-effect-boundary
+language: TypeScript
+severity: error
+message: Do not call vi.mock, vi.doMock, vi.unstable_mockModule, jest.mock, jest.doMock, or jest.unstable_mockModule directly because module mocking bypasses the dependency boundary; use Effect services, Layers, or injected Adapters instead.
+files:
+  - src/**/*.ts
+  - test/**/*.ts
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+rule:
+  any:
+    - pattern: vi.mock($$$ARGS)
+    - pattern: vi.doMock($$$ARGS)
+    - pattern: vi.unstable_mockModule($$$ARGS)
+    - pattern: jest.mock($$$ARGS)
+    - pattern: jest.doMock($$$ARGS)
+    - pattern: jest.unstable_mockModule($$$ARGS)
+---
+# Keep the same direct-call guardrail for JavaScript source files.
+id: direct-module-mocking-uses-effect-boundary-javascript
+language: JavaScript
+severity: error
+message: Do not call vi.mock, vi.doMock, vi.unstable_mockModule, jest.mock, jest.doMock, or jest.unstable_mockModule directly because module mocking bypasses the dependency boundary; use Effect services, Layers, or injected Adapters instead.
+files:
+  - src/**/*.js
+  - src/**/*.jsx
+  - src/**/*.mjs
+  - src/**/*.cjs
+  - test/**/*.js
+  - test/**/*.jsx
+  - test/**/*.mjs
+  - test/**/*.cjs
+  - extensions/**/*.js
+  - extensions/**/*.jsx
+  - extensions/**/*.mjs
+  - extensions/**/*.cjs
+  - scripts/**/*.js
+  - scripts/**/*.jsx
+  - scripts/**/*.mjs
+  - scripts/**/*.cjs
+rule:
+  any:
+    - pattern: vi.mock($$$ARGS)
+    - pattern: vi.doMock($$$ARGS)
+    - pattern: vi.unstable_mockModule($$$ARGS)
+    - pattern: jest.mock($$$ARGS)
+    - pattern: jest.doMock($$$ARGS)
+    - pattern: jest.unstable_mockModule($$$ARGS)

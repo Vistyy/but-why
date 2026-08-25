@@ -164,3 +164,89 @@ valid:
 invalid:
   - environment.taskUseCases.editTaskDependencies
   - environment.taskUseCases.reviseTask
+---
+id: direct-reflect-get-is-validated
+valid:
+  - Reflect["get"](value, "field")
+  - (Reflect.get)(value, "field")
+  - const get = Reflect.get; get(value, "field")
+  - Reflect[method](value, method)
+  - Reflect.get
+  - other.Reflect.get(value, "field")
+invalid:
+  - Reflect.get(value, "field")
+  - const Reflect = localReflect; Reflect.get(value, "field")
+---
+id: direct-reflect-get-is-validated-javascript
+valid:
+  - Reflect["get"](value, "field")
+  - (Reflect.get)(value, "field")
+  - const get = Reflect.get; get(value, "field")
+  - Reflect[method](value, method)
+  - Reflect.get
+  - other.Reflect.get(value, "field")
+invalid:
+  - Reflect.get(value, "field")
+  - const Reflect = localReflect; Reflect.get(value, "field")
+---
+id: direct-reflect-apply-is-typed
+valid:
+  - Reflect["apply"](fn, receiver, args)
+  - (Reflect.apply)(fn, receiver, args)
+  - const apply = Reflect.apply; apply(fn, receiver, args)
+  - Reflect[method](fn, receiver, args)
+  - Reflect.apply
+  - other.Reflect.apply(fn, receiver, args)
+invalid:
+  - Reflect.apply(fn, receiver, args)
+  - const Reflect = localReflect; Reflect.apply(fn, receiver, args)
+---
+id: direct-reflect-apply-is-typed-javascript
+valid:
+  - Reflect["apply"](fn, receiver, args)
+  - (Reflect.apply)(fn, receiver, args)
+  - const apply = Reflect.apply; apply(fn, receiver, args)
+  - Reflect[method](fn, receiver, args)
+  - Reflect.apply
+  - other.Reflect.apply(fn, receiver, args)
+invalid:
+  - Reflect.apply(fn, receiver, args)
+  - const Reflect = localReflect; Reflect.apply(fn, receiver, args)
+---
+id: direct-module-mocking-uses-effect-boundary
+valid:
+  - vi["mock"]("module")
+  - (vi.mock)("module")
+  - const mock = vi.mock; mock("module")
+  - vi[method]("module")
+  - vi.mock
+  - other.vi.mock("module")
+  - vitest.mock("module")
+  - jest["mock"]("module")
+invalid:
+  - vi.mock("module")
+  - vi.doMock("module")
+  - vi.unstable_mockModule("module")
+  - jest.mock("module")
+  - jest.doMock("module")
+  - jest.unstable_mockModule("module")
+  - const vi = localVitest; vi.mock("module")
+---
+id: direct-module-mocking-uses-effect-boundary-javascript
+valid:
+  - vi["mock"]("module")
+  - (vi.mock)("module")
+  - const mock = vi.mock; mock("module")
+  - vi[method]("module")
+  - vi.mock
+  - other.vi.mock("module")
+  - vitest.mock("module")
+  - jest["mock"]("module")
+invalid:
+  - vi.mock("module")
+  - vi.doMock("module")
+  - vi.unstable_mockModule("module")
+  - jest.mock("module")
+  - jest.doMock("module")
+  - jest.unstable_mockModule("module")
+  - const vi = localVitest; vi.mock("module")

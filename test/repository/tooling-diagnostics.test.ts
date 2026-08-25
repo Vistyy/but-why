@@ -43,22 +43,21 @@ type EffectDiagnostic = {
   readonly severity: string;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const decodeEffectDiagnostics = (source: string): readonly EffectDiagnostic[] => {
   const parsed: unknown = JSON.parse(source);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("Effect diagnostic output must be an object");
-  }
-  const diagnostics = Reflect.get(parsed, "diagnostics");
+  if (!isRecord(parsed)) throw new Error("Effect diagnostic output must be an object");
+  const diagnostics = parsed["diagnostics"];
   if (!Array.isArray(diagnostics)) {
     throw new Error("Effect diagnostic output must contain diagnostics");
   }
   return diagnostics.map((diagnostic: unknown) => {
-    if (typeof diagnostic !== "object" || diagnostic === null || Array.isArray(diagnostic)) {
-      throw new Error("Each Effect diagnostic must be an object");
-    }
-    const file = Reflect.get(diagnostic, "file");
-    const name = Reflect.get(diagnostic, "name");
-    const severity = Reflect.get(diagnostic, "severity");
+    if (!isRecord(diagnostic)) throw new Error("Each Effect diagnostic must be an object");
+    const file = diagnostic["file"];
+    const name = diagnostic["name"];
+    const severity = diagnostic["severity"];
     if (typeof file !== "string" || typeof name !== "string" || typeof severity !== "string") {
       throw new Error("Each Effect diagnostic must identify its file, name, and severity");
     }
@@ -150,7 +149,28 @@ describe("repository-authored tooling diagnostics", () => {
       'const result = runTestProcess("npm", ["install"], { cwd });',
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
-  ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
+    ["direct-reflect-get-is-validated", 'const value = Reflect.get(input, "field");'],
+    ["direct-reflect-apply-is-typed", "const value = Reflect.apply(fn, receiver, args);"],
+    ["direct-module-mocking-uses-effect-boundary", 'vi.mock("module");'],
+    [
+      "direct-reflect-get-is-validated-javascript",
+      'const value = Reflect.get(input, "field");',
+      "scripts",
+      "mjs",
+    ],
+    [
+      "direct-reflect-apply-is-typed-javascript",
+      "const value = Reflect.apply(fn, receiver, args);",
+      "scripts",
+      "mjs",
+    ],
+    [
+      "direct-module-mocking-uses-effect-boundary-javascript",
+      'vi.mock("module");',
+      "scripts",
+      "mjs",
+    ],
+  ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string, extension = "ts") => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
     const fixtureDirectory =
@@ -168,7 +188,7 @@ describe("repository-authored tooling diagnostics", () => {
     mkdirSync(join(fixtureRoot, "ast-grep/rules"), { recursive: true });
     copyFileSync(astGrepRulePath, join(fixtureRoot, "ast-grep/rules/structural-bans.yml"));
     copyFileSync(astGrepConfigPath, join(fixtureRoot, "sgconfig.yml"));
-    const fixture = join(fixtureRoot, fixtureDirectory, "diagnostic-fixture.ts");
+    const fixture = join(fixtureRoot, fixtureDirectory, `diagnostic-fixture.${extension}`);
     writeFileSync(fixture, `${source}\n`);
 
     const result = run(

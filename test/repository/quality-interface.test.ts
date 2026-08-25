@@ -95,7 +95,7 @@ const startJust = (
 const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
   settleWithinDeadline(
     startJust(lockFile, args, {
-      PATH: `${dirname(lockFile)}:${Reflect.get(process.env, "PATH") ?? ""}`,
+      PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
     }).done,
     "Just workload settlement",
   );
@@ -416,7 +416,7 @@ describe("quality interface", () => {
       try {
         await waitForFile(readyFile);
         unselected = startJust(lockFile, ["test", "--reporter=dot"], {
-          PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+          PATH: `${directory}:${process.env["PATH"] ?? ""}`,
         });
         await waitForOutput(unselected, "waiting: test is waiting for capacity");
         expect(unselected.child.exitCode).toBeNull();
@@ -559,7 +559,7 @@ describe("quality interface", () => {
         lockFile,
         ["quality"],
         {
-          PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+          PATH: `${directory}:${process.env["PATH"] ?? ""}`,
         },
         directory,
       );
