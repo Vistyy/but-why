@@ -26,7 +26,6 @@ const nodeSqliteConnection = (database: DatabaseSync): NodeSqliteConnection => {
     Effect.withFiberRuntime((fiber) => {
       try {
         const statement = database.prepare(sql);
-        statement.setReturnArrays(false);
         if (Context.get(fiber.currentContext, SqlClient.SafeIntegers)) {
           statement.setReadBigInts(true);
         }
