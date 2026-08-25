@@ -41,13 +41,35 @@ type EventHandlers = {
   input: Parameters<ContinueChangeCapabilities["onInput"]>[0];
 };
 type EventValues = {
-  [Name in keyof EventHandlers]: Parameters<EventHandlers[Name]>[0];
+  tool_call: Parameters<EventHandlers["tool_call"]>[0];
+  session_start: unknown;
+  session_shutdown: unknown;
+  agent_end: Parameters<EventHandlers["agent_end"]>[0];
+  agent_settled: unknown;
+  input: Parameters<EventHandlers["input"]>[0];
 };
+type EventCall =
+  | [event: "tool_call", value: EventValues["tool_call"]]
+  | [event: "session_start", value?: unknown]
+  | [event: "session_shutdown", value?: unknown]
+  | [event: "agent_end", value: EventValues["agent_end"]]
+  | [event: "agent_settled", value?: unknown]
+  | [event: "input", value: EventValues["input"]];
 
 const sourceCwd = fileURLToPath(new URL("../../", import.meta.url));
 
 const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
-  const handlers: Partial<EventHandlers> = {};
+  const missingEventHandler = (): never => {
+    throw new Error("Missing registered continuation event handler");
+  };
+  const handlers: EventHandlers = {
+    tool_call: missingEventHandler,
+    session_start: missingEventHandler,
+    session_shutdown: missingEventHandler,
+    agent_end: missingEventHandler,
+    agent_settled: missingEventHandler,
+    input: missingEventHandler,
+  };
   const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
     {
@@ -154,31 +176,25 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       notify(message: string) {
         notifications.push(message);
       },
-      setWidget(name, value) {
-        widgets.push({ name, value });
+      setWidget(value) {
+        widgets.push({ name: "but-why-change-watcher", value });
       },
     },
   };
-  async function emit<EventName extends keyof EventValues>(
-    event: EventName,
-    value?: EventValues[EventName],
-  ) {
-    switch (event) {
+  async function emit(...args: EventCall) {
+    switch (args[0]) {
       case "tool_call":
-        return await handlers.tool_call?.(value as EventValues["tool_call"], context);
+        return await handlers.tool_call(args[1], context);
       case "session_start":
-        return await handlers.session_start?.(value as EventValues["session_start"], context);
+        return await handlers.session_start(context);
       case "session_shutdown":
-        return await handlers.session_shutdown?.(
-          value ?? { type: "session_shutdown", reason: "quit" },
-          context,
-        );
+        return await handlers.session_shutdown(context);
       case "agent_end":
-        return await handlers.agent_end?.(value as EventValues["agent_end"], context);
+        return await handlers.agent_end(args[1], context);
       case "agent_settled":
-        return await handlers.agent_settled?.(value ?? { type: "agent_settled" }, context);
+        return await handlers.agent_settled(context);
       case "input":
-        return await handlers.input?.(value as EventValues["input"], context);
+        return await handlers.input(args[1], context);
     }
   }
   return {

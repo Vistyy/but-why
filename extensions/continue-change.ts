@@ -135,8 +135,7 @@ type ContinueChangeWidgetFactory = (
 ) => ContinueChangeWidget;
 
 type ContinueChangeToolCallEvent = {
-  readonly toolName: string;
-  readonly input: { readonly command?: string; readonly [key: string]: unknown };
+  readonly input: { readonly command: string };
   readonly [key: string]: unknown;
 };
 
@@ -163,7 +162,7 @@ export type ContinueChangeContext = {
   readonly isIdle: () => boolean;
   readonly ui: {
     readonly notify: (message: string, type?: "info" | "warning" | "error") => void;
-    readonly setWidget: (key: string, content: ContinueChangeWidgetFactory | undefined) => void;
+    readonly setWidget: (content: ContinueChangeWidgetFactory | undefined) => void;
   };
 };
 
@@ -184,10 +183,10 @@ export type ContinueChangeCapabilities = {
       | Promise<ContinueChangeToolCallResult | undefined>,
   ) => void;
   readonly onSessionStart: (
-    handler: (event: object, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (context: ContinueChangeContext) => void | Promise<void>,
   ) => void;
   readonly onSessionShutdown: (
-    handler: (event: object, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (context: ContinueChangeContext) => void | Promise<void>,
   ) => void;
   readonly onAgentEnd: (
     handler: (
@@ -196,7 +195,7 @@ export type ContinueChangeCapabilities = {
     ) => void | Promise<void>,
   ) => void;
   readonly onAgentSettled: (
-    handler: (event: object, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (context: ContinueChangeContext) => void | Promise<void>,
   ) => void;
   readonly onInput: (
     handler: (
@@ -229,9 +228,9 @@ const adaptExtensionContext = (context: ExtensionContext): ContinueChangeContext
   isIdle: () => context.isIdle(),
   ui: {
     notify: (message, type) => context.ui.notify(message, type),
-    setWidget: (key, content) =>
+    setWidget: (content) =>
       context.ui.setWidget(
-        key,
+        watcherWidget,
         content === undefined
           ? undefined
           : (tui, theme) => content(tui, { fg: (color, text) => theme.fg(color, text) }),
@@ -241,18 +240,14 @@ const adaptExtensionContext = (context: ExtensionContext): ContinueChangeContext
 
 const adaptExtensionApi = (api: ExtensionAPI): ContinueChangeCapabilities => ({
   onToolCall: (handler) =>
-    api.on("tool_call", (event, context) =>
-      handler(
-        isToolCallEventType("bash", event)
-          ? { toolName: "bash", input: { command: event.input.command } }
-          : { toolName: event.toolName, input: {} },
-        adaptExtensionContext(context),
-      ),
-    ),
+    api.on("tool_call", (event, context) => {
+      if (!isToolCallEventType("bash", event)) return;
+      return handler({ input: { command: event.input.command } }, adaptExtensionContext(context));
+    }),
   onSessionStart: (handler) =>
-    api.on("session_start", (_event, context) => handler({}, adaptExtensionContext(context))),
+    api.on("session_start", (_event, context) => handler(adaptExtensionContext(context))),
   onSessionShutdown: (handler) =>
-    api.on("session_shutdown", (_event, context) => handler({}, adaptExtensionContext(context))),
+    api.on("session_shutdown", (_event, context) => handler(adaptExtensionContext(context))),
   onAgentEnd: (handler) =>
     api.on("agent_end", (event, context) =>
       handler(
@@ -266,7 +261,7 @@ const adaptExtensionApi = (api: ExtensionAPI): ContinueChangeCapabilities => ({
       ),
     ),
   onAgentSettled: (handler) =>
-    api.on("agent_settled", (_event, context) => handler({}, adaptExtensionContext(context))),
+    api.on("agent_settled", (_event, context) => handler(adaptExtensionContext(context))),
   onInput: (handler) =>
     api.on("input", (event, context) =>
       handler({ text: event.text, source: event.source }, adaptExtensionContext(context)),
@@ -642,7 +637,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
   const showWatcher = (ctx: ContinueChangeContext, display: WatcherDisplay): void => {
     watcherDisplay = display;
     if (changeId === undefined) {
-      ctx.ui.setWidget(watcherWidget, undefined);
+      ctx.ui.setWidget(undefined);
       return;
     }
     const text = (() => {
@@ -673,7 +668,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
           return `◌ Waiting for human review - ${display.pullRequestUrl}`;
       }
     })();
-    ctx.ui.setWidget(watcherWidget, (_tui, theme) => ({
+    ctx.ui.setWidget((_tui, theme) => ({
       render(width) {
         return [
           theme.fg(
@@ -965,7 +960,6 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
   };
 
   pi.onToolCall(async (event, ctx) => {
-    if (event.toolName !== "bash" || event.input.command === undefined) return;
     if (!containsVisibleChangeSubmit(event.input.command)) return;
     if (persisted?.initialSubmissionHandled === true) {
       showValidationStarted(ctx);
@@ -1086,7 +1080,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
 
   const initialize = async (ctx: ContinueChangeContext): Promise<void> => {
     if (changeId === undefined) {
-      ctx.ui.setWidget(watcherWidget, undefined);
+      ctx.ui.setWidget(undefined);
       return;
     }
     if (persisted?.paused) {
@@ -1307,7 +1301,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
     }
   };
 
-  pi.onSessionStart(async (_event, ctx) => {
+  pi.onSessionStart(async (ctx) => {
     changeId ??= findChangeId(ctx.sessionManager.getBranch());
     restoreState(ctx);
     await initialize(ctx);
@@ -1370,7 +1364,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
     }
   });
 
-  pi.onAgentSettled(async (_event, ctx) => {
+  pi.onAgentSettled(async (ctx) => {
     if (persisted?.paused) {
       await continueWatching(ctx, false);
       return;
