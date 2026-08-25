@@ -59,7 +59,7 @@ export const loadChangeSubmit = (input: {
   const programFor = (
     capturePersistence: CandidateCapturePersistence,
     authority: ChangeAuthorityPort,
-    submissionOwner: ChangeSubmissionPort,
+    submissionOwner: Omit<ChangeSubmissionPort, "completeMergedChange">,
     submissionCompletion: ChangeSubmissionPort["completeMergedChange"],
     publication: CandidatePublicationPort,
   ) => {
