@@ -3,10 +3,14 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { commitButWhyConfigAndRecordDefault, runBuiltByWithInput } from "../support/by-cli.js";
+import {
+  commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  runBuiltByWithInput,
+  runByInProcessEffect,
+} from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";
-import { createInitializedRepo } from "../support/initializedRepo.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("compiled Candidate executable stdin and Herdr boundary", () => {
@@ -14,7 +18,9 @@ describe("compiled Candidate executable stdin and Herdr boundary", () => {
     "forwards piped stdin through the compiled Candidate executable to Herdr",
     () =>
       Effect.gen(function* () {
-        const root = createInitializedRepo();
+        const root = createGitRepo();
+        const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+        expect(initialized.status).toBe(0);
         commitButWhyConfigAndRecordDefault(root);
         const home = createTestWorkspace();
         const globalConfigDirectory = join(home, ".config/but-why");
