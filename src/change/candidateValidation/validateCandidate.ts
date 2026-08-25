@@ -421,7 +421,7 @@ const runCandidatePhases = (
   { readonly outcome: CandidateValidationOutcome },
   ValidationToolingFailure | RepositoryStorageError
 > =>
-  Effect.fn("CandidateValidation.runPhases")(function* () {
+  Effect.gen(function* () {
     const changePolicy = authority.changePolicy;
     const agentEnvironment = changePolicy.reviewerConfiguration.agentEnvironment;
     const resourceRoot = activeWorkspace.worktreePath;
@@ -540,7 +540,7 @@ const runCandidatePhases = (
           ...sessionOptions,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });
-  })();
+  }).pipe(Effect.withSpan("CandidateValidation.runPhases"));
 
 const candidateIdentity = (authority: CandidateValidationAuthority) => ({
   candidateId: authority.candidate.id,

@@ -196,12 +196,10 @@ export const completeLinkedChange = (
     if (link !== undefined) {
       const task = yield* operations.getTaskById(sql, link.taskId, idPrefix);
       if (task === undefined) {
-        return yield* Effect.fail(
-          new RepositoryPersistedDataInvalid({
-            operationName: "complete linked Change",
-            cause: new Error("Linked Task was not found"),
-          }),
-        );
+        return yield* new RepositoryPersistedDataInvalid({
+          operationName: "complete linked Change",
+          cause: new Error("Linked Task was not found"),
+        });
       }
       taskDecision = yield* Effect.succeed(decideTaskCompletion(task.state));
       if (!taskDecision.ok) {
@@ -222,21 +220,19 @@ export const readTaskChangeLinkByTaskId = (
   taskId: string,
   idPrefix: string,
 ) =>
-  Effect.flatMap(
+  Effect.map(
     sql<{ readonly taskId: number; readonly changeId: number }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
       WHERE task_id = ${internalTaskId(taskId, idPrefix)}
     `,
     (rows) =>
-      Effect.succeed(
-        rows[0] === undefined
-          ? undefined
-          : {
-              taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
-              changeId: publicChangeId(idPrefix, rows[0].changeId),
-            },
-      ),
+      rows[0] === undefined
+        ? undefined
+        : {
+            taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
+            changeId: publicChangeId(idPrefix, rows[0].changeId),
+          },
   );
 
 const readTaskChangeLinkByChangeId = (
@@ -244,19 +240,17 @@ const readTaskChangeLinkByChangeId = (
   changeId: string,
   idPrefix: string,
 ) =>
-  Effect.flatMap(
+  Effect.map(
     sql<{ readonly taskId: number; readonly changeId: number }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
       WHERE change_id = ${internalChangeId(changeId, idPrefix)}
     `,
     (rows) =>
-      Effect.succeed(
-        rows[0] === undefined
-          ? undefined
-          : {
-              taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
-              changeId: publicChangeId(idPrefix, rows[0].changeId),
-            },
-      ),
+      rows[0] === undefined
+        ? undefined
+        : {
+            taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
+            changeId: publicChangeId(idPrefix, rows[0].changeId),
+          },
   );
