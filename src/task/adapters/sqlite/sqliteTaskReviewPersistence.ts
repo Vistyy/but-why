@@ -147,9 +147,14 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             FROM task_review_agent_invocations
             WHERE task_review_id = ${reviewId}
           `;
+          const advice = yield* sql<{ readonly invocationId: number }>`
+            SELECT agent_invocation_id AS invocationId
+            FROM task_review_simplification_advice
+            WHERE task_review_id = ${reviewId} AND agent_invocation_id IS NOT NULL
+          `;
           yield* settleUnsettledAgentInvocations(
             sql,
-            linked.map(({ invocationId }) => invocationId),
+            [...linked, ...advice].map(({ invocationId }) => invocationId),
             now,
             `Task Review abandonment confirmed that the reviewer process stopped. ${reason}`,
           );
