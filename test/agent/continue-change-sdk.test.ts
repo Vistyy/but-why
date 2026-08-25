@@ -100,7 +100,7 @@ const continuationState = (session: { readonly sessionManager: SessionManager })
     );
   const latest = entries.at(-1);
   const data = latest?.type === "custom" ? latest.data : undefined;
-  return typeof data === "object" && data !== null && !Array.isArray(data)
+  return isRecord(data)
     ? (data as Record<string, unknown> & { readonly paused?: boolean })
     : undefined;
 };
