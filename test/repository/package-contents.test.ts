@@ -219,7 +219,6 @@ describe("release package boundary", () => {
       "docs/public/skills/but-why/references/implement-change.md",
       "docs/public/skills/but-why/references/implementation-verification.md",
       "docs/public/skills/but-why/references/interactive-session.md",
-      "docs/public/skills/but-why/references/operator-workflow.md",
       "docs/public/skills/but-why/references/reconcile-change.md",
       "docs/public/skills/but-why/references/start-work.md",
       "docs/public/skills/but-why/references/task-authoring.md",
