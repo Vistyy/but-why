@@ -4,14 +4,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
-import type { RuntimeCase } from "./continue-change-sdk-helper.js";
+import {
+  changeId,
+  maxRuntimeCaseBytes,
+  runtimeCaseModes,
+  type RuntimeCase,
+} from "./continue-change-sdk-protocol.js";
 
-const changeId = "BY-C1";
 const helperPath = join(repoRoot, "test/agent/continue-change-sdk-helper.ts");
 const tsxLoader = join(repoRoot, "node_modules/tsx/dist/loader.mjs");
 const helperProcessTimeoutMs = 10_000;
-const maxRuntimeCaseBytes = 1_000_000;
-
 const snapshot = {
   change: {
     state: "closed",
@@ -80,7 +82,13 @@ const runRuntimeCase = (blocked: boolean): RuntimeCase => {
   try {
     const result = runTestProcess(
       process.execPath,
-      ["--import", tsxLoader, helperPath, repoRoot, blocked ? "blocked" : "normal"],
+      [
+        "--import",
+        tsxLoader,
+        helperPath,
+        repoRoot,
+        blocked ? runtimeCaseModes.blocked : runtimeCaseModes.normal,
+      ],
       {
         cwd: directory,
         env: { PATH: `${byDirectory}:${process.env["PATH"] ?? ""}` },

@@ -7,33 +7,23 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-
-export type SessionEvent = {
-  readonly type: string;
-  readonly isError?: boolean;
-  readonly [key: string]: unknown;
-};
-
-export type RuntimeCase = {
-  readonly blocked: boolean;
-  readonly providerCalls: number;
-  readonly events: readonly SessionEvent[];
-  readonly messages: readonly unknown[];
-  readonly idle: boolean;
-  readonly continuationState: (Record<string, unknown> & { readonly paused?: boolean }) | undefined;
-  readonly extensionErrors: readonly unknown[];
-};
+import {
+  changeId,
+  maxRuntimeCaseBytes,
+  runtimeCaseModes,
+  type RuntimeCase,
+  type SessionEvent,
+} from "./continue-change-sdk-protocol.js";
 
 const [repoRoot, blockedArgument] = process.argv.slice(2);
 if (repoRoot === undefined || blockedArgument === undefined) {
   throw new Error("Expected repository root and blocked runtime-case argument.");
 }
-const blocked = blockedArgument === "blocked";
-if (!blocked && blockedArgument !== "normal") {
+const blocked = blockedArgument === runtimeCaseModes.blocked;
+if (!blocked && blockedArgument !== runtimeCaseModes.normal) {
   throw new Error(`Unknown runtime-case argument: ${blockedArgument}`);
 }
 
-const changeId = "BY-C1";
 const extensionPath = join(repoRoot, "extensions/continue-change.ts");
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -127,7 +117,8 @@ const runRuntimeCase = async (): Promise<RuntimeCase> => {
 const main = async (): Promise<void> => {
   const result = await runRuntimeCase();
   const output = JSON.stringify(result);
-  if (output.length > 1_000_000) throw new Error("Runtime case result exceeded the output bound.");
+  if (output.length > maxRuntimeCaseBytes)
+    throw new Error("Runtime case result exceeded the output bound.");
   process.stdout.write(`${output}\n`);
 };
 
