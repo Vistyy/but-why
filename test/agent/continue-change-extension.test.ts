@@ -523,11 +523,7 @@ describe("packaged Change Implement continuation extension", () => {
 
   it("stops when blocker history is active even if the Change snapshot is open", async () => {
     const harness = createHarness();
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [],
-      active: { id: "blocker-1" },
-    });
+    harness.setBlockerHistory(validTestBlockerHistory());
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     await harness.emit("agent_settled");
@@ -540,11 +536,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
       await harness.emit("turn_end");
@@ -558,11 +550,7 @@ describe("packaged Change Implement continuation extension", () => {
       expect(harness.entries.at(-1)).toMatchObject({ data: { paused: false } });
       expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
 
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Continue safely." }],
-        active: null,
-      });
+      harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
       await vi.advanceTimersByTimeAsync(30_000);
       expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
       await vi.advanceTimersByTimeAsync(60_000);
@@ -605,11 +593,7 @@ describe("packaged Change Implement continuation extension", () => {
 
   it("handles an existing Resolution when a new bound session starts unpaused", async () => {
     const harness = createHarness();
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
-      active: null,
-    });
+    harness.setBlockerHistory(validTestBlockerHistory("Use the approved design."));
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
@@ -623,22 +607,14 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       const initialInspectionCalls = harness.getExecCallCount();
 
       await vi.advanceTimersByTimeAsync(29_999);
       expect(harness.getExecCallCount()).toBe(initialInspectionCalls);
 
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Use the approved design." }],
-        active: null,
-      });
+      harness.setBlockerHistory(validTestBlockerHistory("Use the approved design."));
       await vi.advanceTimersByTimeAsync(1);
 
       expect(harness.sent).toEqual([expect.stringContaining("Use the approved design.")]);
@@ -655,11 +631,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
       harness.setInspectionFails(true);
@@ -668,11 +640,7 @@ describe("packaged Change Implement continuation extension", () => {
       expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
 
       harness.setInspectionFails(false);
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Continue safely." }],
-        active: null,
-      });
+      harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
       await vi.advanceTimersByTimeAsync(30_000);
       expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
     } finally {
@@ -684,20 +652,12 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       await harness.runCommand("pause-change");
       const pausedInspectionCalls = harness.getExecCallCount();
 
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Continue safely." }],
-        active: null,
-      });
+      harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
       await vi.advanceTimersByTimeAsync(60_000);
       expect(harness.getExecCallCount()).toBe(pausedInspectionCalls);
       expect(harness.sent).toEqual([]);
@@ -713,11 +673,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       harness.blockInspection();
 
@@ -740,11 +696,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       const initialInspectionCalls = harness.getExecCallCount();
 
@@ -754,19 +706,11 @@ describe("packaged Change Implement continuation extension", () => {
       expect(harness.getExecCallCount()).toBe(initialInspectionCalls);
 
       const inFlight = createHarness();
-      inFlight.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      inFlight.setBlockerHistory(validTestBlockerHistory());
       await inFlight.emit("session_start", { type: "session_start", reason: "startup" });
       inFlight.blockInspection();
       await vi.advanceTimersByTimeAsync(30_000);
-      inFlight.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Do not deliver after shutdown." }],
-        active: null,
-      });
+      inFlight.setBlockerHistory(validTestBlockerHistory("Do not deliver after shutdown."));
       await inFlight.emit("session_shutdown");
       await Promise.resolve();
       expect(inFlight.getAbortedExecCount()).toBeGreaterThan(0);
@@ -783,11 +727,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
     harness.setInspectionFails(false);
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ blockerId: 1, content: "Continue safely." }],
-      active: null,
-    });
+    harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
     await harness.emit("agent_settled");
 
     expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
@@ -807,11 +747,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
     harness.setSnapshot(snapshot({ findingCount: 1 }));
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
-      active: null,
-    });
+    harness.setBlockerHistory(validTestBlockerHistory("Use the approved design."));
     await harness.emit("agent_settled");
 
     expect(harness.sent).toHaveLength(1);
@@ -974,11 +910,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
       harness.setSnapshot(
