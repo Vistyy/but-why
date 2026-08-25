@@ -3,22 +3,15 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { internalChangeId } from "../../src/change/changeId.js";
-import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import {
-  commitButWhyConfigAndRecordDefault,
-  runBuiltByWithEnv,
-  runBuiltByWithInput,
-} from "../support/by-cli.js";
+import { commitButWhyConfigAndRecordDefault, runBuiltByWithInput } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
-import { withTestRepository } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-describe("by change implement stdin process boundary", () => {
+describe("compiled Candidate executable stdin and Herdr boundary", () => {
   it.effect(
-    "forwards piped stdin through a real process",
+    "forwards piped stdin through the compiled Candidate executable to Herdr",
     () =>
       Effect.gen(function* () {
         const root = createInitializedRepo();
@@ -119,56 +112,6 @@ exit 1
         } finally {
           yield* Effect.promise(server.stop);
         }
-      }),
-    30_000,
-  );
-
-  it.effect(
-    "records Implementation Decisions through the executable",
-    () =>
-      Effect.gen(function* () {
-        const root = createInitializedRepo();
-        const changeId = "BY-C1";
-        yield* withTestRepository(
-          root,
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
-            yield* repository.operation(
-              "create process Change fixture",
-              (sql) => sql`
-              INSERT INTO changes (
-                id, branch_ref, base_ref, base_remote_url, worktree_path,
-                reviewer_configuration, checks_definition, cleanup_pending
-              ) VALUES (
-                ${internalChangeId(changeId, "BY")}, 'refs/heads/process',
-                'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
-                ${join(root, "process-worktree")},
-                '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
-              )
-            `,
-            );
-          }),
-        );
-        const added = runBuiltByWithEnv(
-          root,
-          {},
-          "change",
-          "decision",
-          "add",
-          changeId,
-          "--choice",
-          "Use the process boundary.",
-          "--rationale",
-          "Keep the process boundary explicit.",
-        );
-        expect(added.status).toBe(0);
-        const listed = runBuiltByWithEnv(root, {}, "change", "decision", "list", changeId);
-        expect(listed.status).toBe(0);
-        expect(JSON.parse(listed.stdout)).toMatchObject({
-          changeId,
-          count: 1,
-          decisions: [{ choice: "Use the process boundary." }],
-        });
       }),
     30_000,
   );

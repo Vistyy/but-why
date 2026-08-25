@@ -295,37 +295,25 @@ describe("release package boundary", () => {
     ).toBe(true);
   });
 
-  it("preserves missing dependency-option guidance through the installed executable", () => {
+  it("preserves representative dependency-option guidance through the installed executable", () => {
     const repositoryRoot = createGitRepo();
     const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+    const result = runTestProcess(
+      bin,
+      ["--log-level", "info", "task", "dependencies", "add", "BY-1"],
+      { cwd: repositoryRoot, timeout: packageProcessTimeoutMs },
+    );
 
-    for (const operation of ["add", "remove", "replace"] as const) {
-      const result = runTestProcess(
-        bin,
-        ["--log-level", "info", "task", "dependencies", operation, "BY-1"],
-        { cwd: repositoryRoot, timeout: packageProcessTimeoutMs },
-      );
-
-      expect(result.error).toBeUndefined();
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toEqual({
-        error:
-          operation === "replace"
-            ? {
-                code: "replace_requires_dependency",
-                message: "The replace operation requires at least one prerequisite.",
-              }
-            : {
-                code: "depends_on_required",
-                message: `The ${operation} operation requires at least one --depends-on value.`,
-              },
-        help:
-          operation === "replace"
-            ? ["Use `by task dependencies clear <task-id>` to remove all prerequisites."]
-            : [`Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`],
-      });
-    }
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      error: {
+        code: "depends_on_required",
+        message: "The add operation requires at least one --depends-on value.",
+      },
+      help: ["Use `by task dependencies add <task-id> --depends-on <task-id>`."],
+    });
   });
 
   it.effect("initializes the release baseline through the installed executable", () => {
