@@ -331,7 +331,10 @@ it.effect("does not resume a continuation marked unusable despite its transcript
   Effect.gen(function* () {
     const root = yield* initializedRepository();
     const transcript = join(root, "unusable-continuation.jsonl");
-    writeFileSync(transcript, "known transcript\n");
+    writeFileSync(
+      transcript,
+      `${JSON.stringify({ type: "session", id: "by-agent-1", cwd: root })}\n`,
+    );
     yield* withPersistence(root, (persistence) =>
       Effect.gen(function* () {
         const result = yield* executeAgentSession({
@@ -417,6 +420,10 @@ it.effect("returns the terminal retry result with ordered Invocation evidence", 
       Effect.gen(function* () {
         const prompts: string[] = [];
         const transcript = join(root, "retry.jsonl");
+        writeFileSync(
+          transcript,
+          `${JSON.stringify({ type: "session", id: "by-agent-1", cwd: root })}\n`,
+        );
         const result = yield* executeAgentSession({
           configuration,
           agentPersistence: persistence,

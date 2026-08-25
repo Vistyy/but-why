@@ -20,6 +20,19 @@ export const buildTaskSimplificationAdviceSystemPrompt = (builtInInstructions: s
     "Use noSafeSimplificationReason as null when options are present, and a non-blank explanation when options is empty.",
   ].join("\n\n");
 
+export const buildTaskSimplificationAdviceOutputCorrectionPrompt = (failure: {
+  readonly message: string;
+}): string =>
+  [
+    "Your Underengineer output did not satisfy the required Task Simplification Advice contract.",
+    failure.message,
+    `Return only one JSON object inside <${reviewerOutputTag}>...</${reviewerOutputTag}> with exactly this complete form:`,
+    '{"practicalCoreOutcome":"...","options":[],"noSafeSimplificationReason":"..."}',
+    "options must contain zero, one, or two objects.",
+    "Each option must contain exactly retainedOutcome, removedComplexity, lostBehavior, adverseConsequence, repositoryEvidence, and materialUncertainty.",
+    "Use a non-blank noSafeSimplificationReason when options is empty, or null when options are present.",
+  ].join("\n");
+
 export const buildTaskSimplificationAdvicePrompt = (input: {
   readonly proposal: {
     readonly title: string;
