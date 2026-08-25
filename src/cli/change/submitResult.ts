@@ -165,7 +165,7 @@ const renderValidationFailure = (result: SubmitFailureResult): CliResult | undef
         change: structuredValue(result.change),
       },
       help: [
-        "Restore access to valid repository state, inspect the blocker with `by change blocker list <change-id>`, then retry Change Submit.",
+        `Restore access to valid repository state, inspect the blocker with \`by change blocker list ${result.changeId}\`, then retry \`by change submit ${result.changeId}\`.`,
       ],
     });
   }

@@ -232,7 +232,7 @@ const cases = {
       "stall_detection_blocker_failed",
       "Stall Detection could not persist its Implementation Blocker.",
       [
-        "Restore access to valid repository state, inspect the blocker with `by change blocker list <change-id>`, then retry Change Submit.",
+        "Restore access to valid repository state, inspect the blocker with `by change blocker list change-1`, then retry `by change submit change-1`.",
       ],
       {
         changeId,

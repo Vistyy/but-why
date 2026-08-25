@@ -39,3 +39,23 @@ export type RepositoryStorageError =
   | RepositorySqlOperationFailed
   | RepositoryMigrationFailed
   | RepositoryPersistedDataInvalid;
+
+export type RepositoryStorageErrorPresentationContext = {
+  readonly kind: "stall_detection_blocker_observation";
+  readonly changeId: string;
+  readonly guidance: string;
+};
+
+const presentationContexts = new WeakMap<object, RepositoryStorageErrorPresentationContext>();
+
+export const withRepositoryStorageErrorPresentationContext = (
+  error: RepositoryStorageError,
+  context: RepositoryStorageErrorPresentationContext,
+): RepositoryStorageError => {
+  presentationContexts.set(error, context);
+  return error;
+};
+
+export const repositoryStorageErrorPresentationContext = (
+  error: RepositoryStorageError,
+): RepositoryStorageErrorPresentationContext | undefined => presentationContexts.get(error);

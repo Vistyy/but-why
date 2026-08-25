@@ -1,5 +1,8 @@
 import { type StructuredErrorInput, structuredError } from "./cliError.js";
-import type { RepositoryStorageError } from "./contracts/repositoryStorageError.js";
+import {
+  type RepositoryStorageError,
+  repositoryStorageErrorPresentationContext,
+} from "./contracts/repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { StructuredObject } from "./output/structured.js";
 import type { ResolveLocalRepositoryError } from "./repositoryRuntime/repositoryContext.js";
@@ -97,16 +100,35 @@ export const repositoryStorageErrorResult = (
   error: RepositoryStorageError,
   idPrefix?: string,
 ): CliResult => {
-  switch (error._tag) {
-    case "RepositoryIdentityConflict":
-      return sharedStateIdentityConflict();
-    case "RepositoryIdPrefixConflict":
-      return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
-    case "RepositoryPersistedDataInvalid":
-      return persistedDataInvalid(error.operationName);
-    default:
-      return stateStoreUnavailable(idPrefix);
-  }
+  const result = (() => {
+    switch (error._tag) {
+      case "RepositoryIdentityConflict":
+        return sharedStateIdentityConflict();
+      case "RepositoryIdPrefixConflict":
+        return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
+      case "RepositoryPersistedDataInvalid":
+        return persistedDataInvalid(error.operationName);
+      default:
+        return stateStoreUnavailable(idPrefix);
+    }
+  })();
+  const context = repositoryStorageErrorPresentationContext(error);
+  if (context === undefined) return result;
+  const output = result.stdout as unknown as {
+    readonly error: StructuredObject;
+    readonly help: readonly string[];
+  };
+  return {
+    ...result,
+    stdout: {
+      error: {
+        ...output.error,
+        changeId: context.changeId,
+        storageError: error._tag,
+      },
+      help: [...output.help, context.guidance],
+    },
+  };
 };
 
 const persistedDataInvalid = (operation: string): CliResult =>

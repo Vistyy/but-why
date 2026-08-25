@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import type { ExecutionLock } from "../contracts/executionLock.js";
-import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import {
+  type RepositoryStorageError,
+  withRepositoryStorageErrorPresentationContext,
+} from "../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../submission/submissionProgress.js";
 import type {
   RemoteChangeBaseError,
@@ -596,7 +599,14 @@ const raiseStallDetectionBlocker = (
     }
 
     const observed = yield* Effect.either(dependencies.persistence.getChangeById(change.id));
-    if (observed._tag === "Left") return yield* observed.left;
+    if (observed._tag === "Left") {
+      const error = withRepositoryStorageErrorPresentationContext(observed.left, {
+        kind: "stall_detection_blocker_observation",
+        changeId: change.id,
+        guidance: `Restore access to valid repository state, inspect the blocker with \`by change blocker list ${change.id}\`, then retry \`by change submit ${change.id}\`.`,
+      });
+      return yield* error;
+    }
     if (observed.right?.activeBlocker !== null && observed.right !== undefined) {
       return { ok: false, code: "change_blocked" } as const;
     }
