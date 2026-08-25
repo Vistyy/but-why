@@ -128,24 +128,21 @@ export const prepareExistingChange = (
       prepare,
       exec: executor,
       cwd: change.worktreePath,
-    })
-      .pipe(
-        Effect.mapError(
-          (error): ChangePrepareFailure => ({
-            command: prepare.command,
-            exitCode: 1,
-            timedOut: false,
-            stdout: "",
-            stderr: error instanceof Error ? error.message : String(error),
-          }),
-        ),
-      )
-      .pipe(
-        Effect.match({
-          onFailure: (failure) => ({ ok: false as const, failure }),
-          onSuccess: (result) => ({ ok: true as const, result }),
+    }).pipe(
+      Effect.mapError(
+        (error): ChangePrepareFailure => ({
+          command: prepare.command,
+          exitCode: 1,
+          timedOut: false,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
         }),
-      );
+      ),
+      Effect.match({
+        onFailure: (failure) => ({ ok: false as const, failure }),
+        onSuccess: (result) => ({ ok: true as const, result }),
+      }),
+    );
 
     const failure =
       outcome.ok && outcome.result.exitCode === 0
