@@ -209,12 +209,10 @@ const loadBlockerMutation = <Input extends { readonly changeId: string }>(
         if (!result.ok) return result;
         const change = yield* changes.getChangeById(command.changeId);
         if (change === undefined) {
-          return yield* Effect.fail(
-            new RepositoryPersistedDataInvalid({
-              operationName: "construct Implementation Blocker CLI output",
-              cause: new Error("Change disappeared"),
-            }),
-          );
+          return yield* new RepositoryPersistedDataInvalid({
+            operationName: "construct Implementation Blocker CLI output",
+            cause: new Error("Change disappeared"),
+          });
         }
         return { ...result, change };
       }),

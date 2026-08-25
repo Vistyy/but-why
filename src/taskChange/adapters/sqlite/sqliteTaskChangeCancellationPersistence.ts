@@ -201,11 +201,11 @@ const readTaskForCancellation = (
       );
 
 const linkedTask = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
-  Effect.flatMap(
+  Effect.map(
     sql<{ readonly taskId: number }>`
       SELECT task_id AS taskId FROM task_change_links WHERE change_id = ${internalChangeId(changeId, idPrefix)}
     `,
-    (rows) => Effect.succeed(rows[0]),
+    (rows) => rows[0],
   );
 
 const invalidData = (operationName: string, message: string) =>
