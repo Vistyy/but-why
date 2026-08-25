@@ -6,6 +6,7 @@ import type { StructuredValue } from "../../../output/structured.js";
 import type { TaskReviewRepositorySubmitResult } from "../../../task/composition/loadTaskReviewUseCases.js";
 import { agentInvocationView } from "../../agentInvocationView.js";
 import { type TaskCommandEnvironment, withTaskReviewSubmission } from "../taskCliSupport.js";
+import { taskReviewProfileView } from "./taskReviewView.js";
 export type TaskSubmitCommand = {
   readonly taskId: string;
 };
@@ -44,35 +45,7 @@ const adviceAttemptView = (
     attempt.configuration === null
       ? null
       : {
-          profile: {
-            agentProfile: attempt.configuration.profile.agentProfile,
-            scope: attempt.configuration.profile.scope,
-            profile: {
-              agentRuntime: attempt.configuration.profile.profile.agentRuntime,
-              runtimeConfig: {
-                model: attempt.configuration.profile.profile.runtimeConfig.model,
-                ...(attempt.configuration.profile.profile.runtimeConfig.thinking === undefined
-                  ? {}
-                  : { thinking: attempt.configuration.profile.profile.runtimeConfig.thinking }),
-                ...(attempt.configuration.profile.profile.runtimeConfig.extensions === undefined
-                  ? {}
-                  : { extensions: attempt.configuration.profile.profile.runtimeConfig.extensions }),
-                ...(attempt.configuration.profile.profile.runtimeConfig.skills === undefined
-                  ? {}
-                  : { skills: attempt.configuration.profile.profile.runtimeConfig.skills }),
-                ...(attempt.configuration.profile.profile.runtimeConfig.tools === undefined
-                  ? {}
-                  : { tools: attempt.configuration.profile.profile.runtimeConfig.tools }),
-                ...(attempt.configuration.profile.profile.runtimeConfig.contextFileDiscovery ===
-                undefined
-                  ? {}
-                  : {
-                      contextFileDiscovery:
-                        attempt.configuration.profile.profile.runtimeConfig.contextFileDiscovery,
-                    }),
-              },
-            },
-          },
+          profile: taskReviewProfileView(attempt.configuration.profile),
           builtInInstructions: attempt.configuration.builtInInstructions,
         },
   agentSession: {

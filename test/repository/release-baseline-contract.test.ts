@@ -52,7 +52,6 @@ const expectedColumns = {
     "cleanup_blocking_reason:TEXT:0:0",
   ],
   task_review_agent_invocations: ["task_review_id:INTEGER:1:1", "agent_invocation_id:INTEGER:1:2"],
-  task_simplification_advice: ["task_id:INTEGER:0:1", "review_id:INTEGER:1:0", "advice:TEXT:1:0"],
   task_review_simplification_advice: [
     "task_review_id:INTEGER:0:1",
     "outcome:TEXT:1:0",
@@ -60,10 +59,7 @@ const expectedColumns = {
     "unavailable:TEXT:0:0",
     "configuration:TEXT:0:0",
     "agent_session_id:INTEGER:0:0",
-  ],
-  task_review_simplification_advice_invocations: [
-    "task_review_id:INTEGER:1:1",
-    "agent_invocation_id:INTEGER:1:2",
+    "agent_invocation_id:INTEGER:0:0",
   ],
   changes: [
     "id:INTEGER:0:1",
@@ -149,13 +145,9 @@ const expectedForeignKeys = {
     "agent_invocation_id->agent_invocations.id",
     "task_review_id->task_reviews.id",
   ],
-  task_simplification_advice: ["review_id->task_reviews.id", "task_id->tasks.id"],
   task_review_simplification_advice: [
-    "agent_session_id->agent_sessions.id",
-    "task_review_id->task_reviews.id",
-  ],
-  task_review_simplification_advice_invocations: [
     "agent_invocation_id->agent_invocations.id",
+    "agent_session_id->agent_sessions.id",
     "task_review_id->task_reviews.id",
   ],
   task_change_links: ["change_id->changes.id", "task_id->tasks.id"],
@@ -284,12 +276,7 @@ const expectedImplicitUniqueIndexes = {
   task_change_links: ["u:change_id"],
   task_dependencies: ["pk:dependent_task_id,prerequisite_task_id"],
   task_review_agent_invocations: ["pk:task_review_id,agent_invocation_id", "u:agent_invocation_id"],
-  task_simplification_advice: ["u:review_id"],
-  task_review_simplification_advice: ["u:agent_session_id"],
-  task_review_simplification_advice_invocations: [
-    "pk:task_review_id,agent_invocation_id",
-    "u:agent_invocation_id",
-  ],
+  task_review_simplification_advice: ["u:agent_invocation_id", "u:agent_session_id"],
   tasks: ["u:reviewer_agent_session_id"],
   validation_phase_agent_invocations: [
     "pk:validation_run_id,phase,producer,agent_invocation_id",
@@ -325,7 +312,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       const tables = objects.filter((object) => object.type === "table");
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
-      expect(tables).toHaveLength(21);
+      expect(tables).toHaveLength(19);
 
       const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
         sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),

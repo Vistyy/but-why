@@ -741,8 +741,11 @@ const readCompletedSimplificationAdvice = (
 ) =>
   Effect.flatMap(
     sql<{ readonly advice: string }>`
-      SELECT advice FROM task_simplification_advice
-      WHERE task_id = ${internalTaskId(taskId, idPrefix)}
+      SELECT advice FROM task_review_simplification_advice AS advice
+      JOIN task_reviews AS review ON review.id = advice.task_review_id
+      WHERE review.task_id = ${internalTaskId(taskId, idPrefix)}
+        AND advice.outcome = 'completed'
+      ORDER BY review.id ASC LIMIT 1
     `,
     (rows) => {
       const row = rows[0];
@@ -805,12 +808,8 @@ const linkSimplificationAdviceInvocation = (
     }
     yield* sql`
       UPDATE task_review_simplification_advice
-      SET agent_session_id = ${session.agentSessionId}
+      SET agent_session_id = ${session.agentSessionId}, agent_invocation_id = ${invocationId}
       WHERE task_review_id = ${reviewId} AND agent_session_id IS NULL
-    `;
-    yield* sql`
-      INSERT INTO task_review_simplification_advice_invocations (task_review_id, agent_invocation_id)
-      VALUES (${reviewId}, ${invocationId})
     `;
   }).pipe(Effect.asVoid);
 
@@ -831,11 +830,6 @@ const settleSimplificationAdvice = (
     if (row[0] === undefined)
       return yield* invalid("settle Task Simplification Advice", "Review missing");
     if (input.complete && input.advice !== undefined) {
-      yield* sql`
-        INSERT INTO task_simplification_advice (task_id, review_id, advice)
-        VALUES (${row[0].taskId}, ${input.reviewId}, ${JSON.stringify(input.advice)})
-        ON CONFLICT(task_id) DO NOTHING
-      `;
       yield* sql`
         UPDATE task_review_simplification_advice
         SET outcome = 'completed', advice = ${JSON.stringify(input.advice)}, unavailable = NULL
@@ -870,26 +864,30 @@ const readSimplificationAdviceAttempt = (
       readonly unavailable: string | null;
       readonly configuration: string | null;
       readonly agentSessionId: number | null;
+      readonly agentInvocationId: number | null;
     }>`
-      SELECT outcome, advice, unavailable, configuration, agent_session_id AS agentSessionId
+      SELECT outcome, advice, unavailable, configuration,
+        agent_session_id AS agentSessionId, agent_invocation_id AS agentInvocationId
       FROM task_review_simplification_advice WHERE task_review_id = ${reviewId}
     `;
     const attempt = attempts[0];
     if (attempt === undefined) return null;
-    const invocations = yield* sql<AdviceInvocationRow>`
-      SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
-        invocation.continuation_id AS continuationId, invocation.created_at AS createdAt,
-        invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
-        invocation.input_tokens AS inputTokens, invocation.cached_input_tokens AS cachedInputTokens,
-        invocation.cache_write_tokens AS cacheWriteTokens, invocation.output_tokens AS outputTokens,
-        invocation.total_tokens AS totalTokens, continuation.harness, continuation.provider,
-        continuation.model, continuation.thinking, continuation.transcript_path AS transcriptPath,
-        continuation.unusable_reason AS unusableReason
-      FROM task_review_simplification_advice_invocations AS link
-      JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
-      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE link.task_review_id = ${reviewId} ORDER BY invocation.id
-    `;
+    const invocations =
+      attempt.agentInvocationId === null
+        ? []
+        : yield* sql<AdviceInvocationRow>`
+            SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
+              invocation.continuation_id AS continuationId, invocation.created_at AS createdAt,
+              invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
+              invocation.input_tokens AS inputTokens, invocation.cached_input_tokens AS cachedInputTokens,
+              invocation.cache_write_tokens AS cacheWriteTokens, invocation.output_tokens AS outputTokens,
+              invocation.total_tokens AS totalTokens, continuation.harness, continuation.provider,
+              continuation.model, continuation.thinking, continuation.transcript_path AS transcriptPath,
+              continuation.unusable_reason AS unusableReason
+            FROM agent_invocations AS invocation
+            JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+            WHERE invocation.id = ${attempt.agentInvocationId}
+          `;
     return yield* Effect.try({
       try: () => ({
         state: attempt.outcome as "completed" | "unavailable",
