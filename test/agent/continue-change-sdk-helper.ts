@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import {
@@ -54,9 +53,8 @@ const continuationState = (session: { readonly sessionManager: SessionManager })
 };
 
 const runRuntimeCase = async (): Promise<RuntimeCase> => {
-  const directory = mkdtempSync(join(tmpdir(), "but-why-pi-sdk-"));
-  const agentDirectory = join(directory, "agent");
-  mkdirSync(agentDirectory);
+  const agentDirectory = join(process.cwd(), "agent");
+  mkdirSync(agentDirectory, { recursive: true });
   const faux = fauxProvider({ provider: "but-why-test" });
   faux.setResponses([
     fauxAssistantMessage(
@@ -123,7 +121,6 @@ const runRuntimeCase = async (): Promise<RuntimeCase> => {
     unsubscribe?.();
     session?.dispose();
     faux.setResponses([]);
-    rmSync(directory, { recursive: true, force: true });
   }
 };
 
