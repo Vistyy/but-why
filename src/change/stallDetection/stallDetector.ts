@@ -60,9 +60,14 @@ const responseSchema = Schema.Struct({
   reason: Schema.String.pipe(Schema.filter((value) => value.trim().length > 0)),
 });
 
-const decodeResponse = Schema.decodeUnknownSync(responseSchema, {
-  onExcessProperty: "error",
-});
+const decodeResponse = (value: unknown, policy: StallDetectorPolicy) => {
+  if (policy.responseContract !== stallDetectorResponseContract) {
+    throw new Error("The frozen Stall Detector response contract is invalid.");
+  }
+  return Schema.decodeUnknownSync(responseSchema, {
+    onExcessProperty: "error",
+  })(value);
+};
 
 export const makePiAiStallDetector = (): StallDetector => ({
   judge: (input) =>
@@ -110,7 +115,7 @@ export const makePiAiStallDetector = (): StallDetector => ({
               )
               .map((part) => part.text)
               .join("");
-            const decoded = decodeResponse(JSON.parse(text) as unknown);
+            const decoded = decodeResponse(JSON.parse(text) as unknown, input.policy);
             return { kind: "decision" as const, ...decoded };
           },
           catch: (cause) => new StallDetectorModelFailure({ cause }),
