@@ -1,7 +1,12 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { commitButWhyConfigAndRecordDefault, createGitRepo, repoRoot } from "../support/by-cli.js";
+import {
+  builtByExecutable,
+  commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  repoRoot,
+} from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 
 const processTimeoutMs = 30_000;
@@ -19,7 +24,7 @@ const decodeEventObjects = (stdout: string): readonly Record<string, unknown>[] 
 
 const eventType = (event: Record<string, unknown>): unknown => Reflect.get(event, "type");
 
-const runPi = (worktreePath: string, callsPath: string, sessionPath: string) =>
+const runPi = (worktreePath: string, callsPath: string, sessionPath: string, path: string) =>
   runTestProcess(
     process.execPath,
     [
@@ -47,7 +52,7 @@ const runPi = (worktreePath: string, callsPath: string, sessionPath: string) =>
     ],
     {
       cwd: worktreePath,
-      env: { PI_TEST_PROVIDER_CALLS: callsPath },
+      env: { PI_TEST_PROVIDER_CALLS: callsPath, PATH: path },
       timeout: processTimeoutMs,
     },
   );
@@ -56,17 +61,22 @@ describe("packaged Change Implement continuation extension process boundary", ()
   it("aborts a real Pi turn after its tool batch when the installed Change is blocked", () => {
     const repositoryRoot = createGitRepo();
     const callsPath = join(repositoryRoot, "provider-calls.log");
-    const initialized = runTestProcess("by", ["init", "--id-prefix", "BY"], {
-      cwd: repositoryRoot,
-      timeout: processTimeoutMs,
-    });
+    const byDirectory = join(repositoryRoot, "by-bin");
+    mkdirSync(byDirectory);
+    symlinkSync(builtByExecutable(), join(byDirectory, "by"));
+    const inheritedPath = Reflect.get(process.env, "PATH");
+    const path = `${byDirectory}:${typeof inheritedPath === "string" ? inheritedPath : ""}`;
+    const runBy = (cwd: string, args: readonly string[], input?: string) =>
+      runTestProcess(process.execPath, [builtByExecutable(), ...args], {
+        cwd,
+        ...(input === undefined ? {} : { input }),
+        timeout: processTimeoutMs,
+      });
+    const initialized = runBy(repositoryRoot, ["init", "--id-prefix", "BY"]);
     expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
     commitButWhyConfigAndRecordDefault(repositoryRoot);
 
-    const started = runTestProcess("by", ["change", "start"], {
-      cwd: repositoryRoot,
-      timeout: processTimeoutMs,
-    });
+    const started = runBy(repositoryRoot, ["change", "start"]);
     expect(started.status, started.stderr || started.stdout).toBe(0);
     const startedValue: unknown = JSON.parse(started.stdout);
     if (typeof startedValue !== "object" || startedValue === null || Array.isArray(startedValue)) {
@@ -80,6 +90,7 @@ describe("packaged Change Implement continuation extension process boundary", ()
       worktreePath,
       normalCallsPath,
       join(repositoryRoot, "normal-session.jsonl"),
+      path,
     );
     expect(normalRun.status, normalRun.stderr || normalRun.stdout).toBe(0);
     const normalEvents = decodeEventObjects(normalRun.stdout);
@@ -88,16 +99,15 @@ describe("packaged Change Implement continuation extension process boundary", ()
     );
     expect(readFileSync(normalCallsPath, "utf8").trim().split("\n").length).toBeGreaterThan(1);
 
-    const blocker = runTestProcess("by", ["change", "blocker", "raise", "BY-C1", "--file", "-"], {
-      cwd: worktreePath,
-      input:
-        "The Operator must approve the implementation direction.\nContinuing without that decision is unsafe.\n",
-      timeout: processTimeoutMs,
-    });
+    const blocker = runBy(
+      worktreePath,
+      ["change", "blocker", "raise", "BY-C1", "--file", "-"],
+      "The Operator must approve the implementation direction.\nContinuing without that decision is unsafe.\n",
+    );
     expect(blocker.status, blocker.stderr || blocker.stdout).toBe(0);
 
     const blockedSessionPath = join(repositoryRoot, "blocked-session.jsonl");
-    const run = runPi(worktreePath, callsPath, blockedSessionPath);
+    const run = runPi(worktreePath, callsPath, blockedSessionPath, path);
     expect(run.status, run.stderr || run.stdout).toBe(0);
     const events = decodeEventObjects(run.stdout);
     expect(events.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(1);
