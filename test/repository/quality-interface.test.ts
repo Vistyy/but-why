@@ -316,293 +316,257 @@ afterEach(() => {
   }
 });
 
-describe("quality interface", () => {
-  test(
-    "waits before starting the quality workload",
-    async () => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const staticFile = join(directory, "static");
-      const buildFile = join(directory, "build");
-      const testFile = join(directory, "test");
-      const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "test");
-      createObservableQualityFixture(directory);
-      let quality: ReturnType<typeof startJust> | undefined;
+describe("quality interface", { timeout: processTestDeadlineMs }, () => {
+  test("waits before starting the quality workload", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const staticFile = join(directory, "static");
+    const buildFile = join(directory, "build");
+    const testFile = join(directory, "test");
+    const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "test");
+    createObservableQualityFixture(directory);
+    let quality: ReturnType<typeof startJust> | undefined;
 
-      try {
-        await waitForFile(readyFile);
-        quality = startJust(
-          lockFile,
-          ["quality"],
-          {
-            QUALITY_STATIC_FILE: staticFile,
-            QUALITY_BUILD_FILE: buildFile,
-            QUALITY_TEST_FILE: testFile,
-          },
-          directory,
-        );
-        await waitForOutput(quality, "waiting: quality is waiting for capacity");
+    try {
+      await waitForFile(readyFile);
+      quality = startJust(
+        lockFile,
+        ["quality"],
+        {
+          QUALITY_STATIC_FILE: staticFile,
+          QUALITY_BUILD_FILE: buildFile,
+          QUALITY_TEST_FILE: testFile,
+        },
+        directory,
+      );
+      await waitForOutput(quality, "waiting: quality is waiting for capacity");
 
-        expect(quality.child.exitCode).toBeNull();
-        expect(quality.output).toContain("waiting: quality is waiting for capacity");
-        expect(() => readFileSync(staticFile)).toThrow();
-        expect(() => readFileSync(buildFile)).toThrow();
-        expect(() => readFileSync(testFile)).toThrow();
+      expect(quality.child.exitCode).toBeNull();
+      expect(() => readFileSync(staticFile)).toThrow();
+      expect(() => readFileSync(buildFile)).toThrow();
+      expect(() => readFileSync(testFile)).toThrow();
 
-        writeFileSync(releaseFile, "release");
-        const result = await settleWithinDeadline(
-          quality.done,
-          "quality settlement after capacity release",
-        );
-        expect(result.status, result.output).toBe(0);
-        expect(result.output).toContain("quality completed in");
-        expect(readFileSync(staticFile, "utf8")).toBe("static");
-        expect(readFileSync(buildFile, "utf8")).toBe("build");
-        expect(readFileSync(testFile, "utf8")).toBe("test");
-      } finally {
-        if (quality?.child.exitCode === null) await stopJust(quality);
-        await stopRunner(holder);
-      }
-    },
-    processTestDeadlineMs,
-  );
-
-  test(
-    "runs every quality phase after the first phase fails without reporting success",
-    async () => {
-      const failure = "static" as const;
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-failure-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const invocationsFile = join(directory, "invocations");
-      createFailingQualityFixture(directory);
-
+      writeFileSync(releaseFile, "release");
       const result = await settleWithinDeadline(
-        startJust(
-          lockFile,
-          ["quality"],
-          {
-            QUALITY_FAILURE: failure,
-            QUALITY_INVOCATIONS: invocationsFile,
-          },
-          directory,
-        ).done,
-        "failed quality settlement",
+        quality.done,
+        "quality settlement after capacity release",
       );
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("quality completed in");
+      expect(readFileSync(staticFile, "utf8")).toBe("static");
+      expect(readFileSync(buildFile, "utf8")).toBe("build");
+      expect(readFileSync(testFile, "utf8")).toBe("test");
+    } finally {
+      if (quality?.child.exitCode === null) await stopJust(quality);
+      await stopRunner(holder);
+    }
+  });
 
-      expect(result.status).toBe(1);
-      expect(result.output).toContain(`${failure} failure marker`);
-      expect(result.output).toContain("quality failed after");
-      expect(result.output).not.toContain("quality completed in");
-      const invocations = readFileSync(invocationsFile, "utf8").trim().split("\n");
-      expect(invocations.filter((invocation) => invocation === "static")).toHaveLength(1);
-      expect(invocations.filter((invocation) => invocation === "build")).toHaveLength(1);
-      expect(invocations.filter((invocation) => invocation === "test")).toHaveLength(1);
-    },
-    processTestDeadlineMs,
-  );
+  test("runs every quality phase after the first phase fails without reporting success", async () => {
+    const failure = "static" as const;
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-failure-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const invocationsFile = join(directory, "invocations");
+    createFailingQualityFixture(directory);
 
-  test(
-    "waits for unselected workloads while targeted tests remain unlocked",
-    async () => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
-      createCompletingPnpm(directory);
-      let unselected: ReturnType<typeof startJust> | undefined;
+    const result = await settleWithinDeadline(
+      startJust(
+        lockFile,
+        ["quality"],
+        {
+          QUALITY_FAILURE: failure,
+          QUALITY_INVOCATIONS: invocationsFile,
+        },
+        directory,
+      ).done,
+      "failed quality settlement",
+    );
 
-      try {
-        await waitForFile(readyFile);
-        unselected = startJust(lockFile, ["test", "--reporter=dot"], {
-          PATH: `${directory}:${process.env["PATH"] ?? ""}`,
-        });
-        await waitForOutput(unselected, "waiting: test is waiting for capacity");
-        expect(unselected.child.exitCode).toBeNull();
-        expect(unselected.output).toContain("waiting: test is waiting for capacity");
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(`${failure} failure marker`);
+    expect(result.output).toContain("quality failed after");
+    expect(result.output).not.toContain("quality completed in");
+    const invocations = readFileSync(invocationsFile, "utf8").trim().split("\n");
+    expect(invocations.filter((invocation) => invocation === "static")).toHaveLength(1);
+    expect(invocations.filter((invocation) => invocation === "build")).toHaveLength(1);
+    expect(invocations.filter((invocation) => invocation === "test")).toHaveLength(1);
+  });
 
-        const targeted = await runJust(lockFile, ["test", "test/cli/cli-task-id.test.ts"]);
-        expect(targeted.status).toBe(0);
-        expect(targeted.output).toContain("1 passed");
+  test("waits for unselected workloads while targeted tests remain unlocked", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
+    createCompletingPnpm(directory);
+    let unselected: ReturnType<typeof startJust> | undefined;
 
-        writeFileSync(releaseFile, "release");
-        const unselectedResult = await settleWithinDeadline(
-          unselected.done,
-          "unselected workload settlement after capacity release",
-        );
-        expect(unselectedResult.status, unselectedResult.output).toBe(0);
-      } finally {
-        if (unselected?.child.exitCode === null) await stopJust(unselected);
-        await stopRunner(holder);
-      }
-    },
-    processTestDeadlineMs,
-  );
+    try {
+      await waitForFile(readyFile);
+      unselected = startJust(lockFile, ["test", "--reporter=dot"], {
+        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
+      });
+      await waitForOutput(unselected, "waiting: test is waiting for capacity");
+      expect(unselected.child.exitCode).toBeNull();
 
-  test(
-    "interrupts a workload while it waits for capacity",
-    async () => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const acquiredFile = join(directory, "acquired");
-      const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
-      let waiter: ReturnType<typeof startRunner> | undefined;
+      const targeted = await runJust(lockFile, ["test", "test/cli/cli-task-id.test.ts"]);
+      expect(targeted.status).toBe(0);
+      expect(targeted.output).toContain("1 passed");
 
-      try {
-        await waitForFile(readyFile);
-        waiter = startRunner(lockFile, [
-          "test",
-          "sh",
-          "-c",
-          'printf acquired > "$1"',
-          "sh",
-          acquiredFile,
-        ]);
-        await waitForOutput(waiter, "waiting: test is waiting for capacity");
-        expect(waiter.child.exitCode).toBeNull();
-        expect(waiter.output).toContain("waiting: test is waiting for capacity");
-        waiter.child.kill("SIGTERM");
-        expect(
-          (await settleWithinDeadline(waiter.done, "interrupted waiting workload settlement"))
-            .status,
-        ).toBe(143);
-        expect(waiter.output).toContain("rerun the same command to retry");
-        expect(() => readFileSync(acquiredFile)).toThrow();
-      } finally {
-        writeFileSync(releaseFile, "release");
-        if (waiter !== undefined) await stopRunner(waiter);
-        await stopRunner(holder);
-      }
-    },
-    processTestDeadlineMs,
-  );
-
-  test(
-    "preserves normal workload success and failure status",
-    async () => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-
-      const failed = await settleWithinDeadline(
-        runRunner(lockFile, ["test", "sh", "-c", "exit 7"]),
-        "failed workload settlement",
+      writeFileSync(releaseFile, "release");
+      const unselectedResult = await settleWithinDeadline(
+        unselected.done,
+        "unselected workload settlement after capacity release",
       );
-      expect(failed.status).toBe(7);
+      expect(unselectedResult.status, unselectedResult.output).toBe(0);
+    } finally {
+      if (unselected?.child.exitCode === null) await stopJust(unselected);
+      await stopRunner(holder);
+    }
+  });
 
-      const succeeded = await settleWithinDeadline(
-        runRunner(lockFile, ["test", "sh", "-c", "exit 0"]),
-        "successful workload settlement",
-      );
-      expect(succeeded.status).toBe(0);
-    },
-    processTestDeadlineMs,
-  );
+  test("interrupts a workload while it waits for capacity", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const acquiredFile = join(directory, "acquired");
+    const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
+    let waiter: ReturnType<typeof startRunner> | undefined;
 
-  test(
-    "releases capacity only after controlled descendant cleanup",
-    async () => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const readyFile = join(directory, "descendant-ready");
-      const descendantPidFile = join(directory, "descendant-pid");
-      const holder = startRunner(lockFile, [
+    try {
+      await waitForFile(readyFile);
+      waiter = startRunner(lockFile, [
         "test",
         "sh",
         "-c",
-        'printf ready > "$1"; sleep 100 & descendant=$!; printf "$descendant" > "$2"; wait',
+        'printf acquired > "$1"',
         "sh",
-        readyFile,
-        descendantPidFile,
+        acquiredFile,
       ]);
+      await waitForOutput(waiter, "waiting: test is waiting for capacity");
+      expect(waiter.child.exitCode).toBeNull();
+      waiter.child.kill("SIGTERM");
+      expect(
+        (await settleWithinDeadline(waiter.done, "interrupted waiting workload settlement")).status,
+      ).toBe(143);
+      expect(waiter.output).toContain("rerun the same command to retry");
+      expect(() => readFileSync(acquiredFile)).toThrow();
+    } finally {
+      writeFileSync(releaseFile, "release");
+      if (waiter !== undefined) await stopRunner(waiter);
+      await stopRunner(holder);
+    }
+  });
 
-      try {
-        await waitForFile(readyFile);
-        const descendantIdentity = await readProcessIdentity(descendantPidFile);
-        const observer = startCleanupObserver(lockFile, descendantIdentity);
-        await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
-        holder.child.kill("SIGINT");
-        expect(
-          (await settleWithinDeadline(holder.done, "interrupted descendant workload settlement"))
-            .status,
-        ).toBe(130);
-        const observation = await settleWithinDeadline(
-          observer.done,
-          "capacity observer settlement after descendant cleanup",
-        );
-        expect(observation.status, observation.output).toBe(0);
-        expect(observation.output).toContain("capacity acquired after descendant cleanup");
-      } finally {
-        await stopRunner(holder);
-      }
-    },
-    processTestDeadlineMs,
-  );
+  test("preserves normal workload success and failure status", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+
+    const failed = await settleWithinDeadline(
+      runRunner(lockFile, ["test", "sh", "-c", "exit 7"]),
+      "failed workload settlement",
+    );
+    expect(failed.status).toBe(7);
+
+    const succeeded = await settleWithinDeadline(
+      runRunner(lockFile, ["test", "sh", "-c", "exit 0"]),
+      "successful workload settlement",
+    );
+    expect(succeeded.status).toBe(0);
+  });
+
+  test("releases capacity only after controlled descendant cleanup", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const readyFile = join(directory, "descendant-ready");
+    const descendantPidFile = join(directory, "descendant-pid");
+    const holder = startRunner(lockFile, [
+      "test",
+      "sh",
+      "-c",
+      'printf ready > "$1"; sleep 100 & descendant=$!; printf "$descendant" > "$2"; wait',
+      "sh",
+      readyFile,
+      descendantPidFile,
+    ]);
+
+    try {
+      await waitForFile(readyFile);
+      const descendantIdentity = await readProcessIdentity(descendantPidFile);
+      const observer = startCleanupObserver(lockFile, descendantIdentity);
+      await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
+      holder.child.kill("SIGINT");
+      expect(
+        (await settleWithinDeadline(holder.done, "interrupted descendant workload settlement"))
+          .status,
+      ).toBe(130);
+      const observation = await settleWithinDeadline(
+        observer.done,
+        "capacity observer settlement after descendant cleanup",
+      );
+      expect(observation.status, observation.output).toBe(0);
+      expect(observation.output).toContain("capacity acquired after descendant cleanup");
+    } finally {
+      await stopRunner(holder);
+    }
+  });
 
   test.each([
     ["SIGINT", 130],
     ["SIGTERM", 143],
-  ] as const)(
-    "interrupts quality with %s and releases capacity",
-    async (signal, expectedStatus) => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const readyFile = join(directory, "quality-ready");
-      const descendantPidFile = join(directory, "quality-descendant-pid");
-      createBlockingPnpm(directory, readyFile, descendantPidFile);
-      createQualityFixture(directory);
-      const quality = startJust(
-        lockFile,
-        ["quality"],
-        {
-          PATH: `${directory}:${process.env["PATH"] ?? ""}`,
-        },
-        directory,
-      );
+  ] as const)("interrupts quality with %s and releases capacity", async (signal, expectedStatus) => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const readyFile = join(directory, "quality-ready");
+    const descendantPidFile = join(directory, "quality-descendant-pid");
+    createBlockingPnpm(directory, readyFile, descendantPidFile);
+    createQualityFixture(directory);
+    const quality = startJust(
+      lockFile,
+      ["quality"],
+      {
+        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
+      },
+      directory,
+    );
 
-      try {
-        await waitForFile(readyFile);
-        await readProcessIdentity(descendantPidFile);
-        const observer = startCapacityObserver(lockFile);
-        await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
-        signalJust(quality, signal);
-        expect(
-          (await settleWithinDeadline(quality.done, "interrupted quality settlement")).status,
-        ).toBe(expectedStatus);
-        expect(quality.output).toContain("quality interrupted after");
-        expect(quality.output).toContain("rerun just quality to retry");
-        expect(quality.output).not.toContain("quality completed in");
-        const observation = await settleWithinDeadline(
-          observer.done,
-          "capacity observer settlement after quality interruption",
-        );
-        expect(observation.status, observation.output).toBe(0);
-        expect(observation.output).toContain("capacity acquired after supervisor exit");
-      } finally {
-        await stopJust(quality);
-      }
-    },
-    processTestDeadlineMs,
-  );
-
-  test(
-    "does not reacquire the lock for nested internal commands",
-    async () => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const nestedCommand = `${runner} 'nested internal' sh -c 'printf nested-success'`;
-      const result = await settleWithinDeadline(
-        runRunner(lockFile, ["test", "sh", "-c", nestedCommand]),
-        "nested workload settlement",
+    try {
+      await waitForFile(readyFile);
+      await readProcessIdentity(descendantPidFile);
+      const observer = startCapacityObserver(lockFile);
+      await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
+      signalJust(quality, signal);
+      expect(
+        (await settleWithinDeadline(quality.done, "interrupted quality settlement")).status,
+      ).toBe(expectedStatus);
+      expect(quality.output).toContain("quality interrupted after");
+      expect(quality.output).toContain("rerun just quality to retry");
+      expect(quality.output).not.toContain("quality completed in");
+      const observation = await settleWithinDeadline(
+        observer.done,
+        "capacity observer settlement after quality interruption",
       );
-      expect(result.status).toBe(0);
-      expect(result.output).toContain("nested-success");
-    },
-    processTestDeadlineMs,
-  );
+      expect(observation.status, observation.output).toBe(0);
+      expect(observation.output).toContain("capacity acquired after supervisor exit");
+    } finally {
+      await stopJust(quality);
+    }
+  });
+
+  test("does not reacquire the lock for nested internal commands", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const nestedCommand = `${runner} 'nested internal' sh -c 'printf nested-success'`;
+    const result = await settleWithinDeadline(
+      runRunner(lockFile, ["test", "sh", "-c", nestedCommand]),
+      "nested workload settlement",
+    );
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("nested-success");
+  });
 });
