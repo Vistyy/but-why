@@ -10,8 +10,8 @@ import {
 import {
   changeId,
   maxRuntimeCaseBytes,
-  runtimeCaseModes,
   type RuntimeCase,
+  runtimeCaseModes,
   type SessionEvent,
 } from "./continue-change-sdk-protocol.js";
 

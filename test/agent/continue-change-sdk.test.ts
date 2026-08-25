@@ -7,8 +7,8 @@ import { runTestProcess } from "../support/testProcess.js";
 import {
   changeId,
   maxRuntimeCaseBytes,
-  runtimeCaseModes,
   type RuntimeCase,
+  runtimeCaseModes,
 } from "./continue-change-sdk-protocol.js";
 
 const helperPath = join(repoRoot, "test/agent/continue-change-sdk-helper.ts");
