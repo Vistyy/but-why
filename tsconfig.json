@@ -29,6 +29,7 @@
         "ignoreEffectWarningsInTscExitCode": true,
         "ignoreEffectErrorsInTscExitCode": false,
         "diagnosticSeverity": {
+          "effectSucceedWithVoid": "off",
           "missingEffectContext": "warning",
           "missingEffectError": "warning",
           "missingLayerContext": "warning",
