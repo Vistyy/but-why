@@ -30,6 +30,13 @@ type BlockerResolution = JsonObject & {
   readonly content: string;
 };
 
+type ImplementationBlocker = JsonObject & {
+  readonly id: number;
+  readonly changeId: string;
+  readonly content: string;
+  readonly resolution: BlockerResolution | null;
+};
+
 export type ChangeInspectionSnapshot = {
   readonly change: {
     readonly state: ChangeState;
@@ -664,7 +671,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     try {
       const value = JSON.parse(result.stdout) as unknown;
-      if (!isBlockerHistory(value)) {
+      if (!isBlockerHistory(value, id)) {
         return {
           ok: false,
           message: "But Why inspection returned an unsupported blocker history shape",
@@ -754,7 +761,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         message: "But Why inspection returned an unsupported Change state shape",
       };
     }
-    if (!isBlockerHistory(blockerValue)) {
+    if (!isBlockerHistory(blockerValue, id)) {
       return {
         ok: false,
         transient: false,
@@ -1361,18 +1368,62 @@ const isResolution = (value: unknown): value is BlockerResolution =>
   isPositiveInteger(recordValue(value, "blockerId")) &&
   typeof recordValue(value, "content") === "string";
 
-const isBlockerHistory = (value: unknown): value is BlockerHistory => {
+const isImplementationBlocker = (value: unknown): value is ImplementationBlocker =>
+  isRecord(value) &&
+  isPositiveInteger(recordValue(value, "id")) &&
+  typeof recordValue(value, "changeId") === "string" &&
+  typeof recordValue(value, "content") === "string" &&
+  (recordValue(value, "resolution") === null || isResolution(recordValue(value, "resolution")));
+
+const sameResolution = (left: BlockerResolution, right: BlockerResolution): boolean =>
+  left.blockerId === right.blockerId && left.content === right.content;
+
+const sameBlocker = (left: ImplementationBlocker, right: ImplementationBlocker): boolean =>
+  left.id === right.id &&
+  left.changeId === right.changeId &&
+  left.content === right.content &&
+  ((left.resolution === null && right.resolution === null) ||
+    (left.resolution !== null &&
+      right.resolution !== null &&
+      sameResolution(left.resolution, right.resolution)));
+
+const isBlockerHistory = (value: unknown, changeId: string): value is BlockerHistory => {
   if (!isRecord(value)) return false;
-  const blockers = recordValue(value, "blockers");
-  const resolutions = recordValue(value, "resolutions");
-  const active = recordValue(value, "active");
+  const blockersValue = recordValue(value, "blockers");
+  const resolutionsValue = recordValue(value, "resolutions");
+  const activeValue = recordValue(value, "active");
+  if (
+    !Array.isArray(blockersValue) ||
+    !blockersValue.every(isImplementationBlocker) ||
+    !Array.isArray(resolutionsValue) ||
+    !resolutionsValue.every(isResolution) ||
+    (activeValue !== null && !isImplementationBlocker(activeValue))
+  ) {
+    return false;
+  }
+  const blockers = blockersValue;
+  const resolutions = resolutionsValue;
+  if (blockers.some((blocker) => blocker.changeId !== changeId)) return false;
+  if (new Set(blockers.map((blocker) => blocker.id)).size !== blockers.length) return false;
+  if (new Set(resolutions.map((resolution) => resolution.blockerId)).size !== resolutions.length) {
+    return false;
+  }
+  const resolvedBlockers = blockers.filter((blocker) => blocker.resolution !== null);
+  const activeBlockers = blockers.filter((blocker) => blocker.resolution === null);
+  if (activeBlockers.length > 1 || resolutions.length !== resolvedBlockers.length) return false;
+  for (const blocker of blockers) {
+    if (blocker.resolution === null) continue;
+    if (blocker.resolution.blockerId !== blocker.id) return false;
+    const resolution = resolutions.find((item) => item.blockerId === blocker.id);
+    if (resolution === undefined || !sameResolution(resolution, blocker.resolution)) return false;
+  }
+  if (activeValue === null) return activeBlockers.length === 0;
+  const activeBlocker = activeBlockers[0];
   return (
-    Array.isArray(blockers) &&
-    blockers.every(isRecord) &&
-    Array.isArray(resolutions) &&
-    resolutions.every(isRecord) &&
-    (resolutions.length === 0 || isResolution(resolutions.at(-1))) &&
-    (active === null || isRecord(active))
+    activeBlocker !== undefined &&
+    activeValue.changeId === changeId &&
+    activeValue.resolution === null &&
+    sameBlocker(activeValue, activeBlocker)
   );
 };
 

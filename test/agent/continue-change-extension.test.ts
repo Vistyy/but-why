@@ -27,6 +27,23 @@ type TestBlockerHistory = {
   resolutions: Record<string, unknown>[];
   active: Record<string, unknown> | null;
 };
+
+const validTestBlockerHistory = (resolutionContent?: string): TestBlockerHistory => {
+  const resolution =
+    resolutionContent === undefined ? null : { blockerId: 1, content: resolutionContent };
+  const blocker = {
+    id: 1,
+    changeId,
+    content: "The Operator must approve the implementation direction.",
+    resolution,
+  };
+  return {
+    blockers: [blocker],
+    resolutions: resolution === null ? [] : [resolution],
+    active: resolution === null ? blocker : null,
+  };
+};
+
 type EventHandler = (event: unknown, context: ExtensionContext) => unknown;
 type CommandHandler = (args: string, context: ExtensionContext) => unknown;
 
@@ -1039,6 +1056,27 @@ describe("packaged Change Implement continuation extension", () => {
         blockers: [{ body: { opaque: true } }],
         resolutions: [{ blockerId: 1 }],
         active: null,
+      },
+    ],
+    [
+      "active blocker relationship",
+      undefined,
+      {
+        blockers: [
+          {
+            id: 1,
+            changeId,
+            content: "The Operator must approve the implementation direction.",
+            resolution: null,
+          },
+        ],
+        resolutions: [],
+        active: {
+          id: 2,
+          changeId,
+          content: "The Operator must approve the implementation direction.",
+          resolution: null,
+        },
       },
     ],
   ])("rejects malformed %s control data without continuing", async (_name, malformedSnapshot, malformedHistory) => {

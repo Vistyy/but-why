@@ -58,69 +58,125 @@ const runPi = (worktreePath: string, callsPath: string, sessionPath: string, pat
     },
   );
 
+type ChangeEnvironment = {
+  readonly repositoryRoot: string;
+  readonly worktreePath: string;
+  readonly inheritedPath: string;
+  readonly runBy: (
+    cwd: string,
+    args: readonly string[],
+    input?: string,
+  ) => ReturnType<typeof runTestProcess>;
+};
+
+const createChangeEnvironment = (): ChangeEnvironment => {
+  const repositoryRoot = createGitRepo();
+  const candidateExecutable = builtByExecutable();
+  const byDirectory = join(repositoryRoot, "by-bin");
+  mkdirSync(byDirectory);
+  const candidatePath = join(byDirectory, "by");
+  writeFileSync(
+    candidatePath,
+    `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(candidateExecutable)} "$@"\n`,
+    { mode: 0o755 },
+  );
+  const inheritedPath = Reflect.get(process.env, "PATH");
+  const path = `${byDirectory}:${typeof inheritedPath === "string" ? inheritedPath : ""}`;
+  const runBy = (cwd: string, args: readonly string[], input?: string) =>
+    runTestProcess(process.execPath, [candidateExecutable, ...args], {
+      cwd,
+      ...(input === undefined ? {} : { input }),
+      timeout: processTimeoutMs,
+    });
+  const initialized = runBy(repositoryRoot, ["init", "--id-prefix", "BY"]);
+  expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
+  commitButWhyConfigAndRecordDefault(repositoryRoot);
+
+  const started = runBy(repositoryRoot, ["change", "start"]);
+  expect(started.status, started.stderr || started.stdout).toBe(0);
+  const startedValue: unknown = JSON.parse(started.stdout);
+  if (typeof startedValue !== "object" || startedValue === null || Array.isArray(startedValue)) {
+    throw new Error("Installed Change Start returned a non-object result.");
+  }
+  const worktreePath = Reflect.get(startedValue, "worktreePath");
+  if (typeof worktreePath !== "string") throw new Error("Change Start omitted worktreePath.");
+  return { repositoryRoot, worktreePath, inheritedPath: path, runBy };
+};
+
+const writeNoBlockerBy = (directory: string): string => {
+  const path = join(directory, "by");
+  const snapshot = JSON.stringify({
+    change: {
+      state: "open",
+      closeReason: null,
+      acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+    },
+    currentCandidate: null,
+    currentValidationRun: null,
+    findingCount: 0,
+    toolingFailureCount: 0,
+    pullRequest: null,
+  });
+  const blockerHistory = JSON.stringify({ blockers: [], resolutions: [], active: null });
+  writeFileSync(
+    path,
+    `#!/bin/sh
+if [ "$1" = "change" ] && [ "$2" = "show" ]; then
+  printf '%s\\n' ${shellQuote(snapshot)}
+  exit 0
+fi
+if [ "$1" = "change" ] && [ "$2" = "blocker" ] && [ "$3" = "list" ]; then
+  printf '%s\\n' ${shellQuote(blockerHistory)}
+  exit 0
+fi
+exit 2
+`,
+    { mode: 0o755 },
+  );
+  return path;
+};
+
 describe("packaged Change Implement continuation extension process boundary", () => {
-  it("aborts a real Pi turn after its tool batch when the installed Change is blocked", () => {
-    const repositoryRoot = createGitRepo();
-    const callsPath = join(repositoryRoot, "provider-calls.log");
-    const byDirectory = join(repositoryRoot, "by-bin");
-    mkdirSync(byDirectory);
-    const candidateExecutable = builtByExecutable();
-    writeFileSync(
-      join(byDirectory, "by"),
-      `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(candidateExecutable)} "$@"\n`,
-      { mode: 0o755 },
-    );
-    const inheritedPath = Reflect.get(process.env, "PATH");
-    const path = `${byDirectory}:${typeof inheritedPath === "string" ? inheritedPath : ""}`;
-    const runBy = (cwd: string, args: readonly string[], input?: string) =>
-      runTestProcess(process.execPath, [candidateExecutable, ...args], {
-        cwd,
-        ...(input === undefined ? {} : { input }),
-        timeout: processTimeoutMs,
-      });
-    const initialized = runBy(repositoryRoot, ["init", "--id-prefix", "BY"]);
-    expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
-    commitButWhyConfigAndRecordDefault(repositoryRoot);
-
-    const started = runBy(repositoryRoot, ["change", "start"]);
-    expect(started.status, started.stderr || started.stdout).toBe(0);
-    const startedValue: unknown = JSON.parse(started.stdout);
-    if (typeof startedValue !== "object" || startedValue === null || Array.isArray(startedValue)) {
-      throw new Error("Installed Change Start returned a non-object result.");
-    }
-    const worktreePath = Reflect.get(startedValue, "worktreePath");
-    if (typeof worktreePath !== "string") throw new Error("Change Start omitted worktreePath.");
-
-    const normalCallsPath = join(repositoryRoot, "normal-provider-calls.log");
-    const normalRun = runPi(
-      worktreePath,
-      normalCallsPath,
-      join(repositoryRoot, "normal-session.jsonl"),
+  it("continues a real Pi tool turn when blocker inspection reports no blocker", () => {
+    const environment = createChangeEnvironment();
+    const normalByDirectory = join(environment.repositoryRoot, "normal-by-bin");
+    mkdirSync(normalByDirectory);
+    writeNoBlockerBy(normalByDirectory);
+    const path = `${normalByDirectory}:${environment.inheritedPath}`;
+    const callsPath = join(environment.repositoryRoot, "normal-provider-calls.log");
+    const run = runPi(
+      environment.worktreePath,
+      callsPath,
+      join(environment.repositoryRoot, "normal-session.jsonl"),
       path,
     );
-    expect(normalRun.status, normalRun.stderr || normalRun.stdout).toBe(0);
-    const normalEvents = decodeEventObjects(normalRun.stdout);
-    expect(normalEvents.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(
-      1,
-    );
-    expect(readFileSync(normalCallsPath, "utf8").trim().split("\n").length).toBeGreaterThan(1);
 
-    const blocker = runBy(
-      worktreePath,
+    expect(run.status, run.stderr || run.stdout).toBe(0);
+    const events = decodeEventObjects(run.stdout);
+    expect(events.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(1);
+    expect(readFileSync(callsPath, "utf8").trim().split("\n").length).toBeGreaterThan(1);
+  }, 30_000);
+
+  it("aborts a real Pi turn after its tool batch when the installed Change is blocked", () => {
+    const environment = createChangeEnvironment();
+    const blocker = environment.runBy(
+      environment.worktreePath,
       ["change", "blocker", "raise", "BY-C1", "--file", "-"],
       "The Operator must approve the implementation direction.\nContinuing without that decision is unsafe.\n",
     );
     expect(blocker.status, blocker.stderr || blocker.stdout).toBe(0);
 
-    const blockedSessionPath = join(repositoryRoot, "blocked-session.jsonl");
-    const run = runPi(worktreePath, callsPath, blockedSessionPath, path);
+    const callsPath = join(environment.repositoryRoot, "blocked-provider-calls.log");
+    const sessionPath = join(environment.repositoryRoot, "blocked-session.jsonl");
+    const run = runPi(environment.worktreePath, callsPath, sessionPath, environment.inheritedPath);
+
     expect(run.status, run.stderr || run.stdout).toBe(0);
     const events = decodeEventObjects(run.stdout);
     expect(events.filter((event) => eventType(event) === "tool_execution_end")).toHaveLength(1);
     expect(events.some((event) => eventType(event) === "turn_end")).toBe(true);
     expect(events.some((event) => eventType(event) === "agent_end")).toBe(true);
     expect(readFileSync(callsPath, "utf8").trim().split("\n")).toEqual(["1"]);
-    const continuationEntries = decodeEventObjects(readFileSync(blockedSessionPath, "utf8")).filter(
+    const continuationEntries = decodeEventObjects(readFileSync(sessionPath, "utf8")).filter(
       (entry) => Reflect.get(entry, "customType") === "but-why-change-continuation",
     );
     const latestContinuation = continuationEntries.at(-1);
