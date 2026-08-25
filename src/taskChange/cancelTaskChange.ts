@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import type { ChangeCleanup } from "../change/change.js";
-import type { TerminalCleanupOperation } from "../change/cleanupTerminalChange.js";
 import {
   classifyOwnedPullRequest,
   observedMergedChangeEvidence,
@@ -48,7 +47,6 @@ export type CancellationDependencies = {
   readonly github: GitHubPullRequestCloser;
   readonly validation: ActiveValidationRunPort;
   readonly executionLock: ExecutionLock;
-  readonly cleanupTerminal: TerminalCleanupOperation;
 };
 
 export type TaskCancellationResult =
@@ -245,13 +243,12 @@ const cancelChange = (
       if (change.closeReason !== "cancelled") {
         return { ok: false, code: "change_already_completed" as const, changeId: change.id };
       }
-      const withCleanup = yield* cleanupTerminalChange(dependencies, change, input.now);
       const task = yield* loadLinkedTask(dependencies, change);
       return {
         ok: true as const,
         status: "cancelled" as const,
         changed: false,
-        change: withCleanup.change,
+        change,
         task,
       };
     }
@@ -293,12 +290,11 @@ const cancelChange = (
       now: input.now,
     });
     if (!cancelled.ok) return { ...cancelled, changeId: change.id };
-    const withCleanup = yield* cleanupTerminalChange(dependencies, cancelled.change, input.now);
     return {
       ok: true as const,
       status: "cancelled" as const,
       changed: cancelled.changed,
-      change: withCleanup.change,
+      change: cancelled.change,
       task: cancelled.task,
     };
   });
@@ -348,12 +344,11 @@ const completeMerged = (
           }
         : { ok: false as const, code: "change_already_completed" as const, changeId: change.id };
     }
-    const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
     return {
       ok: true as const,
       status: "completed" as const,
       changed: completed.changed,
-      change: withCleanup.change,
+      change: completed.change,
       task: completed.task,
     };
   });
@@ -429,17 +424,3 @@ const conflictingRecoveryEvidence = {
   classification: "conflict",
   reason: "postcondition_mismatch",
 } as const;
-
-const cleanupTerminalChange = (
-  dependencies: CancellationDependencies,
-  change: TaskChangeCancellationChange,
-  now: string,
-): Effect.Effect<
-  { readonly change: TaskChangeCancellationChange; readonly cleanup: ChangeCleanup },
-  RepositoryStorageError
-> =>
-  Effect.map(dependencies.cleanupTerminal(change, now), (result) =>
-    result.ok
-      ? { change: { ...change, cleanup: result.cleanup }, cleanup: result.cleanup }
-      : { change, cleanup: change.cleanup },
-  );

@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -21,10 +21,6 @@ import {
   passTaskReviewFixture,
   runByInProcessEffect,
 } from "../support/by-cli.js";
-import {
-  noOpTerminalCleanupDependencies,
-  openTerminalCleanup,
-} from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const writeDefaultReviewConfig = (root: string): void => {
@@ -183,8 +179,12 @@ describe("Change cancellation", () => {
 
       const started = yield* runByInProcessEffect(root, ["change", "start"]);
       expect(started.status).toBe(0);
-      const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
-        .change.id;
+      const startedOutput = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+      };
+      const changeId = startedOutput.change.id;
+      expect(existsSync(startedOutput.worktreePath)).toBe(true);
 
       const cancelled = yield* runByInProcessEffect(root, [
         "change",
@@ -196,8 +196,16 @@ describe("Change cancellation", () => {
       expect(cancelled.status).toBe(0);
       expect(JSON.parse(cancelled.stdout)).toMatchObject({
         status: "cancelled",
-        change: { state: "closed", cancelReason: "Not needed" },
+        change: { state: "closed", cancelReason: "Not needed", cleanup: { state: "pending" } },
       });
+      expect(existsSync(startedOutput.worktreePath)).toBe(true);
+
+      const reconciled = yield* runByInProcessEffect(root, ["change", "reconcile", changeId]);
+      expect(reconciled.status).toBe(0);
+      expect(JSON.parse(reconciled.stdout)).toMatchObject({
+        changes: [{ changeId, status: "cleanup_complete" }],
+      });
+      expect(existsSync(startedOutput.worktreePath)).toBe(false);
 
       const shown = yield* runByInProcessEffect(root, ["change", "show", changeId]);
       expect(shown.status).toBe(0);
@@ -285,10 +293,40 @@ describe("Change cancellation", () => {
         expect(repeated.status).toBe(0);
         expect(JSON.parse(repeated.stdout)).toMatchObject({
           changed: false,
-          change: { cancelReason: "Not needed", cleanup: { state: "complete" } },
+          change: { cancelReason: "Not needed", cleanup: { state: "pending" } },
         });
       }),
   );
+
+  it.effect("leaves cleanup pending when cancellation observes an exact merged Candidate", () => {
+    const events: string[] = [];
+    const task = taskRecord("todo");
+    const dependencies = cancellationDependencies({
+      task,
+      change: changeRecord(null),
+      pullRequest: pullRequest("closed", true),
+      events,
+    });
+
+    return openCancellationUseCases(dependencies)
+      .cancelChange({ changeId: "change-1", reason: "Stop", now })
+      .pipe(
+        Effect.map((result) => {
+          expect(result).toMatchObject({
+            ok: true,
+            status: "completed",
+            changed: true,
+            change: {
+              state: "closed",
+              closeReason: "completed",
+              cleanup: { state: "pending", blockingReason: null },
+            },
+          });
+          expect(events).toEqual(["read-pr", "complete-change"]);
+          return result;
+        }),
+      );
+  });
 
   it.effect("proves PR closure ordering through the Change CLI", () =>
     Effect.gen(function* () {
@@ -310,7 +348,7 @@ describe("Change cancellation", () => {
 
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout).status).toBe("cancelled");
-      expect(events).toEqual(["read-pr", "close-pr", "cancel-change", "cleanup", "record-cleanup"]);
+      expect(events).toEqual(["read-pr", "close-pr", "cancel-change"]);
       expect(dependencies.closePullRequestInputs).toEqual([{ target, number: 42 }]);
     }),
   );
@@ -535,7 +573,6 @@ describe("Change cancellation", () => {
 
   it.effect("closes an owned open pull request before deleting its Remote Change Branch", () => {
     const events: string[] = [];
-    const cleanupRemoteBranches: (object | null)[] = [];
     const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
@@ -543,7 +580,6 @@ describe("Change cancellation", () => {
       change,
       pullRequest: pullRequest("open", false),
       closePullRequest: { ok: true, pullRequest: pullRequest("closed", false) },
-      cleanupRemoteBranches,
       events,
     });
 
@@ -562,19 +598,6 @@ describe("Change cancellation", () => {
             "read-pr",
             "close-pr",
             "cancel-change",
-            "cleanup",
-            "record-cleanup",
-          ]);
-          expect(cleanupRemoteBranches).toEqual([
-            {
-              owner: target.owner,
-              repo: target.repo,
-              remoteName: target.remoteName,
-              remoteUrl: change.baseRemoteUrl,
-              branchName: "change-1",
-              targetBranch: target.baseBranch,
-              expectedHeadSha: "head",
-            },
           ]);
           return result;
         }),
@@ -621,8 +644,6 @@ describe("Change cancellation", () => {
             "close-pr",
             "read-pr",
             "cancel-change",
-            "cleanup",
-            "record-cleanup",
           ]);
           return result;
         }),
@@ -674,7 +695,7 @@ describe("Change cancellation", () => {
       );
   });
 
-  it.effect("keeps unsafe cleanup pending without reopening the cancelled lifecycle", () => {
+  it.effect("leaves cleanup pending without running it during cancellation", () => {
     const events: string[] = [];
     const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
@@ -682,7 +703,6 @@ describe("Change cancellation", () => {
       task,
       change,
       pullRequest: pullRequest("closed", false),
-      cleanupResult: { state: "pending", blockingReason: "worktree_has_uncommitted_changes" },
       events,
     });
 
@@ -694,7 +714,7 @@ describe("Change cancellation", () => {
             ok: true,
             status: "cancelled",
             change: { state: "closed" },
-            cleanup: { state: "pending", blockingReason: "worktree_has_uncommitted_changes" },
+            cleanup: { state: "pending", blockingReason: null },
           });
           return result;
         }),
@@ -778,10 +798,6 @@ const cancellationDependencies = (input: {
   readonly change: ChangeRecord & CancellationChange;
   readonly pullRequest: GitHubPullRequest;
   readonly closePullRequest?: GitHubPullRequestMutationResult;
-  readonly cleanupResult?:
-    | { readonly state: "complete"; readonly blockingReason: null }
-    | { readonly state: "pending"; readonly blockingReason: string };
-  readonly cleanupRemoteBranches?: (object | null)[];
   readonly activeValidationRunId?: number;
   readonly events: string[];
 }): CancellationDependencies & { readonly closePullRequestInputs: unknown[] } => {
@@ -813,6 +829,7 @@ const cancellationDependencies = (input: {
         closeReason: "cancelled",
         cancelReason:
           currentChange.taskId === null ? cancelInput.reason : currentChange.cancelReason,
+        cleanup: { state: "pending", blockingReason: null },
       };
       currentTask = { ...currentTask, state: "cancelled", cancelReason: cancelInput.reason };
       return Effect.succeed({
@@ -820,18 +837,6 @@ const cancellationDependencies = (input: {
         changed: true,
         change: currentChange,
         task: currentChange.taskId === null ? null : currentTask,
-      });
-    },
-    recordCleanup: () => {
-      input.events.push("record-cleanup");
-      currentChange = {
-        ...currentChange,
-        cleanup: input.cleanupResult ?? { state: "complete", blockingReason: null },
-      };
-      return Effect.succeed({
-        ok: true as const,
-        changed: true,
-        cleanup: currentChange.cleanup,
       });
     },
   };
@@ -872,15 +877,6 @@ const cancellationDependencies = (input: {
         return input.closePullRequest ?? { ok: true, pullRequest: pullRequest("closed", false) };
       },
     },
-    cleanupTerminal: openTerminalCleanup({
-      ...noOpTerminalCleanupDependencies,
-      persistence: changes,
-      cleanup: (cleanupInput) => {
-        input.events.push("cleanup");
-        input.cleanupRemoteBranches?.push(cleanupInput.remoteChangeBranch);
-        return input.cleanupResult ?? { state: "complete", blockingReason: null };
-      },
-    }),
     closePullRequestInputs,
   };
 };
