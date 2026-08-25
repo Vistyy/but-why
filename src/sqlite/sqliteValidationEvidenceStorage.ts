@@ -1,7 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import type { AgentInvocationRecord, AgentThinking } from "../agent/agentSession/agentSession.js";
+import {
+  decodeSqliteAgentInvocation,
+  type SqliteAgentInvocationRow,
+} from "../agent/agentSession/adapters/sqlite/sqliteAgentInvocation.js";
 import {
   assertValidationArtifactRecord,
   assertValidationToolingFailureEvidence,
@@ -29,26 +32,9 @@ type StoredPhaseResultRow = {
   readonly toolingFailure: string | null;
 };
 
-type StoredValidationAgentInvocationRow = {
+type StoredValidationAgentInvocationRow = SqliteAgentInvocationRow & {
   readonly phase: string;
   readonly producer: string;
-  readonly id: number;
-  readonly agentSessionId: number;
-  readonly continuationId: number;
-  readonly createdAt: string;
-  readonly settledAt: string | null;
-  readonly settlementKind: string | null;
-  readonly inputTokens: number | null;
-  readonly cachedInputTokens: number | null;
-  readonly cacheWriteTokens: number | null;
-  readonly outputTokens: number | null;
-  readonly totalTokens: number | null;
-  readonly harness: string;
-  readonly provider: string | null;
-  readonly model: string;
-  readonly thinking: string | null;
-  readonly transcriptPath: string | null;
-  readonly unusableReason: string | null;
 };
 
 export const listValidationPhaseResults = (
@@ -110,7 +96,7 @@ export const listValidationAgentInvocations = (
       rows.map((row) => {
         configuredValidationPosition(row.phase, row.producer, authority.changePolicy);
         return {
-          ...decodeAgentInvocation(row),
+          ...decodeSqliteAgentInvocation(row),
           phase: decodeValidationPhase(row.phase),
           producer: row.producer,
         };
@@ -281,56 +267,6 @@ const parseToolingFailure = (
   return failure;
 };
 
-const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentInvocationRecord => {
-  const validKinds = ["returned", "launch_failed", "failed", "return_unknown"] as const;
-  if (
-    row.settlementKind !== null &&
-    !validKinds.includes(row.settlementKind as (typeof validKinds)[number])
-  ) {
-    throw new Error(`Invalid Agent Invocation settlement kind: ${row.settlementKind}`);
-  }
-  const values = [
-    row.inputTokens,
-    row.cachedInputTokens,
-    row.cacheWriteTokens,
-    row.outputTokens,
-    row.totalTokens,
-  ];
-  const hasUsage = values.some((value) => value !== null);
-  if (
-    hasUsage &&
-    values.some((value) => value === null || !Number.isSafeInteger(value) || value < 0)
-  ) {
-    throw new Error("Incomplete Agent Invocation token evidence");
-  }
-  return {
-    id: row.id,
-    continuationId: row.continuationId,
-    createdAt: row.createdAt,
-    settledAt: row.settledAt,
-    settlementKind: row.settlementKind as AgentInvocationRecord["settlementKind"],
-    usage: hasUsage
-      ? {
-          inputTokens: row.inputTokens as number,
-          cachedInputTokens: row.cachedInputTokens as number,
-          cacheWriteTokens: row.cacheWriteTokens as number,
-          outputTokens: row.outputTokens as number,
-          totalTokens: row.totalTokens as number,
-        }
-      : null,
-    continuation: {
-      id: row.continuationId,
-      agentSessionId: row.agentSessionId,
-      harness: row.harness === "pi" ? "pi" : invalidHarness(row.harness),
-      provider: row.provider,
-      model: row.model,
-      thinking: decodeThinking(row.thinking),
-      transcriptPath: row.transcriptPath,
-      unusableReason: row.unusableReason,
-    },
-  };
-};
-
 const phasePosition = (phase: string): number => {
   switch (decodePhase(phase)) {
     case validationPhase.prepare:
@@ -396,16 +332,6 @@ const requireExactFields = (
 const numberValue = (value: unknown, name: string): number => {
   if (typeof value !== "number") throw new Error(`${name} is not a number`);
   return value;
-};
-const invalidHarness = (value: string): never => {
-  throw new Error(`Invalid Agent Harness: ${value}`);
-};
-const decodeThinking = (value: string | null): AgentThinking | null => {
-  if (value === null) return null;
-  if (["off", "minimal", "low", "medium", "high", "xhigh"].includes(value)) {
-    return value as AgentThinking;
-  }
-  throw new Error(`Invalid Agent thinking level: ${value}`);
 };
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
