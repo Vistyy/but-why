@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
-import { afterAll, beforeAll, vi } from "vitest";
+import { afterAll, beforeAll, onTestFinished, vi } from "vitest";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -16,7 +16,6 @@ import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapt
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
-import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -28,8 +27,12 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
-import { removeRegisteredTestGitWorktree } from "../support/testGit.js";
-import { runTestProcess } from "../support/testProcess.js";
+import {
+  addRegisteredTestGitWorktree,
+  releaseRegisteredTestGitRepository,
+  removeRegisteredTestGitWorktree,
+} from "../support/testGit.js";
+import { runTestWorkspaceCommand } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
@@ -70,7 +73,8 @@ afterAll(() => {
   releaseTestWorkspace(candidateRepoTemplate);
 });
 
-const candidateReadyRepoCopy = () => cloneInitializedTestRepository(candidateRepoTemplate);
+const candidateReadyRepoCopy = (workspace?: string) =>
+  cloneInitializedTestRepository(candidateRepoTemplate, workspace);
 
 class AcceptanceTemplate extends Context.Tag("@but-why/AcceptanceTemplate")<
   AcceptanceTemplate,
@@ -366,7 +370,7 @@ const runReviewPhases = (
         started.validationRunId,
       );
       mkdirSync(dirname(worktreePath), { recursive: true });
-      git(ready.repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
+      addRegisteredTestGitWorktree(ready.repo, worktreePath, captured.headSha);
 
       const result = yield* Effect.acquireUseRelease(
         Effect.succeed(undefined),
@@ -390,26 +394,7 @@ const runReviewPhases = (
               ],
             });
             const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
-              Effect.gen(function* () {
-                const result = runTestProcess("bash", ["-lc", command], {
-                  cwd: options?.cwd ?? worktreePath,
-                });
-                if (result.error !== undefined) {
-                  return yield* new WorkspaceCommandExecutionFailed({
-                    message: result.error.message,
-                  });
-                }
-                if (result.status === null) {
-                  return yield* new WorkspaceCommandExecutionFailed({
-                    message: "Test command exited without a status.",
-                  });
-                }
-                return {
-                  exitCode: result.status,
-                  stdout: result.stdout,
-                  stderr: result.stderr,
-                };
-              });
+              runTestWorkspaceCommand(command, options?.cwd ?? worktreePath);
             const acceptance = yield* runAcceptanceReviewPhase({
               validationRunId: started.validationRunId,
               changeId: captured.changeId,
@@ -476,7 +461,9 @@ const acceptanceReadyRepo = (
 ): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError, AcceptanceTemplate> =>
   Effect.gen(function* () {
     const template = yield* AcceptanceTemplate;
-    const repo = yield* candidateReadyRepoCopy();
+    const workspace = acquireTestWorkspace();
+    onTestFinished(() => releaseRegisteredTestGitRepository(workspace));
+    const repo = yield* candidateReadyRepoCopy(workspace);
     const captured = template.captured;
     const validation = candidateValidationForTest({
       localRepositoryRoot: repo,

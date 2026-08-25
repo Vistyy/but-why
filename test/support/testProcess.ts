@@ -8,6 +8,8 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:f
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
+import { Effect } from "effect";
+import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
@@ -173,6 +175,30 @@ export const runTestProcessOrThrow = (
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout.trim();
 };
+
+export const runTestWorkspaceCommand = (
+  command: string,
+  cwd: string,
+): Effect.Effect<
+  { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
+  WorkspaceCommandExecutionFailed
+> =>
+  Effect.gen(function* () {
+    const result = runTestProcess("bash", ["-lc", command], { cwd });
+    if (result.error !== undefined) {
+      return yield* new WorkspaceCommandExecutionFailed({ message: result.error.message });
+    }
+    if (result.status === null) {
+      return yield* new WorkspaceCommandExecutionFailed({
+        message: "Test command exited without a status.",
+      });
+    }
+    return {
+      exitCode: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+  });
 
 export const runTestProcessExpectExit = (
   command: string,

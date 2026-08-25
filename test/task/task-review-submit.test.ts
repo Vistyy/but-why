@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { onTestFinished } from "vitest";
 import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
-import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { DisposableWorkspaceRestorationFailed } from "../../src/disposableWorkspace/disposableWorkspace.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
@@ -23,9 +23,13 @@ import {
   createGitRepo,
   runByInProcessEffect,
 } from "../support/by-cli.js";
-import { removeRegisteredTestGitWorktree } from "../support/testGit.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
+import {
+  addRegisteredTestGitWorktree,
+  releaseRegisteredTestGitRepository,
+  removeRegisteredTestGitWorktree,
+} from "../support/testGit.js";
+import { runTestProcessOrThrow, runTestWorkspaceCommand } from "../support/testProcess.js";
+import { acquireTestWorkspace, createTestWorkspace } from "../support/testWorkspace.js";
 
 const defaultAgentPersistence = (): AgentSessionPersistence => ({
   beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
@@ -223,7 +227,9 @@ it.effect("observes final Task Review restoration and restoration failure", () =
   Effect.gen(function* () {
     const runScenario = (scenario: "passed" | "restoration_failure" | "interrupted") =>
       Effect.gen(function* () {
-        const root = createGitRepo();
+        const root = acquireTestWorkspace();
+        onTestFinished(() => releaseRegisteredTestGitRepository(root));
+        createGitRepo(root);
         runTestProcessOrThrow("git", ["config", "user.name", "But Why Test"], { cwd: root });
         runTestProcessOrThrow("git", ["config", "user.email", "but-why@example.test"], {
           cwd: root,
@@ -241,11 +247,7 @@ it.effect("observes final Task Review restoration and restoration failure", () =
         const workspacePath = expectedTaskReviewWorkspacePath(repositoryCommonDirectory, 1);
         const agentSessionStorageRoot = createTestWorkspace();
         mkdirSync(dirname(workspacePath), { recursive: true });
-        runTestProcessOrThrow(
-          "git",
-          ["worktree", "add", "--detach", "--", workspacePath, baseCommit],
-          { cwd: root },
-        );
+        addRegisteredTestGitWorktree(root, workspacePath, baseCommit);
         const taskId = publicTaskId("BY-1");
         const reviewerProfile = {
           agentProfile: "review",
@@ -331,26 +333,7 @@ it.effect("observes final Task Review restoration and restoration failure", () =
           proposalIsCurrent: () => Effect.succeed(true),
         };
         const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
-          Effect.gen(function* () {
-            const result = runTestProcess("bash", ["-lc", command], {
-              cwd: options?.cwd ?? workspacePath,
-            });
-            if (result.error !== undefined) {
-              return yield* new WorkspaceCommandExecutionFailed({
-                message: result.error.message,
-              });
-            }
-            if (result.status === null) {
-              return yield* new WorkspaceCommandExecutionFailed({
-                message: "Test command exited without a status.",
-              });
-            }
-            return {
-              exitCode: result.status,
-              stdout: result.stdout,
-              stderr: result.stderr,
-            };
-          });
+          runTestWorkspaceCommand(command, options?.cwd ?? workspacePath);
         const reviews = openTaskReviewUseCases({
           repositoryRoot: root,
           repositoryCommonDirectory,

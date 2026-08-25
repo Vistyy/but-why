@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe, vi } from "vitest";
+import { describe, onTestFinished, vi } from "vitest";
 import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import {
   piReviewerAgentRuntime,
@@ -21,7 +21,6 @@ import {
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
-import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { DisposableWorkspaceRestorationFailed } from "../../src/disposableWorkspace/disposableWorkspace.js";
 import { repoRoot } from "../support/by-cli.js";
@@ -33,9 +32,13 @@ import {
   git,
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
-import { removeRegisteredTestGitWorktree } from "../support/testGit.js";
-import { runTestProcess } from "../support/testProcess.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
+import {
+  addRegisteredTestGitWorktree,
+  releaseRegisteredTestGitRepository,
+  removeRegisteredTestGitWorktree,
+} from "../support/testGit.js";
+import { runTestWorkspaceCommand } from "../support/testProcess.js";
+import { acquireTestWorkspace, createTestWorkspace } from "../support/testWorkspace.js";
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
   execute: () => Effect.die("Captured Specialist runtime must not execute a reviewer process."),
@@ -739,38 +742,21 @@ describe("Candidate Specialist Review phase", () => {
 
   it.scoped("restores the workspace after an interrupted reviewer", () =>
     Effect.gen(function* () {
-      const repo = candidateReadyRepo();
+      const workspace = acquireTestWorkspace();
+      onTestFinished(() => releaseRegisteredTestGitRepository(workspace));
+      const repo = candidateReadyRepo(workspace);
       const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
       if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
       const workspaceId = "validation-run-426614174002";
       const repositoryCommonDirectory = commonDirectory(repo);
       const worktreePath = expectedSnapshotWorkspacePath(repositoryCommonDirectory, 426614174002);
       mkdirSync(dirname(worktreePath), { recursive: true });
-      git(repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
+      addRegisteredTestGitWorktree(repo, worktreePath, captured.headSha);
       const results: Parameters<
         NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
       >[0][] = [];
       const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
-        Effect.gen(function* () {
-          const result = runTestProcess("bash", ["-lc", command], {
-            cwd: options?.cwd ?? worktreePath,
-          });
-          if (result.error !== undefined) {
-            return yield* new WorkspaceCommandExecutionFailed({
-              message: result.error.message,
-            });
-          }
-          if (result.status === null) {
-            return yield* new WorkspaceCommandExecutionFailed({
-              message: "Test command exited without a status.",
-            });
-          }
-          return {
-            exitCode: result.status,
-            stdout: result.stdout,
-            stderr: result.stderr,
-          };
-        });
+        runTestWorkspaceCommand(command, options?.cwd ?? worktreePath);
       const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
         Effect.gen(function* () {
           writeFileSync(join(worktreePath, ".but-why/config.json"), "interrupted\n");
@@ -846,39 +832,22 @@ describe("Candidate Specialist Review phase", () => {
     "restores real Candidate mutations before retries and the next reviewer",
     () =>
       Effect.gen(function* () {
-        const repo = candidateReadyRepo();
+        const workspace = acquireTestWorkspace();
+        onTestFinished(() => releaseRegisteredTestGitRepository(workspace));
+        const repo = candidateReadyRepo(workspace);
         const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const workspaceId = "validation-run-426614174001";
         const repositoryCommonDirectory = commonDirectory(repo);
         const worktreePath = expectedSnapshotWorkspacePath(repositoryCommonDirectory, 426614174001);
         mkdirSync(dirname(worktreePath), { recursive: true });
-        git(repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
+        addRegisteredTestGitWorktree(repo, worktreePath, captured.headSha);
         const statuses: string[] = [];
         const results: Parameters<
           NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
         >[0][] = [];
         const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
-          Effect.gen(function* () {
-            const result = runTestProcess("bash", ["-lc", command], {
-              cwd: options?.cwd ?? worktreePath,
-            });
-            if (result.error !== undefined) {
-              return yield* new WorkspaceCommandExecutionFailed({
-                message: result.error.message,
-              });
-            }
-            if (result.status === null) {
-              return yield* new WorkspaceCommandExecutionFailed({
-                message: "Test command exited without a status.",
-              });
-            }
-            return {
-              exitCode: result.status,
-              stdout: result.stdout,
-              stderr: result.stderr,
-            };
-          });
+          runTestWorkspaceCommand(command, options?.cwd ?? worktreePath);
         let invocations = 0;
         const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
           Effect.sync(() => {

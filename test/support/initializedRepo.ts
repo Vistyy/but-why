@@ -44,12 +44,12 @@ export const cloneInitializedRepositoryState = (template: string) =>
     return root;
   }).pipe(Effect.orDie);
 
-export const cloneInitializedTestRepository = (template: string) =>
+export const cloneInitializedTestRepository = (template: string, workspace?: string) =>
   Effect.gen(function* () {
     const root = yield* Effect.sync(() => {
-      const workspace = createTestWorkspace();
-      cpSync(template, workspace, { recursive: true });
-      return workspace;
+      const workspaceRoot = workspace ?? createTestWorkspace();
+      cpSync(template, workspaceRoot, { recursive: true });
+      return workspaceRoot;
     });
     const commonDirectory = join(root, ".git");
     yield* Effect.gen(function* () {
