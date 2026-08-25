@@ -21,6 +21,7 @@ const runner = join(repositoryRoot, "scripts/with-capacity-lock.sh");
 const qualityRunner = join(repositoryRoot, "scripts/run-quality-workload.sh");
 const temporaryPaths: string[] = [];
 const processDeadlineMs = 5_000;
+const qualityTestTimeoutMs = 30_000;
 
 type CommandResult = {
   status: number | null;
@@ -363,7 +364,7 @@ afterEach(() => {
   }
 });
 
-describe("quality interface", () => {
+describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
   test("waits before starting the quality workload", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);

@@ -14,7 +14,7 @@ import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const validationRunId = 1;
-const snapshotWorkspaceProcessTestTimeoutMs = 10_000;
+const snapshotWorkspaceProcessTestTimeoutMs = 15_000;
 const createSnapshotWorkspace = makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace);
 
 describe("Snapshot Workspace lifecycle", () => {

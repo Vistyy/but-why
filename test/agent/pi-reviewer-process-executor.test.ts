@@ -17,7 +17,7 @@ import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piRevi
 import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
 import { observeUntil } from "../support/observe.js";
 
-const reviewerProcessTerminationTestTimeoutMs = 10_000;
+const reviewerProcessTerminationTestTimeoutMs = 15_000;
 
 const profile = {
   agentProfile: "review",

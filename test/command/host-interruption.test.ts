@@ -32,7 +32,10 @@ const testHost = (): TestHost => {
 };
 
 describe("host interruption boundary", () => {
-  it("captures the signal and finalizes before reporting completion", async () => {
+  it.each([
+    "SIGINT",
+    "SIGTERM",
+  ] as const)("captures %s and finalizes before reporting completion", async (signal) => {
     const host = testHost();
     const events: string[] = [];
     let completion: HostInterruptionResult<void> | undefined;
@@ -50,11 +53,11 @@ describe("host interruption boundary", () => {
       host,
     );
 
-    host.emit("SIGTERM");
+    host.emit(signal);
     await running;
 
     expect(events).toEqual(["finalized", "completed"]);
-    expect(completion).toMatchObject({ ok: false, signal: "SIGTERM" });
+    expect(completion).toMatchObject({ ok: false, signal });
     expect(host.listeners.size).toBe(0);
   });
 
