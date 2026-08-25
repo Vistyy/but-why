@@ -29,6 +29,8 @@ describe("private Node SQLite SQL Adapter", () => {
         expect(inserted).toEqual([{ id: 1, value: "one" }]);
         const values = yield* sql`SELECT id, value FROM records`.values;
         expect(values).toEqual([[1, "one"]]);
+        const rawRows = yield* sql`SELECT id, value FROM records`.raw;
+        expect(rawRows).toEqual([{ id: 1, value: "one" }]);
         const raw = yield* sql`INSERT INTO records (value) VALUES (${"two"})`.raw;
         expect(raw).toMatchObject({ changes: 1 });
         const failure = yield* sql`SELECT * FROM missing_records`.pipe(Effect.flip);
