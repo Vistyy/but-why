@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import type { ChangeCleanup } from "../change/change.js";
 import {
   classifyOwnedPullRequest,
   observedMergedChangeEvidence,
@@ -56,7 +55,6 @@ export type TaskCancellationResult =
       readonly changed: boolean;
       readonly task: TaskRecord;
       readonly change: TaskChangeCancellationChange | null;
-      readonly cleanup: ChangeCleanup | null;
     }
   | {
       readonly ok: false;
@@ -191,7 +189,6 @@ const cancelTask = (
             changed: cancelled.changed,
             task: cancelled.task,
             change: null,
-            cleanup: null,
           }
         : {
             ok: false,
@@ -226,7 +223,6 @@ const cancelTask = (
       changed: result.changed,
       task: result.task,
       change: result.change,
-      cleanup: result.change.cleanup,
     };
   });
 

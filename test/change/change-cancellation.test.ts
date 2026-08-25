@@ -713,8 +713,10 @@ describe("Change cancellation", () => {
           expect(result).toMatchObject({
             ok: true,
             status: "cancelled",
-            change: { state: "closed" },
-            cleanup: { state: "pending", blockingReason: null },
+            change: {
+              state: "closed",
+              cleanup: { state: "pending", blockingReason: null },
+            },
           });
           return result;
         }),

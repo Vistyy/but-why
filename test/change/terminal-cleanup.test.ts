@@ -337,7 +337,7 @@ describe("Repeated cancellation leaves cleanup for reconciliation", () => {
         ok: true,
         status: "cancelled",
         changed: false,
-        cleanup: pendingCleanup,
+        change: { cleanup: pendingCleanup },
       });
       expect(events).toEqual(["read-task", "read-change", "read-task"]);
     }),
