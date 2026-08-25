@@ -48,6 +48,18 @@ export type AdmitTaskReviewResult =
     }
   | TaskReviewAdmissionRejection;
 
+export type SettleSimplificationAdviceInput =
+  | {
+      readonly reviewId: number;
+      readonly complete: true;
+      readonly advice: TaskSimplificationAdvice;
+    }
+  | {
+      readonly reviewId: number;
+      readonly complete: false;
+      readonly failure: TaskReviewToolingFailure;
+    };
+
 export type CompleteTaskReviewInput = {
   readonly reviewId: number;
   readonly findings: readonly TaskReviewFinding[];
@@ -82,21 +94,18 @@ export type CompleteTaskReviewSuccess =
       readonly outcome: "passed";
       readonly review: PassedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: "todo" };
-      readonly simplificationAdvice?: TaskSimplificationAdvice;
     }
   | {
       readonly ok: true;
       readonly outcome: "blocked";
       readonly review: BlockedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: "new" };
-      readonly simplificationAdvice?: TaskSimplificationAdvice;
     }
   | {
       readonly ok: true;
       readonly outcome: "tooling_failed";
       readonly review: ToolingFailedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: TaskState };
-      readonly simplificationAdvice?: TaskSimplificationAdvice;
     };
 
 export type CompleteTaskReviewResult =
@@ -114,12 +123,9 @@ export type TaskReviewPersistence = {
   readonly linkSimplificationAdviceInvocation: (input: {
     readonly reviewId: number;
   }) => AgentSessionSqlLink;
-  readonly settleSimplificationAdvice: (input: {
-    readonly reviewId: number;
-    readonly advice?: TaskSimplificationAdvice;
-    readonly failure?: TaskReviewToolingFailure;
-    readonly complete: boolean;
-  }) => AgentSessionSqlLink;
+  readonly settleSimplificationAdvice: (
+    input: SettleSimplificationAdviceInput,
+  ) => AgentSessionSqlLink;
   readonly reuseJudgment: (
     taskId: PublicTaskId,
     now: string,

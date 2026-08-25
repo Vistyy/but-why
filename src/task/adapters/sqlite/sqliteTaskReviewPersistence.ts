@@ -24,6 +24,7 @@ import type {
   AdmitTaskReviewInput,
   AdmitTaskReviewResult,
   CompleteTaskReviewSuccess,
+  SettleSimplificationAdviceInput,
   TaskReviewAdmissionRejection,
   TaskReviewPersistence,
 } from "../../review/taskReviewPersistence.js";
@@ -31,7 +32,6 @@ import { expectedTaskReviewWorkspacePath } from "../../review/taskReviewWorkspac
 import {
   decodeTaskSimplificationAdvice,
   decodeTaskSimplificationAdvicePolicy,
-  type TaskSimplificationAdvice,
   type TaskSimplificationAdviceAttempt,
 } from "../../review/taskSimplificationAdvice.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../taskId.js";
@@ -826,12 +826,8 @@ const linkSimplificationAdviceInvocation = (
 
 const settleSimplificationAdvice = (
   sql: SqlClient.SqlClient,
-  input: {
-    readonly reviewId: number;
+  input: SettleSimplificationAdviceInput & {
     readonly invocationId: number;
-    readonly advice?: TaskSimplificationAdvice;
-    readonly failure?: TaskReviewToolingFailure;
-    readonly complete: boolean;
   },
 ) =>
   Effect.gen(function* () {
@@ -840,20 +836,16 @@ const settleSimplificationAdvice = (
     `;
     if (row[0] === undefined)
       return yield* invalid("settle Task Simplification Advice", "Review missing");
-    if (input.complete && input.advice !== undefined) {
+    if (input.complete) {
       yield* sql`
         UPDATE task_review_simplification_advice
         SET outcome = 'completed', advice = ${JSON.stringify(input.advice)}, unavailable = NULL
         WHERE task_review_id = ${input.reviewId}
       `;
     } else {
-      const failure = input.failure ?? {
-        operation: "run_underengineer",
-        message: "Underengineer did not produce Task Simplification Advice.",
-      };
       yield* sql`
         UPDATE task_review_simplification_advice
-        SET outcome = 'unavailable', advice = NULL, unavailable = ${JSON.stringify(failure)}
+        SET outcome = 'unavailable', advice = NULL, unavailable = ${JSON.stringify(input.failure)}
         WHERE task_review_id = ${input.reviewId}
       `;
     }

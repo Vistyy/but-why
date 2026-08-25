@@ -42,6 +42,7 @@ import {
   resolveTaskSimplificationAdvicePolicy,
 } from "../review/taskReviewConfig.js";
 import type { TaskReviewerOutput } from "../review/taskReviewerOutput.js";
+import type { CompleteTaskReviewSuccess } from "../review/taskReviewPersistence.js";
 import {
   abandonTaskReview,
   inspectTaskReviewIdentity,
@@ -50,6 +51,10 @@ import {
   type TaskReviewRecoveryUseCases,
   type TaskReviewSubmitResult,
 } from "../review/taskReviewUseCases.js";
+import type {
+  TaskSimplificationAdvice,
+  TaskSimplificationAdviceAttempt,
+} from "../review/taskSimplificationAdvice.js";
 import type { TaskSimplificationAdviceOutput } from "../review/taskSimplificationAdviceOutput.js";
 import type { PublicTaskId } from "../taskId.js";
 
@@ -171,15 +176,25 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
       Effect.flatMap(({ judgment, advice }) =>
         judgment === undefined
           ? submitFreshTaskReview(input, use)
-          : use({
-              ...judgment,
-              ...(advice === undefined ? {} : { simplificationAdvice: advice }),
-              ...(advice === undefined && judgment.review.simplificationAdviceAttempt !== undefined
-                ? { simplificationAdviceAttempt: judgment.review.simplificationAdviceAttempt }
-                : {}),
-            }).pipe(Effect.map((value) => ({ ok: true as const, value }))),
+          : use(
+              submissionResultWithAdvice(
+                judgment,
+                advice,
+                judgment.review.simplificationAdviceAttempt,
+              ),
+            ).pipe(Effect.map((value) => ({ ok: true as const, value }))),
       ),
     );
+};
+
+const submissionResultWithAdvice = (
+  judgment: CompleteTaskReviewSuccess,
+  advice: TaskSimplificationAdvice | undefined,
+  attempt: TaskSimplificationAdviceAttempt | undefined,
+): TaskReviewSubmitResult => {
+  if (advice !== undefined) return { ...judgment, simplificationAdvice: advice };
+  if (attempt !== undefined) return { ...judgment, simplificationAdviceAttempt: attempt };
+  return judgment;
 };
 
 const submitFreshTaskReview = <A, E, R>(

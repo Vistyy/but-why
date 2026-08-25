@@ -72,11 +72,22 @@ import {
   type TaskSimplificationAdviceOutput,
 } from "./taskSimplificationAdviceOutput.js";
 
+type TaskReviewSubmissionAdvice =
+  | {
+      readonly simplificationAdvice: TaskSimplificationAdvice;
+      readonly simplificationAdviceAttempt?: never;
+    }
+  | {
+      readonly simplificationAdvice?: never;
+      readonly simplificationAdviceAttempt: TaskSimplificationAdviceAttempt;
+    }
+  | {
+      readonly simplificationAdvice?: never;
+      readonly simplificationAdviceAttempt?: never;
+    };
+
 export type TaskReviewSubmitResult =
-  | (CompleteTaskReviewSuccess & {
-      readonly simplificationAdvice?: TaskSimplificationAdvice;
-      readonly simplificationAdviceAttempt?: TaskSimplificationAdviceAttempt;
-    })
+  | (CompleteTaskReviewSuccess & TaskReviewSubmissionAdvice)
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
   | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
