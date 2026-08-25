@@ -22,10 +22,8 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 ## 1. Read the implementation direction
 
 Run `<but-why> change show <change-id>`.
-For a Change linked to a Task, use the complete `acceptanceContext` in the Change inspection as the accepted implementation intent.
-For a Change without a Task, no Acceptance Context exists.
-When the current session implements a Change without a Task, use the exact authorized outcome established in the current Operator conversation as implementation direction.
-When a separate Interactive Session implements a Change without a Task, use the authorized outcome in the initial Implementer Prompt as implementation direction without treating it as durable intent.
+Use the complete `acceptanceContext` as accepted implementation intent when it is present.
+Otherwise, use the exact authorized outcome from the current Operator conversation or initial Implementer Prompt as implementation direction without treating it as durable intent.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
 This step is complete when the Change, implementation direction, and Managed Worktree are known.

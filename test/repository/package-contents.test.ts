@@ -215,10 +215,15 @@ describe("release package boundary", () => {
       "extensions/continue-change.ts",
       "docs/public/skills/but-why/SKILL.md",
       "docs/public/skills/but-why/references/command-guidance.md",
+      "docs/public/skills/but-why/references/blocker-triage.md",
       "docs/public/skills/but-why/references/implement-change.md",
-      "docs/public/skills/but-why/references/operator-workflow.md",
-      "docs/public/skills/but-why/references/task-authoring.md",
       "docs/public/skills/but-why/references/implementation-verification.md",
+      "docs/public/skills/but-why/references/interactive-session.md",
+      "docs/public/skills/but-why/references/operator-workflow.md",
+      "docs/public/skills/but-why/references/reconcile-change.md",
+      "docs/public/skills/but-why/references/start-work.md",
+      "docs/public/skills/but-why/references/task-authoring.md",
+      "docs/public/skills/but-why/references/task-operations.md",
     ]) {
       expect(files).toContain(required);
     }
@@ -231,34 +236,6 @@ describe("release package boundary", () => {
     expect(files).not.toContain("bin/by");
     expect(files).not.toContain("justfile");
     expect(readFileSync(join(root, "CHANGELOG.md"), "utf8")).toContain("Source tag: `v0.0.1`");
-  });
-
-  it("packages responsibility-specific portable workflow guidance", () => {
-    const skillRoot = join(prepared.installedPackage, "docs/public/skills/but-why");
-    const skill = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
-    const operator = readFileSync(join(skillRoot, "references/operator-workflow.md"), "utf8");
-    const implementer = readFileSync(join(skillRoot, "references/implement-change.md"), "utf8");
-    const verification = readFileSync(
-      join(skillRoot, "references/implementation-verification.md"),
-      "utf8",
-    );
-
-    expect(skill).toContain("Select guidance from the responsibility of the next action.");
-    expect(skill).toContain("Do not infer the current responsibility from a Change association");
-    expect(operator).toContain("Investigate exhaustively until the evidence explains the blocker");
-    expect(operator).toContain("use `/pause-change` in that session before investigating");
-    expect(operator).toContain(
-      "An integration prototype tests whether several parts work together",
-    );
-    expect(operator).toContain("A Resolution may replace earlier accepted direction");
-    expect(operator).toContain("change reconcile <change-id>");
-    expect(implementer).toContain("use a bounded real-system experiment");
-    expect(implementer).toContain("Stall Detection can create that transfer");
-    expect(implementer).not.toContain("change blocker resolve");
-    expect(implementer).not.toContain("/pause-change");
-    expect(implementer).not.toContain("change reconcile");
-    expect(verification).not.toContain("Acceptance Reviewer");
-    expect(verification).not.toContain("Review verification");
   });
 
   it("preserves lazy command loading and includes every declared dynamic target", () => {

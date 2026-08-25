@@ -18,8 +18,8 @@ Before setup guidance, read [Setup guidance](../../setup.md) completely.
 
 For Operator responsibility:
 
-- Before Task authoring or Task revision, read [Task authoring](references/task-authoring.md) and [Operator workflow](references/operator-workflow.md) completely.
-- Before Work Route Selection, Task Recording, Task Submission, implementation authorization, Change control, Implementation Blocker investigation, Interactive Session management, or reconciliation, read [Operator workflow](references/operator-workflow.md) completely.
+- Before selecting a Work Route, operating on a Task, authorizing implementation, controlling a Change, managing an Interactive Session, investigating an Implementation Blocker, or reconciling a Change, read [Operator workflow](references/operator-workflow.md) completely.
+- Follow its condition for loading the procedure required by the next action.
 
 For Implementer responsibility:
 
