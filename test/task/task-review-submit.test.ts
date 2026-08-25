@@ -1275,7 +1275,7 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
 );
 
 it.effect(
-  "continues a compatible Task Agent Session with the current proposal diff and exposes transcripts",
+  "continues a compatible Task Agent Session with the complete current proposal and exposes transcripts",
   () =>
     Effect.gen(function* () {
       const root = createGitRepo();
@@ -1367,7 +1367,14 @@ it.effect(
       expect(second.status, second.stdout).toBe(1);
       expect(observed).toHaveLength(2);
       expect(observed[1]?.resumeSession).toBe("by-agent-2");
-      expect(observed[1]?.prompt).toContain("Changed proposal");
+      expect(observed[1]?.prompt).toContain(
+        '"title":"Review continuity","description":"Changed proposal\\n","dependencyIds":[]',
+      );
+      expect(observed[1]?.prompt).toContain(
+        'Captured direct Task Dependency evidence:\n{"dependencies":[]}',
+      );
+      expect(observed[1]?.prompt).not.toContain("Deterministic proposal diff");
+      expect(observed[1]?.prompt).not.toContain("Initial proposal");
 
       const secondId = (JSON.parse(second.stdout) as { error: { review: { id: number } } }).error
         .review.id;

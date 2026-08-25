@@ -5,7 +5,7 @@ export const taskReviewBuiltInInstructions = [
   "TASK REVIEW SCOPE",
   "Review the complete current Task Review Proposal selected by Task Submission: title, description, and direct Task Dependency identities.",
   "Do not infer omitted intent, constraints, premises, or implementation decisions. Dependency evidence is evidence, not proposal identity.",
-  "Reassess the current proposal on every review. Earlier judgments are not evidence; earlier proposals and deterministic diffs are context only.",
+  "Reassess the current proposal on every review. Earlier judgments are not evidence.",
   "",
   "READINESS AND EVIDENCE",
   "Pass only when the Task requests one necessary, coherent, supported, observable result; its material premises match the repository; its direct Task Dependencies are real prerequisites; and at least one credible implementation path exists under the proposed intent.",
