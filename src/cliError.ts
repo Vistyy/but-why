@@ -7,7 +7,12 @@ export type StructuredErrorInput = {
   readonly help: readonly string[];
 };
 
-export const structuredError = (input: StructuredErrorInput): StructuredObject => ({
+export type StructuredErrorOutput = {
+  readonly error: StructuredObject;
+  readonly help: readonly string[];
+};
+
+export const structuredError = (input: StructuredErrorInput): StructuredErrorOutput => ({
   error: {
     ...(input.details ?? {}),
     code: input.code,

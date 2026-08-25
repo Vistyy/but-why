@@ -1,4 +1,8 @@
-import { type StructuredErrorInput, structuredError } from "./cliError.js";
+import {
+  type StructuredErrorInput,
+  type StructuredErrorOutput,
+  structuredError,
+} from "./cliError.js";
 import type { RepositoryStorageError } from "./contracts/repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { StructuredObject } from "./output/structured.js";
@@ -13,7 +17,7 @@ export type CliSuccessResult = {
 
 export type CliRuntimeErrorResult = {
   readonly exitCode: 1;
-  readonly stdout: StructuredObject;
+  readonly stdout: StructuredErrorOutput;
 };
 
 export type CliUsageErrorResult = {
@@ -82,7 +86,7 @@ const invalidRepoConfig = (
     help: ["Fix the JSON or run `by init --id-prefix <prefix>` after moving it aside."],
   });
 
-export const stateStoreUnavailable = (idPrefix: string | undefined): CliResult =>
+export const stateStoreUnavailable = (idPrefix: string | undefined): CliRuntimeErrorResult =>
   runtimeError({
     code: "state_store_unavailable",
     message: "Shared But Why? state is unavailable.",
@@ -96,7 +100,7 @@ export const stateStoreUnavailable = (idPrefix: string | undefined): CliResult =
 export const repositoryStorageErrorResult = (
   error: RepositoryStorageError,
   idPrefix?: string,
-): CliResult => {
+): CliRuntimeErrorResult => {
   const result = (() => {
     switch (error._tag) {
       case "RepositoryIdentityConflict":
@@ -112,7 +116,7 @@ export const repositoryStorageErrorResult = (
   return result;
 };
 
-const persistedDataInvalid = (operation: string): CliResult =>
+const persistedDataInvalid = (operation: string): CliRuntimeErrorResult =>
   runtimeError({
     code: "persisted_data_invalid",
     message: "Shared But Why? state contains malformed persisted data.",
@@ -122,7 +126,10 @@ const persistedDataInvalid = (operation: string): CliResult =>
     ],
   });
 
-const idPrefixConflict = (configuredIdPrefix: string, storedIdPrefix: string): CliResult =>
+const idPrefixConflict = (
+  configuredIdPrefix: string,
+  storedIdPrefix: string,
+): CliRuntimeErrorResult =>
   runtimeError({
     code: "id_prefix_conflict",
     message: `Repo Config ID Prefix ${configuredIdPrefix} conflicts with initialized Shared Repository State prefix ${storedIdPrefix}.`,
@@ -130,7 +137,7 @@ const idPrefixConflict = (configuredIdPrefix: string, storedIdPrefix: string): C
     help: [`Restore .but-why/config.json to use idPrefix ${storedIdPrefix}, then retry.`],
   });
 
-const sharedStateIdentityConflict = (): CliResult =>
+const sharedStateIdentityConflict = (): CliRuntimeErrorResult =>
   runtimeError({
     code: "shared_state_identity_conflict",
     message: "Shared But Why? state belongs to a different Git repository.",
