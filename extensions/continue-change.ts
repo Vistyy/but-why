@@ -1252,7 +1252,6 @@ export default function continueChange(pi: ExtensionAPI): void {
     if (observed.blockerHistory.active !== null) {
       blockerAbortRequested = true;
       showWatcher(ctx, { kind: "blocked" });
-      scheduleBlockedPolling(ctx);
       ctx.abort();
     }
   });

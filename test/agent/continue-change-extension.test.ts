@@ -534,6 +534,7 @@ describe("packaged Change Implement continuation extension", () => {
       await harness.emit("agent_end", {
         messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
       });
+      await harness.emit("agent_settled");
 
       expect(harness.getAbortCount()).toBe(1);
       expect(harness.sent).toEqual([]);
