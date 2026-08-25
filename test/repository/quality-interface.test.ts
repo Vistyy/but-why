@@ -1,6 +1,7 @@
 import {
   chmodSync,
   cpSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -19,11 +20,25 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const runner = join(repositoryRoot, "scripts/with-capacity-lock.sh");
 const qualityRunner = join(repositoryRoot, "scripts/run-quality-workload.sh");
 const temporaryPaths: string[] = [];
+const processDeadlineMs = 5_000;
 
 type CommandResult = {
   status: number | null;
   output: string;
 };
+
+type StartedCommand = {
+  readonly child: { readonly exitCode: number | null };
+  readonly done: Promise<CommandResult>;
+};
+
+const awaitProcessDone = (process: StartedCommand, description: string): Promise<CommandResult> =>
+  observeUntil({
+    description,
+    observe: () => process.child.exitCode,
+    isReady: (exitCode) => exitCode !== null,
+    timeoutMs: processDeadlineMs,
+  }).then(() => process.done);
 
 const startRunner = (lockFile: string, args: string[]) => {
   const child = startTestProcess("bash", [runner, ...args], {
@@ -52,8 +67,14 @@ const startRunner = (lockFile: string, args: string[]) => {
   };
 };
 
-const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  startRunner(lockFile, args).done;
+const runRunner = async (lockFile: string, args: string[]): Promise<CommandResult> => {
+  const runnerProcess = startRunner(lockFile, args);
+  try {
+    return await awaitProcessDone(runnerProcess, "runner process to exit");
+  } finally {
+    await stopRunner(runnerProcess);
+  }
+};
 
 const startJust = (
   lockFile: string,
@@ -89,14 +110,20 @@ const startJust = (
   };
 };
 
-const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  startJust(lockFile, args, {
+const runJust = async (lockFile: string, args: string[]): Promise<CommandResult> => {
+  const justProcess = startJust(lockFile, args, {
     PATH: `${dirname(lockFile)}:${Reflect.get(process.env, "PATH") ?? ""}`,
-  }).done;
+  });
+  try {
+    return await awaitProcessDone(justProcess, "Just process to exit");
+  } finally {
+    await stopJust(justProcess);
+  }
+};
 
 const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
   if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
-  await runnerProcess.done;
+  await awaitProcessDone(runnerProcess, "runner process cleanup");
 };
 
 const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Signals): void => {
@@ -106,25 +133,31 @@ const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Si
 
 const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> => {
   if (justProcess.child.exitCode === null) signalJust(justProcess, "SIGTERM");
-  await justProcess.done;
+  await awaitProcessDone(justProcess, "Just process cleanup");
 };
 
-const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult> =>
-  new Promise<CommandResult>((resolveResult) => {
-    const child = startTestProcess(
-      join(repositoryRoot, "node_modules/.bin/vitest"),
-      ["run", "--config", join(repositoryRoot, "vitest.config.ts"), "--root", fixtureRoot, fixture],
-      { cwd: fixtureRoot },
-    );
-    let output = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
+const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult> => {
+  const child = startTestProcess(
+    join(repositoryRoot, "node_modules/.bin/vitest"),
+    ["run", "--config", join(repositoryRoot, "vitest.config.ts"), "--root", fixtureRoot, fixture],
+    { cwd: fixtureRoot },
+  );
+  let output = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  const done = new Promise<CommandResult>((resolveResult) => {
     child.on("close", (status) => resolveResult({ status, output }));
   });
+  const process = { child, done };
+  return awaitProcessDone(process, "Vitest process to exit").finally(async () => {
+    if (child.exitCode === null) child.kill("SIGTERM");
+    await awaitProcessDone(process, "Vitest process cleanup");
+  });
+};
 
 const waitForFile = (file: string): Promise<string> =>
   observeUntil({
@@ -363,7 +396,7 @@ describe("quality interface", () => {
       expect(() => readFileSync(testFile)).toThrow();
 
       writeFileSync(releaseFile, "release");
-      const result = await quality.done;
+      const result = await awaitProcessDone(quality, "quality process to exit");
       expect(result.status, result.output).toBe(0);
       expect(result.output).toContain("quality completed in");
       expect(result.output).not.toContain("warning: quality exceeded");
@@ -371,7 +404,7 @@ describe("quality interface", () => {
       expect(readFileSync(buildFile, "utf8")).toBe("build");
       expect(readFileSync(testFile, "utf8")).toBe("test");
     } finally {
-      if (quality?.child.exitCode === null) await stopJust(quality);
+      if (quality !== undefined) await stopJust(quality);
       await stopRunner(holder);
     }
   });
@@ -387,7 +420,7 @@ describe("quality interface", () => {
     const invocationsFile = join(directory, "invocations");
     createFailingQualityFixture(directory);
 
-    const result = await startJust(
+    const quality = startJust(
       lockFile,
       ["quality"],
       {
@@ -395,7 +428,13 @@ describe("quality interface", () => {
         QUALITY_INVOCATIONS: invocationsFile,
       },
       directory,
-    ).done;
+    );
+    let result: CommandResult;
+    try {
+      result = await awaitProcessDone(quality, "quality failure process to exit");
+    } finally {
+      await stopJust(quality);
+    }
 
     expect(result.status).toBe(1);
     expect(result.output).toContain(`${failure} failure marker`);
@@ -429,10 +468,13 @@ describe("quality interface", () => {
       expect(targeted.output).toContain("1 passed");
 
       writeFileSync(releaseFile, "release");
-      const unselectedResult = await unselected.done;
+      const unselectedResult = await awaitProcessDone(
+        unselected,
+        "unselected test process to exit",
+      );
       expect(unselectedResult.status, unselectedResult.output).toBe(0);
     } finally {
-      if (unselected?.child.exitCode === null) await stopJust(unselected);
+      if (unselected !== undefined) await stopJust(unselected);
       await stopRunner(holder);
     }
   }, 30_000);
@@ -459,7 +501,7 @@ describe("quality interface", () => {
       expect(waiter.child.exitCode).toBeNull();
       expect(waiter.output).toContain("waiting: test is waiting for capacity");
       waiter.child.kill("SIGTERM");
-      expect((await waiter.done).status).toBe(143);
+      expect((await awaitProcessDone(waiter, "capacity waiter to exit")).status).toBe(143);
       expect(waiter.output).toContain("rerun the same command to retry");
       expect(() => readFileSync(acquiredFile)).toThrow();
     } finally {
@@ -496,19 +538,21 @@ describe("quality interface", () => {
       readyFile,
       descendantPidFile,
     ]);
+    let observer: ReturnType<typeof startRunner> | undefined;
 
     try {
       await waitForFile(readyFile);
       const descendantIdentity = await readProcessIdentity(descendantPidFile);
-      const observer = startCleanupObserver(lockFile, descendantIdentity);
+      observer = startCleanupObserver(lockFile, descendantIdentity);
       await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
       holder.child.kill("SIGINT");
-      expect((await holder.done).status).toBe(130);
-      const observation = await observer.done;
+      expect((await awaitProcessDone(holder, "interrupted runner to exit")).status).toBe(130);
+      const observation = await awaitProcessDone(observer, "cleanup observer to exit");
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after descendant cleanup");
       await waitForProcessExit(descendantIdentity);
     } finally {
+      if (observer !== undefined) await stopRunner(observer);
       await stopRunner(holder);
     }
   });
@@ -530,26 +574,34 @@ describe("quality interface", () => {
       daemonPidFile,
       daemonReadyFile,
     ]);
-
-    await waitForFile(workloadReadyFile);
-    await waitForFile(daemonReadyFile);
-    const daemonIdentity = await readProcessIdentity(daemonPidFile);
-    const observer = startCapacityObserver(lockFile);
+    let daemonIdentity: string | undefined;
+    let observer: ReturnType<typeof startRunner> | undefined;
 
     try {
+      await waitForFile(workloadReadyFile);
+      await waitForFile(daemonReadyFile);
+      daemonIdentity = await readProcessIdentity(daemonPidFile);
+      observer = startCapacityObserver(lockFile);
       await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       holder.child.kill("SIGTERM");
-      expect((await holder.done).status).toBe(143);
-      const observation = await observer.done;
+      expect((await awaitProcessDone(holder, "interrupted runner to exit")).status).toBe(143);
+      const observation = await awaitProcessDone(observer, "capacity observer to exit");
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
-      expect(processIdentity(Number(daemonIdentity.split(":", 1)[0]))).toBe(daemonIdentity);
+      expect(processIdentity(Number(daemonIdentity?.split(":", 1)[0]))).toBe(daemonIdentity);
     } finally {
-      const daemonPid = Number(daemonIdentity.split(":", 1)[0]);
-      process.kill(daemonPid, "SIGKILL");
-      await waitForProcessExit(daemonIdentity);
+      if (observer !== undefined) await stopRunner(observer);
+      const daemonToStop =
+        daemonIdentity ??
+        (existsSync(daemonPidFile)
+          ? processIdentity(Number(readFileSync(daemonPidFile, "utf8")))
+          : undefined);
+      if (daemonToStop !== undefined) {
+        const daemonPid = Number(daemonToStop.split(":", 1)[0]);
+        if (processIdentity(daemonPid) === daemonToStop) process.kill(daemonPid, "SIGKILL");
+        await waitForProcessExit(daemonToStop);
+      }
       await stopRunner(holder);
-      await stopRunner(observer);
     }
   });
 
@@ -565,19 +617,23 @@ describe("quality interface", () => {
     const justProcess = startJust(lockFile, ["test"], {
       PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
     });
+    let observer: ReturnType<typeof startRunner> | undefined;
 
     try {
       await waitForFile(readyFile);
       await readProcessIdentity(descendantPidFile);
-      const observer = startCapacityObserver(lockFile);
+      observer = startCapacityObserver(lockFile);
       await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       signalJust(justProcess, signal);
-      expect((await justProcess.done).status).toBe(expectedStatus);
+      expect((await awaitProcessDone(justProcess, "interrupted Just process to exit")).status).toBe(
+        expectedStatus,
+      );
       expect(justProcess.output).toContain("rerun the same command to retry");
-      const observation = await observer.done;
+      const observation = await awaitProcessDone(observer, "capacity observer to exit");
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
+      if (observer !== undefined) await stopRunner(observer);
       await stopJust(justProcess);
     }
   });
@@ -601,21 +657,25 @@ describe("quality interface", () => {
       },
       directory,
     );
+    let observer: ReturnType<typeof startRunner> | undefined;
 
     try {
       await waitForFile(readyFile);
       await readProcessIdentity(descendantPidFile);
-      const observer = startCapacityObserver(lockFile);
+      observer = startCapacityObserver(lockFile);
       await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       signalJust(quality, signal);
-      expect((await quality.done).status).toBe(expectedStatus);
+      expect((await awaitProcessDone(quality, "interrupted quality process to exit")).status).toBe(
+        expectedStatus,
+      );
       expect(quality.output).toContain("quality interrupted after");
       expect(quality.output).toContain("rerun just quality to retry");
       expect(quality.output).not.toContain("quality completed in");
-      const observation = await observer.done;
+      const observation = await awaitProcessDone(observer, "capacity observer to exit");
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
+      if (observer !== undefined) await stopRunner(observer);
       await stopJust(quality);
     }
   });

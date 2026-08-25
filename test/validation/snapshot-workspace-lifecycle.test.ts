@@ -9,10 +9,12 @@ import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createS
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
+import { observeUntil } from "../support/observe.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const validationRunId = 1;
+const snapshotWorkspaceProcessTestTimeoutMs = 10_000;
 const createSnapshotWorkspace = makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace);
 
 describe("Snapshot Workspace lifecycle", () => {
@@ -125,61 +127,69 @@ describe("Snapshot Workspace lifecycle", () => {
     }),
   );
 
-  it.scoped("terminates an interrupted command before cleanup records success", () =>
-    Effect.gen(function* () {
-      const repository = initializedRepository();
-      const commonDirectory = repositoryCommonDirectory(repository);
-      const commitSha = git(repository, "rev-parse", "HEAD");
-      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, validationRunId);
-      const evidenceRoot = createTestWorkspace();
-      const processIdPath = join(evidenceRoot, "child-pid");
-      const cleanupResults: unknown[] = [];
-      const fiber = yield* Effect.fork(
-        createSnapshotWorkspace({
-          repositoryRoot: repository,
-          repositoryCommonDirectory: commonDirectory,
-          validationRunId,
-          submittedSha: commitSha,
-          recordWorkspaceCleanup: (cleanupResult) =>
-            Effect.sync(() => {
-              cleanupResults.push(cleanupResult);
-            }),
-          runInWorkspace: (workspace) =>
-            workspace
-              .commandExecutor(
-                `sleep 30 & child=$!; printf '%s' "$child" > '${processIdPath}'; wait "$child"`,
-              )
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new InfrastructureToolingFailed({
-                      operationName: "interrupted_test_command",
-                      message: cause.message,
-                    }),
+  it.scoped(
+    "terminates an interrupted command before cleanup records success",
+    () =>
+      Effect.gen(function* () {
+        const repository = initializedRepository();
+        const commonDirectory = repositoryCommonDirectory(repository);
+        const commitSha = git(repository, "rev-parse", "HEAD");
+        const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, validationRunId);
+        const evidenceRoot = createTestWorkspace();
+        const processIdPath = join(evidenceRoot, "child-pid");
+        const cleanupResults: unknown[] = [];
+        const fiber = yield* Effect.fork(
+          createSnapshotWorkspace({
+            repositoryRoot: repository,
+            repositoryCommonDirectory: commonDirectory,
+            validationRunId,
+            submittedSha: commitSha,
+            recordWorkspaceCleanup: (cleanupResult) =>
+              Effect.sync(() => {
+                cleanupResults.push(cleanupResult);
+              }),
+            runInWorkspace: (workspace) =>
+              workspace
+                .commandExecutor(
+                  `sleep 30 & child=$!; printf '%s' "$child" > '${processIdPath}'; wait "$child"`,
+                )
+                .pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new InfrastructureToolingFailed({
+                        operationName: "interrupted_test_command",
+                        message: cause.message,
+                      }),
+                  ),
+                  Effect.as({ outcome: "passed" as const }),
                 ),
-                Effect.as({ outcome: "passed" as const }),
-              ),
-        }),
-      );
-      yield* Effect.promise(
-        () =>
-          new Promise<void>((resolve) => {
-            const interval = setInterval(() => {
-              if (!existsSync(processIdPath)) return;
-              clearInterval(interval);
-              resolve();
-            }, 5);
           }),
-      );
-      const childProcessId = readFileSync(processIdPath, "utf8");
-      yield* Fiber.interrupt(fiber);
+        );
+        yield* Effect.addFinalizer(() => Fiber.interrupt(fiber).pipe(Effect.asVoid));
+        yield* Effect.promise(() =>
+          observeUntil({
+            description: `file ${processIdPath} to contain a child PID`,
+            observe: () => {
+              try {
+                return readFileSync(processIdPath, "utf8");
+              } catch {
+                return "";
+              }
+            },
+            isReady: (contents) => contents.length > 0,
+            timeoutMs: 5_000,
+          }),
+        );
+        const childProcessId = readFileSync(processIdPath, "utf8");
+        yield* Fiber.interrupt(fiber);
 
-      expect(cleanupResults).toEqual([{ workspace: "removed" }]);
-      expect(existsSync(worktreePath)).toBe(false);
-      expect(runTestProcess("kill", ["-0", childProcessId], { cwd: repository }).status).not.toBe(
-        0,
-      );
-    }),
+        expect(cleanupResults).toEqual([{ workspace: "removed" }]);
+        expect(existsSync(worktreePath)).toBe(false);
+        expect(runTestProcess("kill", ["-0", childProcessId], { cwd: repository }).status).not.toBe(
+          0,
+        );
+      }),
+    snapshotWorkspaceProcessTestTimeoutMs,
   );
 });
 
