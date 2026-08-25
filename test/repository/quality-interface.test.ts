@@ -181,6 +181,12 @@ const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Si
 const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> =>
   stopProcess(justProcess, "Just process cleanup");
 
+const awaitAllCleanup = async (...cleanups: readonly Promise<void>[]): Promise<void> => {
+  const results = await Promise.allSettled(cleanups);
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+};
+
 const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult> => {
   const child = startTestProcess(
     join(repositoryRoot, "node_modules/.bin/vitest"),
@@ -458,8 +464,10 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
       expect(readFileSync(buildFile, "utf8")).toBe("build");
       expect(readFileSync(testFile, "utf8")).toBe("test");
     } finally {
-      if (quality !== undefined) await stopJust(quality);
-      await stopRunner(holder);
+      await awaitAllCleanup(
+        ...(quality === undefined ? [] : [stopJust(quality)]),
+        stopRunner(holder),
+      );
     }
   });
 
@@ -487,7 +495,7 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
     try {
       result = await awaitProcessDone(quality, "quality failure process to exit");
     } finally {
-      await stopJust(quality);
+      await awaitAllCleanup(stopJust(quality));
     }
 
     expect(result.status).toBe(1);
@@ -530,8 +538,10 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
         );
         expect(unselectedResult.status, unselectedResult.output).toBe(0);
       } finally {
-        if (unselected !== undefined) await stopJust(unselected);
-        await stopRunner(holder);
+        await awaitAllCleanup(
+          ...(unselected === undefined ? [] : [stopJust(unselected)]),
+          stopRunner(holder),
+        );
       }
     },
     qualityTestTimeoutMs,
@@ -564,8 +574,10 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
       expect(() => readFileSync(acquiredFile)).toThrow();
     } finally {
       writeFileSync(releaseFile, "release");
-      if (waiter !== undefined) await stopRunner(waiter);
-      await stopRunner(holder);
+      await awaitAllCleanup(
+        ...(waiter === undefined ? [] : [stopRunner(waiter)]),
+        stopRunner(holder),
+      );
     }
   });
 
@@ -610,8 +622,10 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
       expect(observation.output).toContain("capacity acquired after descendant cleanup");
       await waitForProcessExit(descendantIdentity);
     } finally {
-      if (observer !== undefined) await stopRunner(observer);
-      await stopRunner(holder);
+      await awaitAllCleanup(
+        ...(observer === undefined ? [] : [stopRunner(observer)]),
+        stopRunner(holder),
+      );
     }
   });
 
@@ -648,18 +662,24 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
       expect(observation.output).toContain("capacity acquired after supervisor exit");
       expect(processIdentity(Number(daemonIdentity?.split(":", 1)[0]))).toBe(daemonIdentity);
     } finally {
-      if (observer !== undefined) await stopRunner(observer);
       const daemonToStop =
         daemonIdentity ??
         (existsSync(daemonPidFile)
           ? processIdentity(Number(readFileSync(daemonPidFile, "utf8")))
           : undefined);
-      if (daemonToStop !== undefined) {
-        const daemonPid = Number(daemonToStop.split(":", 1)[0]);
-        if (processIdentity(daemonPid) === daemonToStop) process.kill(daemonPid, "SIGKILL");
-        await waitForProcessExit(daemonToStop);
-      }
-      await stopRunner(holder);
+      const stopDaemon =
+        daemonToStop === undefined
+          ? Promise.resolve()
+          : (async () => {
+              const daemonPid = Number(daemonToStop.split(":", 1)[0]);
+              if (processIdentity(daemonPid) === daemonToStop) process.kill(daemonPid, "SIGKILL");
+              await waitForProcessExit(daemonToStop);
+            })();
+      await awaitAllCleanup(
+        ...(observer === undefined ? [] : [stopRunner(observer)]),
+        stopDaemon,
+        stopRunner(holder),
+      );
     }
   });
 
@@ -691,8 +711,10 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
-      if (observer !== undefined) await stopRunner(observer);
-      await stopJust(justProcess);
+      await awaitAllCleanup(
+        ...(observer === undefined ? [] : [stopRunner(observer)]),
+        stopJust(justProcess),
+      );
     }
   });
 
@@ -733,8 +755,10 @@ describe("quality interface", { timeout: qualityTestTimeoutMs }, () => {
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
-      if (observer !== undefined) await stopRunner(observer);
-      await stopJust(quality);
+      await awaitAllCleanup(
+        ...(observer === undefined ? [] : [stopRunner(observer)]),
+        stopJust(quality),
+      );
     }
   });
 
