@@ -8,6 +8,10 @@ export const addRegisteredTestGitWorktree = (
   worktreePath: string,
   commitSha: string,
 ): void => {
+  const expectedPath = resolve(worktreePath);
+  if (registeredWorktreePaths(repositoryRoot).includes(expectedPath)) {
+    throw new Error(`Git worktree path is already registered: ${expectedPath}`);
+  }
   try {
     runTestProcessOrThrow("git", ["worktree", "add", "--detach", "--", worktreePath, commitSha], {
       cwd: repositoryRoot,
