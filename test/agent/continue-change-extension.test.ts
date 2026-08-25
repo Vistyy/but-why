@@ -31,13 +31,23 @@ type TestBlockerHistory = {
   resolutions: Record<string, unknown>[];
   active: Record<string, unknown> | null;
 };
-type EventHandler = (event: unknown, context: ContinueChangeContext) => unknown;
 type CommandHandler = (args: string, context: ContinueChangeContext) => unknown;
+type EventHandlers = {
+  tool_call: Parameters<ContinueChangeCapabilities["onToolCall"]>[0];
+  session_start: Parameters<ContinueChangeCapabilities["onSessionStart"]>[0];
+  session_shutdown: Parameters<ContinueChangeCapabilities["onSessionShutdown"]>[0];
+  agent_end: Parameters<ContinueChangeCapabilities["onAgentEnd"]>[0];
+  agent_settled: Parameters<ContinueChangeCapabilities["onAgentSettled"]>[0];
+  input: Parameters<ContinueChangeCapabilities["onInput"]>[0];
+};
+type EventValues = {
+  [Name in keyof EventHandlers]: Parameters<EventHandlers[Name]>[0];
+};
 
 const sourceCwd = fileURLToPath(new URL("../../", import.meta.url));
 
 const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
-  const handlers = new Map<string, unknown>();
+  const handlers: Partial<EventHandlers> = {};
   const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
     {
@@ -76,27 +86,27 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   const execSignals: Array<AbortSignal | undefined> = [];
   const api: ContinueChangeCapabilities = {
     onToolCall(handler) {
-      handlers.set("tool_call", handler);
+      handlers.tool_call = handler;
     },
     onSessionStart(handler) {
-      handlers.set("session_start", handler);
+      handlers.session_start = handler;
     },
     onSessionShutdown(handler) {
-      handlers.set("session_shutdown", handler);
+      handlers.session_shutdown = handler;
     },
     onAgentEnd(handler) {
-      handlers.set("agent_end", handler);
+      handlers.agent_end = handler;
     },
     onAgentSettled(handler) {
-      handlers.set("agent_settled", handler);
+      handlers.agent_settled = handler;
     },
     onInput(handler) {
-      handlers.set("input", handler);
+      handlers.input = handler;
     },
     registerCommand(name: string, options: { handler: CommandHandler }) {
       commands.set(name, options.handler);
     },
-    appendEntry(_type: string, data: unknown) {
+    appendContinuationState(data) {
       entries.push({
         type: "custom",
         id: `custom-${entries.length}`,
@@ -149,6 +159,28 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       },
     },
   };
+  async function emit<EventName extends keyof EventValues>(
+    event: EventName,
+    value?: EventValues[EventName],
+  ) {
+    switch (event) {
+      case "tool_call":
+        return await handlers.tool_call?.(value as EventValues["tool_call"], context);
+      case "session_start":
+        return await handlers.session_start?.(value as EventValues["session_start"], context);
+      case "session_shutdown":
+        return await handlers.session_shutdown?.(
+          value ?? { type: "session_shutdown", reason: "quit" },
+          context,
+        );
+      case "agent_end":
+        return await handlers.agent_end?.(value as EventValues["agent_end"], context);
+      case "agent_settled":
+        return await handlers.agent_settled?.(value ?? { type: "agent_settled" }, context);
+      case "input":
+        return await handlers.input?.(value as EventValues["input"], context);
+    }
+  }
   return {
     handlers,
     context,
@@ -200,11 +232,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       if (typeof value !== "function") return undefined;
       return value(undefined, { fg: (color: string) => color }).render(80);
     },
-    async emit(event: string, value: unknown = {}) {
-      const handler = handlers.get(event);
-      if (handler === undefined) throw new Error(`Missing ${event} handler`);
-      return await (handler as EventHandler)(value, context);
-    },
+    emit,
   };
 };
 

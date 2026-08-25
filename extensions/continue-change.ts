@@ -1,18 +1,11 @@
 import { createHash } from "node:crypto";
 import {
-  type AgentEndEvent,
-  type AgentSettledEvent,
   type ExecResult,
   type ExtensionAPI,
   type ExtensionContext,
-  type InputEvent,
   isToolCallEventType,
   type SessionEntry,
-  type SessionShutdownEvent,
-  type SessionStartEvent,
   type ThemeColor,
-  type ToolCallEvent,
-  type ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 
 type ChangeState = "open" | "closed";
@@ -141,6 +134,27 @@ type ContinueChangeWidgetFactory = (
   theme: { readonly fg: (color: ThemeColor, text: string) => string },
 ) => ContinueChangeWidget;
 
+type ContinueChangeToolCallEvent = {
+  readonly toolName: string;
+  readonly input: { readonly command?: string; readonly [key: string]: unknown };
+  readonly [key: string]: unknown;
+};
+
+type ContinueChangeAgentEndEvent = {
+  readonly messages: readonly {
+    readonly role: string;
+    readonly stopReason: string | undefined;
+    readonly [key: string]: unknown;
+  }[];
+};
+
+type ContinueChangeInputEvent = {
+  readonly text: string;
+  readonly source: "interactive" | "rpc" | "extension";
+};
+
+type ContinueChangeToolCallResult = { readonly block: true; readonly reason: string };
+
 export type ContinueChangeContext = {
   readonly cwd: string;
   readonly sessionManager: {
@@ -162,24 +176,33 @@ type ContinueChangeExecOptions = {
 export type ContinueChangeCapabilities = {
   readonly onToolCall: (
     handler: (
-      event: ToolCallEvent,
+      event: ContinueChangeToolCallEvent,
       context: ContinueChangeContext,
-    ) => ToolCallEventResult | undefined | Promise<ToolCallEventResult | undefined>,
+    ) =>
+      | ContinueChangeToolCallResult
+      | undefined
+      | Promise<ContinueChangeToolCallResult | undefined>,
   ) => void;
   readonly onSessionStart: (
-    handler: (event: SessionStartEvent, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (event: object, context: ContinueChangeContext) => void | Promise<void>,
   ) => void;
   readonly onSessionShutdown: (
-    handler: (event: SessionShutdownEvent, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (event: object, context: ContinueChangeContext) => void | Promise<void>,
   ) => void;
   readonly onAgentEnd: (
-    handler: (event: AgentEndEvent, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (
+      event: ContinueChangeAgentEndEvent,
+      context: ContinueChangeContext,
+    ) => void | Promise<void>,
   ) => void;
   readonly onAgentSettled: (
-    handler: (event: AgentSettledEvent, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (event: object, context: ContinueChangeContext) => void | Promise<void>,
   ) => void;
   readonly onInput: (
-    handler: (event: InputEvent, context: ContinueChangeContext) => void | Promise<void>,
+    handler: (
+      event: ContinueChangeInputEvent,
+      context: ContinueChangeContext,
+    ) => void | Promise<void>,
   ) => void;
   readonly registerCommand: (
     name: string,
@@ -188,7 +211,7 @@ export type ContinueChangeCapabilities = {
       readonly handler: (args: string, context: ContinueChangeContext) => void | Promise<void>;
     },
   ) => void;
-  readonly appendEntry: (customType: string, data?: unknown) => void;
+  readonly appendContinuationState: (state: PersistedContinuationState) => void;
   readonly sendUserMessage: (
     content: string,
     options?: { readonly deliverAs?: "steer" | "followUp" },
@@ -218,23 +241,42 @@ const adaptExtensionContext = (context: ExtensionContext): ContinueChangeContext
 
 const adaptExtensionApi = (api: ExtensionAPI): ContinueChangeCapabilities => ({
   onToolCall: (handler) =>
-    api.on("tool_call", (event, context) => handler(event, adaptExtensionContext(context))),
+    api.on("tool_call", (event, context) =>
+      handler(
+        isToolCallEventType("bash", event)
+          ? { toolName: "bash", input: { command: event.input.command } }
+          : { toolName: event.toolName, input: {} },
+        adaptExtensionContext(context),
+      ),
+    ),
   onSessionStart: (handler) =>
-    api.on("session_start", (event, context) => handler(event, adaptExtensionContext(context))),
+    api.on("session_start", (_event, context) => handler({}, adaptExtensionContext(context))),
   onSessionShutdown: (handler) =>
-    api.on("session_shutdown", (event, context) => handler(event, adaptExtensionContext(context))),
+    api.on("session_shutdown", (_event, context) => handler({}, adaptExtensionContext(context))),
   onAgentEnd: (handler) =>
-    api.on("agent_end", (event, context) => handler(event, adaptExtensionContext(context))),
+    api.on("agent_end", (event, context) =>
+      handler(
+        {
+          messages: event.messages.map((message) => ({
+            role: message.role,
+            stopReason: "stopReason" in message ? message.stopReason : undefined,
+          })),
+        },
+        adaptExtensionContext(context),
+      ),
+    ),
   onAgentSettled: (handler) =>
-    api.on("agent_settled", (event, context) => handler(event, adaptExtensionContext(context))),
+    api.on("agent_settled", (_event, context) => handler({}, adaptExtensionContext(context))),
   onInput: (handler) =>
-    api.on("input", (event, context) => handler(event, adaptExtensionContext(context))),
+    api.on("input", (event, context) =>
+      handler({ text: event.text, source: event.source }, adaptExtensionContext(context)),
+    ),
   registerCommand: (name, options) =>
     api.registerCommand(name, {
       description: options.description,
       handler: async (args, context) => options.handler(args, adaptExtensionContext(context)),
     }),
-  appendEntry: (customType, data) => api.appendEntry(customType, data),
+  appendContinuationState: (state) => api.appendEntry(stateEntry, state),
   sendUserMessage: (content, options) => api.sendUserMessage(content, options),
   exec: (command, args, options) => api.exec(command, args, options),
 });
@@ -719,7 +761,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
 
   const saveState = (state: PersistedContinuationState): void => {
     persisted = state;
-    pi.appendEntry(stateEntry, state);
+    pi.appendContinuationState(state);
   };
 
   const run = async (
@@ -923,7 +965,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
   };
 
   pi.onToolCall(async (event, ctx) => {
-    if (!isToolCallEventType("bash", event)) return;
+    if (event.toolName !== "bash" || event.input.command === undefined) return;
     if (!containsVisibleChangeSubmit(event.input.command)) return;
     if (persisted?.initialSubmissionHandled === true) {
       showValidationStarted(ctx);
