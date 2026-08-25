@@ -28,6 +28,9 @@ Do not infer additional requirements from implementation, tests, rationale, or a
 Construct the smallest credible alternative and trace both forms through the complete responsibility.
 Require the smaller form when it preserves all obligations with less real maintenance cost.
 A durable check earns retention only through distinct material protection at the cheapest reliable seam; do not turn a Change-specific implementation fact into a permanent contract.
+Remove a durable check whose oracle restates repository-authored documentation, prompt wording, or source representation unless exact bytes or ordering are a supported machine-consumed contract.
+Substring and absence assertions, snapshots, hashes, and whole-file equality do not independently verify instructional meaning.
+Prefer behavior at a supported interface, schema or parser behavior, package presence and link checks, or one-time inspection of the exact work.
 
 Removal owns whether machinery should exist in its current amount or form.
 Standards owns the truthful design of necessary retained machinery.
