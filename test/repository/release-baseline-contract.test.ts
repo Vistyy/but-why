@@ -58,7 +58,6 @@ const expectedColumns = {
     "advice:TEXT:0:0",
     "unavailable:TEXT:0:0",
     "configuration:TEXT:0:0",
-    "agent_session_id:INTEGER:0:0",
     "agent_invocation_id:INTEGER:0:0",
   ],
   changes: [
@@ -147,7 +146,6 @@ const expectedForeignKeys = {
   ],
   task_review_simplification_advice: [
     "agent_invocation_id->agent_invocations.id",
-    "agent_session_id->agent_sessions.id",
     "task_review_id->task_reviews.id",
   ],
   task_change_links: ["change_id->changes.id", "task_id->tasks.id"],
@@ -276,7 +274,7 @@ const expectedImplicitUniqueIndexes = {
   task_change_links: ["u:change_id"],
   task_dependencies: ["pk:dependent_task_id,prerequisite_task_id"],
   task_review_agent_invocations: ["pk:task_review_id,agent_invocation_id", "u:agent_invocation_id"],
-  task_review_simplification_advice: ["u:agent_invocation_id", "u:agent_session_id"],
+  task_review_simplification_advice: ["u:agent_invocation_id"],
   tasks: ["u:reviewer_agent_session_id"],
   validation_phase_agent_invocations: [
     "pk:validation_run_id,phase,producer,agent_invocation_id",

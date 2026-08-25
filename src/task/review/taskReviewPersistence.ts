@@ -101,21 +101,21 @@ export type CompleteTaskReviewResult =
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" };
 
 export type TaskReviewPersistence = {
-  readonly getCompletedSimplificationAdvice?: (
+  readonly getCompletedSimplificationAdvice: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
-  readonly createSimplificationAdviceAttempt?: (input: {
+  readonly createSimplificationAdviceAttempt: (input: {
     readonly reviewId: number;
     readonly configuration?: TaskSimplificationAdvicePolicy;
   }) => Effect.Effect<void, RepositoryStorageError>;
-  readonly recordSimplificationAdviceFailure?: (
+  readonly recordSimplificationAdviceFailure: (
     reviewId: number,
     failure: TaskReviewToolingFailure,
   ) => Effect.Effect<void, RepositoryStorageError>;
-  readonly linkSimplificationAdviceInvocation?: (input: {
+  readonly linkSimplificationAdviceInvocation: (input: {
     readonly reviewId: number;
   }) => AgentSessionSqlLink;
-  readonly settleSimplificationAdvice?: (input: {
+  readonly settleSimplificationAdvice: (input: {
     readonly reviewId: number;
     readonly advice?: TaskSimplificationAdvice;
     readonly failure?: TaskReviewToolingFailure;

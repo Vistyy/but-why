@@ -10,7 +10,6 @@ export const taskSimplificationAdviceMigration = Effect.gen(function* () {
       advice TEXT,
       unavailable TEXT,
       configuration TEXT,
-      agent_session_id INTEGER UNIQUE REFERENCES agent_sessions(id),
       agent_invocation_id INTEGER UNIQUE REFERENCES agent_invocations(id),
       CHECK ((outcome = 'completed') = (advice IS NOT NULL)),
       CHECK ((outcome = 'unavailable') = (unavailable IS NOT NULL))

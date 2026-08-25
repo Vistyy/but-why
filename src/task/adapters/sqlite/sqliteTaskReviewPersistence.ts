@@ -768,12 +768,12 @@ const createSimplificationAdviceAttempt = (
 ) =>
   sql`
     INSERT INTO task_review_simplification_advice (
-      task_review_id, outcome, advice, unavailable, configuration, agent_session_id
+      task_review_id, outcome, advice, unavailable, configuration
     ) VALUES (
       ${input.reviewId}, 'unavailable', NULL, ${JSON.stringify({
         operation: "underengineer_pending",
         message: "Task Simplification Advice attempt is pending.",
-      })}, ${input.configuration === undefined ? null : JSON.stringify(input.configuration)}, NULL
+      })}, ${input.configuration === undefined ? null : JSON.stringify(input.configuration)}
     )
   `.pipe(Effect.asVoid);
 
@@ -795,23 +795,11 @@ const linkSimplificationAdviceInvocation = (
   reviewId: number,
   invocationId: number,
 ) =>
-  Effect.gen(function* () {
-    const sessions = yield* sql<{ readonly agentSessionId: number }>`
-      SELECT continuation.agent_session_id AS agentSessionId
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE invocation.id = ${invocationId}
-    `;
-    const session = sessions[0];
-    if (session === undefined) {
-      return yield* invalid("link Task Simplification Advice Invocation", "Invocation is missing");
-    }
-    yield* sql`
-      UPDATE task_review_simplification_advice
-      SET agent_session_id = ${session.agentSessionId}, agent_invocation_id = ${invocationId}
-      WHERE task_review_id = ${reviewId} AND agent_session_id IS NULL
-    `;
-  }).pipe(Effect.asVoid);
+  sql`
+    UPDATE task_review_simplification_advice
+    SET agent_invocation_id = ${invocationId}
+    WHERE task_review_id = ${reviewId} AND agent_invocation_id IS NULL
+  `.pipe(Effect.asVoid);
 
 const settleSimplificationAdvice = (
   sql: SqlClient.SqlClient,
@@ -863,11 +851,10 @@ const readSimplificationAdviceAttempt = (
       readonly advice: string | null;
       readonly unavailable: string | null;
       readonly configuration: string | null;
-      readonly agentSessionId: number | null;
       readonly agentInvocationId: number | null;
     }>`
       SELECT outcome, advice, unavailable, configuration,
-        agent_session_id AS agentSessionId, agent_invocation_id AS agentInvocationId
+        agent_invocation_id AS agentInvocationId
       FROM task_review_simplification_advice WHERE task_review_id = ${reviewId}
     `;
     const attempt = attempts[0];
@@ -903,7 +890,7 @@ const readSimplificationAdviceAttempt = (
           attempt.configuration === null
             ? null
             : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration) as unknown),
-        ...(attempt.agentSessionId === null ? {} : { agentSessionId: attempt.agentSessionId }),
+        ...(invocations[0] === undefined ? {} : { agentSessionId: invocations[0].agentSessionId }),
         ...(invocations.length === 0
           ? {}
           : { agentInvocations: invocations.map(decodeAgentInvocation) }),

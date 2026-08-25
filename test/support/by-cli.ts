@@ -123,6 +123,21 @@ type InProcessCliResult = {
   readonly stderr: string;
 };
 
+const unavailableUnderengineerAgentRuntime: ReviewerAgentRuntime<TaskSimplificationAdviceOutput> = {
+  review: () =>
+    Effect.succeed({
+      ok: false as const,
+      failure: {
+        kind: "process_execution" as const,
+        operationName: "test_underengineer",
+        message: "Test Underengineer is intentionally unavailable.",
+      },
+      sessionUsability: "unknown" as const,
+      attempts: 1,
+      stdout: "",
+    }),
+};
+
 type InProcessCliOptions = {
   readonly globalConfigPath?: string;
   readonly stdin?: TextInputStdin;
@@ -168,9 +183,13 @@ const runByInProcessEffectRaw = (
     ...(options.taskReviewerAgentRuntime === undefined
       ? {}
       : { taskReviewerAgentRuntime: options.taskReviewerAgentRuntime }),
-    ...(options.underengineerAgentRuntime === undefined
+    ...(options.underengineerAgentRuntime === undefined &&
+    options.taskReviewerAgentRuntime === undefined
       ? {}
-      : { underengineerAgentRuntime: options.underengineerAgentRuntime }),
+      : {
+          underengineerAgentRuntime:
+            options.underengineerAgentRuntime ?? unavailableUnderengineerAgentRuntime,
+        }),
     ...(options.interactiveSessionHost === undefined
       ? {}
       : { interactiveSessionHost: options.interactiveSessionHost }),

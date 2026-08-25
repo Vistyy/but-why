@@ -75,9 +75,7 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
       Effect.flatMap((persistence) =>
         use({
           getCompletedSimplificationAdvice: (taskId) =>
-            persistence.getCompletedSimplificationAdvice
-              ? persistence.getCompletedSimplificationAdvice(taskId)
-              : Effect.succeed(undefined),
+            persistence.getCompletedSimplificationAdvice(taskId),
           getById: persistence.getById,
           getLatestForTask: persistence.getLatestForTask,
           listForTask: persistence.listForTask,
@@ -164,9 +162,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
         Effect.flatMap((persistence) =>
           Effect.all({
             judgment: persistence.reuseJudgment(input.taskId, input.now),
-            advice: persistence.getCompletedSimplificationAdvice
-              ? persistence.getCompletedSimplificationAdvice(input.taskId)
-              : Effect.succeed(undefined),
+            advice: persistence.getCompletedSimplificationAdvice(input.taskId),
           }),
         ),
       ),
@@ -279,11 +275,7 @@ const submitFreshTaskReview = <A, E, R>(
           persistence,
           agentPersistence,
           reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
-          ...(input.underengineerRuntime === undefined && input.reviewerRuntime !== undefined
-            ? {}
-            : {
-                underengineerRuntime: input.underengineerRuntime ?? piReviewerAgentRuntime,
-              }),
+          underengineerRuntime: input.underengineerRuntime ?? piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
           readReviewBase: readCurrentWorktreeReviewBase,
           verifyReviewBase: verifyRecordedTaskReviewBase,

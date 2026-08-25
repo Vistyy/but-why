@@ -86,9 +86,27 @@ it.effect("submits through the supported Task Review operation with a real Agent
             ok: true as const,
             policy: { profile, snapshot: policy },
           }),
+          resolveSimplificationAdvicePolicy: () => ({
+            ok: false as const,
+            message: "Test Underengineer is unavailable.",
+          }),
           persistence: reviews,
           agentSessionStorageRoot: sessionStorageRoot,
           agentPersistence: agents,
+          underengineerRuntime: {
+            review: () =>
+              Effect.succeed({
+                ok: false as const,
+                failure: {
+                  kind: "process_execution" as const,
+                  operationName: "test_underengineer",
+                  message: "Test Underengineer is unavailable.",
+                },
+                sessionUsability: "unknown" as const,
+                attempts: 1,
+                stdout: "",
+              }),
+          },
           reviewerRuntime: piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
           readReviewBase: (repositoryRoot) => readCurrentWorktreeReviewBase(repositoryRoot),

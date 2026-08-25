@@ -17,10 +17,7 @@ import {
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
-import {
-  RepositoryPersistedDataInvalid,
-  type RepositoryStorageError,
-} from "../../contracts/repositoryStorageError.js";
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   type DisposableWorkspaceIntegrityFailed,
   type DisposableWorktreeInspection,
@@ -38,7 +35,6 @@ import {
 import {
   buildTaskSimplificationAdvicePrompt,
   buildTaskSimplificationAdviceSystemPrompt,
-  taskSimplificationAdviceBuiltInInstructions,
 } from "../../reviewerPrompts/taskSimplificationAdvicePrompt.js";
 import {
   runAfterSubmitProgressStarted,
@@ -117,7 +113,7 @@ export type TaskReviewIdentityInspection =
   | { readonly verified: false; readonly message: string };
 
 export type TaskReviewInspectionUseCases = {
-  readonly getCompletedSimplificationAdvice?: (
+  readonly getCompletedSimplificationAdvice: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
   readonly getById: (
@@ -181,7 +177,7 @@ export const openTaskReviewUseCases = (input: {
     repoConfig: RepoConfig,
     baseCommit: string,
   ) => TaskReviewPolicyResolutionResult;
-  readonly resolveSimplificationAdvicePolicy?: (
+  readonly resolveSimplificationAdvicePolicy: (
     repoConfig: RepoConfig,
     baseCommit: string,
   ) => TaskSimplificationAdvicePolicyResolutionResult;
@@ -190,7 +186,7 @@ export const openTaskReviewUseCases = (input: {
   readonly agentSessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
-  readonly underengineerRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
+  readonly underengineerRuntime: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
     repositoryRoot: string,
@@ -220,9 +216,7 @@ export const openTaskReviewUseCases = (input: {
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
   getCompletedSimplificationAdvice: (taskId) =>
-    input.persistence.getCompletedSimplificationAdvice
-      ? input.persistence.getCompletedSimplificationAdvice(taskId)
-      : Effect.succeed(undefined),
+    input.persistence.getCompletedSimplificationAdvice(taskId),
   getById: input.persistence.getById,
   getLatestForTask: input.persistence.getLatestForTask,
   listForTask: input.persistence.listForTask,
@@ -270,28 +264,12 @@ const submitTaskReview = (
     });
     if (!admitted.ok) return admitted;
     const reviewId = admitted.review.id;
-    const completedAdvice = input.persistence.getCompletedSimplificationAdvice
-      ? yield* input.persistence.getCompletedSimplificationAdvice(taskId)
-      : undefined;
+    const completedAdvice = yield* input.persistence.getCompletedSimplificationAdvice(taskId);
     const advicePolicy =
-      completedAdvice === undefined && input.underengineerRuntime !== undefined
-        ? input.resolveSimplificationAdvicePolicy === undefined
-          ? {
-              ok: true as const,
-              policy: {
-                profile: resolvedPolicy.policy.profile,
-                builtInInstructions: taskSimplificationAdviceBuiltInInstructions,
-              },
-            }
-          : input.resolveSimplificationAdvicePolicy(repoConfig, base.base.commit)
+      completedAdvice === undefined
+        ? input.resolveSimplificationAdvicePolicy(repoConfig, base.base.commit)
         : undefined;
-    if (completedAdvice === undefined && input.underengineerRuntime !== undefined) {
-      if (input.persistence.createSimplificationAdviceAttempt === undefined) {
-        return yield* new RepositoryPersistedDataInvalid({
-          operationName: "record Task Simplification Advice attempt",
-          cause: new Error("Task Simplification Advice persistence is unavailable."),
-        });
-      }
+    if (completedAdvice === undefined) {
       yield* input.persistence.createSimplificationAdviceAttempt({
         reviewId,
         ...(advicePolicy?.ok === true ? { configuration: advicePolicy.policy } : {}),
@@ -362,11 +340,16 @@ const submitTaskReview = (
                 }
               }
               const agentEnvironment = repoAgentEnvironment(repoConfig);
-              if (completedAdvice === undefined && input.underengineerRuntime !== undefined) {
+              if (completedAdvice === undefined) {
                 const adviceResult = yield* runTaskSimplificationAdvice({
                   input,
                   reviewId,
-                  policy: advicePolicy,
+                  policy:
+                    advicePolicy ??
+                    ({
+                      ok: false,
+                      message: "Task Simplification Advice policy is unavailable.",
+                    } as const),
                   admitted,
                   base: base.base,
                   active,
@@ -508,10 +491,7 @@ const submitTaskReview = (
               operation: workspace.toolingError.operationName,
               message: workspace.toolingError.errorMessage,
             };
-        if (
-          workspaceFailure !== undefined &&
-          input.persistence.recordSimplificationAdviceFailure !== undefined
-        ) {
+        if (workspaceFailure !== undefined && completedAdvice === undefined) {
           yield* input.persistence.recordSimplificationAdviceFailure(reviewId, workspaceFailure);
         }
         const execution: WorkspaceExecution =
@@ -546,9 +526,7 @@ const submitTaskReview = (
           if (active === undefined) return { ok: false, code: "task_review_not_found" } as const;
           return { ok: false, code: "task_review_recovery_required", review: active } as const;
         }
-        const advice = input.persistence.getCompletedSimplificationAdvice
-          ? yield* input.persistence.getCompletedSimplificationAdvice(taskId)
-          : undefined;
+        const advice = yield* input.persistence.getCompletedSimplificationAdvice(taskId);
         return {
           ...completed,
           ...(advice !== undefined ? { simplificationAdvice: advice } : {}),
@@ -565,7 +543,7 @@ const submitTaskReview = (
 const runTaskSimplificationAdvice = (input: {
   readonly input: Parameters<typeof openTaskReviewUseCases>[0];
   readonly reviewId: number;
-  readonly policy: TaskSimplificationAdvicePolicyResolutionResult | undefined;
+  readonly policy: TaskSimplificationAdvicePolicyResolutionResult;
   readonly admitted: {
     readonly proposal: TaskReviewRecord["proposal"];
     readonly dependencyEvidence: TaskReviewRecord["dependencyEvidence"];
@@ -582,27 +560,10 @@ const runTaskSimplificationAdvice = (input: {
 > =>
   Effect.gen(function* () {
     const persistence = input.input.persistence;
-    if (
-      persistence.recordSimplificationAdviceFailure === undefined ||
-      persistence.linkSimplificationAdviceInvocation === undefined ||
-      persistence.settleSimplificationAdvice === undefined ||
-      input.input.underengineerRuntime === undefined
-    ) {
-      return {
-        ok: false,
-        failure: {
-          operation: "run_underengineer",
-          message: "Task Simplification Advice persistence or execution is unavailable.",
-        },
-      } as const;
-    }
-    if (input.policy === undefined || !input.policy.ok) {
+    if (!input.policy.ok) {
       const failure = {
         operation: "resolve_underengineer_configuration",
-        message:
-          input.policy === undefined
-            ? "Underengineer configuration was not resolved."
-            : input.policy.message,
+        message: input.policy.message,
       } as const;
       yield* persistence.recordSimplificationAdviceFailure(input.reviewId, failure);
       return { ok: true } as const;
@@ -619,16 +580,6 @@ const runTaskSimplificationAdvice = (input: {
             }),
         ),
       );
-    const settleSimplificationAdvice = persistence.settleSimplificationAdvice;
-    if (settleSimplificationAdvice === undefined) {
-      return {
-        ok: false,
-        failure: {
-          operation: "run_underengineer",
-          message: "Task Simplification Advice settlement is unavailable.",
-        },
-      } as const;
-    }
     const execution = yield* executeAgentSession({
       configuration: agentConfiguration(profile),
       agentPersistence: input.input.agentPersistence,
@@ -699,7 +650,7 @@ const runTaskSimplificationAdvice = (input: {
         }),
       settleDomain: ({ result }) =>
         Effect.succeed(
-          settleSimplificationAdvice({
+          persistence.settleSimplificationAdvice({
             reviewId: input.reviewId,
             ...(result.ok
               ? { advice: result.report, complete: true }
