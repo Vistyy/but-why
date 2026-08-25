@@ -1,9 +1,18 @@
 import { createHash } from "node:crypto";
 import {
+  type AgentEndEvent,
+  type AgentSettledEvent,
+  type ExecResult,
   type ExtensionAPI,
   type ExtensionContext,
+  type InputEvent,
   isToolCallEventType,
   type SessionEntry,
+  type SessionShutdownEvent,
+  type SessionStartEvent,
+  type ThemeColor,
+  type ToolCallEvent,
+  type ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 
 type ChangeState = "open" | "closed";
@@ -121,6 +130,114 @@ const maxUnchangedRestarts = 3;
 const blockerPollingIntervalMs = 30_000;
 const changeIdPattern = /^\s*Change identity:\s*([A-Z][A-Z0-9]{1,9}-C[1-9][0-9]*)\.?\s*$/mu;
 const butWhyCommand = (...args: readonly string[]): string => ["by", ...args].join(" ");
+
+type ContinueChangeWidget = {
+  readonly render: (width: number) => string[];
+  readonly invalidate: () => void;
+};
+
+type ContinueChangeWidgetFactory = (
+  tui: unknown,
+  theme: { readonly fg: (color: ThemeColor, text: string) => string },
+) => ContinueChangeWidget;
+
+export type ContinueChangeContext = {
+  readonly cwd: string;
+  readonly sessionManager: {
+    readonly getBranch: () => readonly SessionEntry[];
+  };
+  readonly isIdle: () => boolean;
+  readonly ui: {
+    readonly notify: (message: string, type?: "info" | "warning" | "error") => void;
+    readonly setWidget: (key: string, content: ContinueChangeWidgetFactory | undefined) => void;
+  };
+};
+
+type ContinueChangeExecOptions = {
+  readonly cwd?: string;
+  readonly timeout?: number;
+  readonly signal?: AbortSignal;
+};
+
+export type ContinueChangeCapabilities = {
+  readonly onToolCall: (
+    handler: (
+      event: ToolCallEvent,
+      context: ContinueChangeContext,
+    ) => ToolCallEventResult | undefined | Promise<ToolCallEventResult | undefined>,
+  ) => void;
+  readonly onSessionStart: (
+    handler: (event: SessionStartEvent, context: ContinueChangeContext) => void | Promise<void>,
+  ) => void;
+  readonly onSessionShutdown: (
+    handler: (event: SessionShutdownEvent, context: ContinueChangeContext) => void | Promise<void>,
+  ) => void;
+  readonly onAgentEnd: (
+    handler: (event: AgentEndEvent, context: ContinueChangeContext) => void | Promise<void>,
+  ) => void;
+  readonly onAgentSettled: (
+    handler: (event: AgentSettledEvent, context: ContinueChangeContext) => void | Promise<void>,
+  ) => void;
+  readonly onInput: (
+    handler: (event: InputEvent, context: ContinueChangeContext) => void | Promise<void>,
+  ) => void;
+  readonly registerCommand: (
+    name: string,
+    options: {
+      readonly description: string;
+      readonly handler: (args: string, context: ContinueChangeContext) => void | Promise<void>;
+    },
+  ) => void;
+  readonly appendEntry: (customType: string, data?: unknown) => void;
+  readonly sendUserMessage: (
+    content: string,
+    options?: { readonly deliverAs?: "steer" | "followUp" },
+  ) => void;
+  readonly exec: (
+    command: string,
+    args: string[],
+    options?: ContinueChangeExecOptions,
+  ) => Promise<ExecResult>;
+};
+
+const adaptExtensionContext = (context: ExtensionContext): ContinueChangeContext => ({
+  cwd: context.cwd,
+  sessionManager: { getBranch: () => context.sessionManager.getBranch() },
+  isIdle: () => context.isIdle(),
+  ui: {
+    notify: (message, type) => context.ui.notify(message, type),
+    setWidget: (key, content) =>
+      context.ui.setWidget(
+        key,
+        content === undefined
+          ? undefined
+          : (tui, theme) => content(tui, { fg: (color, text) => theme.fg(color, text) }),
+      ),
+  },
+});
+
+const adaptExtensionApi = (api: ExtensionAPI): ContinueChangeCapabilities => ({
+  onToolCall: (handler) =>
+    api.on("tool_call", (event, context) => handler(event, adaptExtensionContext(context))),
+  onSessionStart: (handler) =>
+    api.on("session_start", (event, context) => handler(event, adaptExtensionContext(context))),
+  onSessionShutdown: (handler) =>
+    api.on("session_shutdown", (event, context) => handler(event, adaptExtensionContext(context))),
+  onAgentEnd: (handler) =>
+    api.on("agent_end", (event, context) => handler(event, adaptExtensionContext(context))),
+  onAgentSettled: (handler) =>
+    api.on("agent_settled", (event, context) => handler(event, adaptExtensionContext(context))),
+  onInput: (handler) =>
+    api.on("input", (event, context) => handler(event, adaptExtensionContext(context))),
+  registerCommand: (name, options) =>
+    api.registerCommand(name, {
+      description: options.description,
+      handler: async (args, context) => options.handler(args, adaptExtensionContext(context)),
+    }),
+  appendEntry: (customType, data) => api.appendEntry(customType, data),
+  sendUserMessage: (content, options) => api.sendUserMessage(content, options),
+  exec: (command, args, options) => api.exec(command, args, options),
+});
 
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
@@ -470,7 +587,7 @@ const durableChangeFingerprint = (
     )
     .digest("hex");
 
-export default function continueChange(pi: ExtensionAPI): void {
+export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
   let changeId: string | undefined;
   let persisted: PersistedContinuationState | undefined;
   let settling = false;
@@ -480,7 +597,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   let pollingTimer: ReturnType<typeof setTimeout> | undefined;
   let watcherDisplay: WatcherDisplay = { kind: "implementing", pullRequestUrl: null };
 
-  const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
+  const showWatcher = (ctx: ContinueChangeContext, display: WatcherDisplay): void => {
     watcherDisplay = display;
     if (changeId === undefined) {
       ctx.ui.setWidget(watcherWidget, undefined);
@@ -586,7 +703,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     return { kind: "implementing", pullRequestUrl };
   };
 
-  const restoreState = (ctx: ExtensionContext): void => {
+  const restoreState = (ctx: ContinueChangeContext): void => {
     const latest = ctx.sessionManager
       .getBranch()
       .filter(
@@ -643,7 +760,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   ): Promise<RunResult> => run("by", commandArgs, cwd, signal);
 
   const inspect = async (
-    ctx: ExtensionContext,
+    ctx: ContinueChangeContext,
     id: string,
     signal?: AbortSignal,
   ): Promise<InspectionResult> => {
@@ -748,7 +865,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   };
 
   const inspectInitialSubmissionEligibility = async (
-    ctx: ExtensionContext,
+    ctx: ContinueChangeContext,
     id: string,
   ): Promise<
     | { readonly ok: true; readonly hasAcceptanceContext: boolean }
@@ -795,7 +912,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     saveState({ ...previous, initialSubmissionHandled: true });
   };
 
-  const showValidationStarted = (ctx: ExtensionContext): void => {
+  const showValidationStarted = (ctx: ContinueChangeContext): void => {
     const pullRequestUrl =
       watcherDisplay.kind === "implementing" ||
       watcherDisplay.kind === "validating" ||
@@ -805,7 +922,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     showWatcher(ctx, { kind: "validating", pullRequestUrl });
   };
 
-  pi.on("tool_call", async (event, ctx) => {
+  pi.onToolCall(async (event, ctx) => {
     if (!isToolCallEventType("bash", event)) return;
     if (!containsVisibleChangeSubmit(event.input.command)) return;
     if (persisted?.initialSubmissionHandled === true) {
@@ -913,9 +1030,9 @@ export default function continueChange(pi: ExtensionAPI): void {
     pollingTimer = undefined;
   };
 
-  let continueWatching: (ctx: ExtensionContext, explicit: boolean) => Promise<void>;
+  let continueWatching: (ctx: ContinueChangeContext, explicit: boolean) => Promise<void>;
 
-  const scheduleBlockedPolling = (ctx: ExtensionContext): void => {
+  const scheduleBlockedPolling = (ctx: ContinueChangeContext): void => {
     clearBlockedPolling();
     if (shutDown || persisted?.paused) return;
     pollingTimer = setTimeout(() => {
@@ -925,7 +1042,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     if (typeof pollingTimer === "object") pollingTimer.unref();
   };
 
-  const initialize = async (ctx: ExtensionContext): Promise<void> => {
+  const initialize = async (ctx: ContinueChangeContext): Promise<void> => {
     if (changeId === undefined) {
       ctx.ui.setWidget(watcherWidget, undefined);
       return;
@@ -968,7 +1085,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const pause = (ctx: ExtensionContext): void => {
+  const pause = (ctx: ContinueChangeContext): void => {
     if (changeId === undefined) {
       ctx.ui.notify(
         "But Why automatic continuation is unavailable because this session has no Change.",
@@ -994,7 +1111,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     );
   };
 
-  continueWatching = async (ctx: ExtensionContext, explicit: boolean): Promise<void> => {
+  continueWatching = async (ctx: ContinueChangeContext, explicit: boolean): Promise<void> => {
     if (!ctx.isIdle() || settling) {
       if (!persisted?.paused && watcherDisplay.kind === "blocked") scheduleBlockedPolling(ctx);
       return;
@@ -1148,7 +1265,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  pi.on("session_start", async (_event, ctx) => {
+  pi.onSessionStart(async (_event, ctx) => {
     changeId ??= findChangeId(ctx.sessionManager.getBranch());
     restoreState(ctx);
     await initialize(ctx);
@@ -1181,7 +1298,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     },
   });
 
-  pi.on("input", (event, ctx) => {
+  pi.onInput((event, ctx) => {
     if (event.source === "extension") return;
     const inputChangeId = extractChangeId(event.text);
     if (inputChangeId === undefined || changeId !== undefined) return;
@@ -1192,7 +1309,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     );
   });
 
-  pi.on("session_shutdown", () => {
+  pi.onSessionShutdown(() => {
     shutDown = true;
     pauseGeneration += 1;
     clearBlockedPolling();
@@ -1200,7 +1317,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     activeInspectionAbortController = undefined;
   });
 
-  pi.on("agent_end", (event, ctx) => {
+  pi.onAgentEnd((event, ctx) => {
     if (
       event.messages.some(
         (message) => message.role === "assistant" && message.stopReason === "aborted",
@@ -1211,13 +1328,17 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   });
 
-  pi.on("agent_settled", async (_event, ctx) => {
+  pi.onAgentSettled(async (_event, ctx) => {
     if (persisted?.paused) {
       await continueWatching(ctx, false);
       return;
     }
     await continueWatching(ctx, false);
   });
+};
+
+export default function continueChange(api: ExtensionAPI): void {
+  runContinueChange(adaptExtensionApi(api));
 }
 
 const isNonNegativeInteger = (value: unknown): value is number =>

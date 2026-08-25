@@ -1,9 +1,13 @@
 import { fileURLToPath } from "node:url";
 
-import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
-import continueChange from "../../extensions/continue-change.js";
+import {
+  type ContinueChangeCapabilities,
+  type ContinueChangeContext,
+  runContinueChange,
+} from "../../extensions/continue-change.js";
 
 const changeId = "BY-C1";
 
@@ -27,13 +31,13 @@ type TestBlockerHistory = {
   resolutions: Record<string, unknown>[];
   active: Record<string, unknown> | null;
 };
-type EventHandler = (event: unknown, context: ExtensionContext) => unknown;
-type CommandHandler = (args: string, context: ExtensionContext) => unknown;
+type EventHandler = (event: unknown, context: ContinueChangeContext) => unknown;
+type CommandHandler = (args: string, context: ContinueChangeContext) => unknown;
 
 const sourceCwd = fileURLToPath(new URL("../../", import.meta.url));
 
 const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
-  const handlers = new Map<string, EventHandler>();
+  const handlers = new Map<string, unknown>();
   const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
     {
@@ -70,9 +74,24 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   let idle = true;
   const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   const execSignals: Array<AbortSignal | undefined> = [];
-  const api = {
-    on(event: string, handler: EventHandler) {
-      handlers.set(event, handler);
+  const api: ContinueChangeCapabilities = {
+    onToolCall(handler) {
+      handlers.set("tool_call", handler);
+    },
+    onSessionStart(handler) {
+      handlers.set("session_start", handler);
+    },
+    onSessionShutdown(handler) {
+      handlers.set("session_shutdown", handler);
+    },
+    onAgentEnd(handler) {
+      handlers.set("agent_end", handler);
+    },
+    onAgentSettled(handler) {
+      handlers.set("agent_settled", handler);
+    },
+    onInput(handler) {
+      handlers.set("input", handler);
     },
     registerCommand(name: string, options: { handler: CommandHandler }) {
       commands.set(name, options.handler);
@@ -115,9 +134,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
       return { stdout: "", stderr: "", code: 1, killed: false };
     },
-  } as unknown as ExtensionAPI;
-  continueChange(api);
-  const context = {
+  };
+  runContinueChange(api);
+  const context: ContinueChangeContext = {
     cwd,
     sessionManager: { getBranch: () => [...entries] },
     isIdle: () => idle,
@@ -125,11 +144,11 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       notify(message: string) {
         notifications.push(message);
       },
-      setWidget(name: string, value: unknown) {
+      setWidget(name, value) {
         widgets.push({ name, value });
       },
     },
-  } as unknown as ExtensionContext;
+  };
   return {
     handlers,
     context,
@@ -184,7 +203,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     async emit(event: string, value: unknown = {}) {
       const handler = handlers.get(event);
       if (handler === undefined) throw new Error(`Missing ${event} handler`);
-      return await handler(value, context);
+      return await (handler as EventHandler)(value, context);
     },
   };
 };
