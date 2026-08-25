@@ -3,22 +3,26 @@ import { resolve } from "node:path";
 import { runTestProcessOrThrow } from "./testProcess.js";
 import { releaseTestWorkspace } from "./testWorkspace.js";
 
+const trackedWorktrees = new Map<string, Set<string>>();
+
 export const addRegisteredTestGitWorktree = (
   repositoryRoot: string,
   worktreePath: string,
   commitSha: string,
 ): void => {
+  const expectedRoot = resolve(repositoryRoot);
   const expectedPath = resolve(worktreePath);
-  if (registeredWorktreePaths(repositoryRoot).includes(expectedPath)) {
+  trackedWorktreesFor(expectedRoot).add(expectedPath);
+  if (registeredWorktreePaths(expectedRoot).includes(expectedPath)) {
     throw new Error(`Git worktree path is already registered: ${expectedPath}`);
   }
   try {
     runTestProcessOrThrow("git", ["worktree", "add", "--detach", "--", worktreePath, commitSha], {
-      cwd: repositoryRoot,
+      cwd: expectedRoot,
     });
   } catch (error) {
     try {
-      removeRegisteredTestGitWorktree(repositoryRoot, worktreePath);
+      removeRegisteredTestGitWorktree(expectedRoot, expectedPath);
     } catch (cleanupError) {
       throw new Error(
         `Git worktree setup failed and cleanup was not verified: ${errorMessage(cleanupError)}`,
@@ -33,28 +37,37 @@ export const removeRegisteredTestGitWorktree = (
   repositoryRoot: string,
   worktreePath: string,
 ): void => {
+  const expectedRoot = resolve(repositoryRoot);
   const expectedPath = resolve(worktreePath);
-  const before = registeredWorktreePaths(repositoryRoot);
+  const before = registeredWorktreePaths(expectedRoot);
   if (!before.includes(expectedPath)) {
     if (existsSync(expectedPath)) {
       throw new Error(`Git worktree exists without a registration: ${expectedPath}`);
     }
+    trackedWorktreesFor(expectedRoot).delete(expectedPath);
     return;
   }
 
   runTestProcessOrThrow("git", ["worktree", "remove", "--force", "--", expectedPath], {
-    cwd: repositoryRoot,
+    cwd: expectedRoot,
   });
 
-  const after = registeredWorktreePaths(repositoryRoot);
+  const after = registeredWorktreePaths(expectedRoot);
   if (after.includes(expectedPath) || existsSync(expectedPath)) {
     throw new Error(`Git worktree cleanup was not verified: ${expectedPath}`);
   }
+  trackedWorktreesFor(expectedRoot).delete(expectedPath);
 };
 
 export const releaseRegisteredTestGitRepository = (repositoryRoot: string): void => {
   const expectedRoot = resolve(repositoryRoot);
-  const linkedWorktrees = registeredWorktreePaths(repositoryRoot).filter(
+  const tracked = [...(trackedWorktrees.get(expectedRoot) ?? [])];
+  if (tracked.length > 0) {
+    throw new Error(
+      `Git repository cleanup is blocked by unresolved worktrees: ${tracked.join(", ")}`,
+    );
+  }
+  const linkedWorktrees = registeredWorktreePaths(expectedRoot).filter(
     (path) => path !== expectedRoot,
   );
   if (linkedWorktrees.length > 0) {
@@ -62,10 +75,19 @@ export const releaseRegisteredTestGitRepository = (repositoryRoot: string): void
       `Git repository cleanup is blocked by registered worktrees: ${linkedWorktrees.join(", ")}`,
     );
   }
-  releaseTestWorkspace(repositoryRoot);
+  releaseTestWorkspace(expectedRoot);
   if (existsSync(expectedRoot)) {
     throw new Error(`Git repository cleanup was not verified: ${expectedRoot}`);
   }
+  trackedWorktrees.delete(expectedRoot);
+};
+
+const trackedWorktreesFor = (repositoryRoot: string): Set<string> => {
+  const existing = trackedWorktrees.get(repositoryRoot);
+  if (existing !== undefined) return existing;
+  const created = new Set<string>();
+  trackedWorktrees.set(repositoryRoot, created);
+  return created;
 };
 
 const registeredWorktreePaths = (repositoryRoot: string): readonly string[] =>
