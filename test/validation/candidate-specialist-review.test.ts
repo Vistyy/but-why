@@ -863,6 +863,12 @@ describe("Candidate Specialist Review phase", () => {
               git(cwd, "add", ".but-why/config.json");
               writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
               if (invocations < 3) {
+                const sessionStorageRoot = input.sessionStorageRoot;
+                if (sessionStorageRoot === undefined)
+                  throw new Error("Reviewer session storage root was not supplied.");
+                mkdirSync(sessionStorageRoot, { recursive: true });
+                const sessionFilePath = join(sessionStorageRoot, "session-1.jsonl");
+                writeFileSync(sessionFilePath, "session\n");
                 return {
                   ok: false as const,
                   failure: new ReviewerExecutionFailed({
@@ -875,6 +881,7 @@ describe("Candidate Specialist Review phase", () => {
                   attempts: 1,
                   stdout: "invalid output",
                   sessionReference: "session-1",
+                  sessionFilePath,
                 };
               }
             }

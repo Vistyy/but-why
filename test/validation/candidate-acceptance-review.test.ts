@@ -126,6 +126,12 @@ layer(acceptanceTemplateLayer)(
                 throw new Error("Acceptance reviewer workspace was not supplied.");
               statuses.push(git(cwd, "status", "--porcelain=v1"));
               if (calls === 1) {
+                const sessionStorageRoot = input.sessionStorageRoot;
+                if (sessionStorageRoot === undefined)
+                  throw new Error("Reviewer session storage root was not supplied.");
+                mkdirSync(sessionStorageRoot, { recursive: true });
+                const sessionFilePath = join(sessionStorageRoot, "session-1.jsonl");
+                writeFileSync(sessionFilePath, "session\n");
                 writeFileSync(join(cwd, ".but-why/config.json"), "mutated\n");
                 git(cwd, "add", ".but-why/config.json");
                 writeFileSync(join(cwd, "acceptance-untracked"), "remove\n");
@@ -141,6 +147,7 @@ layer(acceptanceTemplateLayer)(
                   attempts: 1,
                   stdout: "invalid output",
                   sessionReference: "session-1",
+                  sessionFilePath,
                 };
               }
               return {
