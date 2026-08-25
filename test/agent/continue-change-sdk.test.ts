@@ -2,24 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { RuntimeCase } from "./continue-change-sdk-helper.js";
 import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
-
-type SessionEvent = {
-  readonly type: string;
-  readonly isError?: boolean;
-  readonly [key: string]: unknown;
-};
-
-type RuntimeCase = {
-  readonly blocked: boolean;
-  readonly providerCalls: number;
-  readonly events: readonly SessionEvent[];
-  readonly messages: readonly unknown[];
-  readonly idle: boolean;
-  readonly continuationState: (Record<string, unknown> & { readonly paused?: boolean }) | undefined;
-  readonly extensionErrors: readonly unknown[];
-};
 
 const changeId = "BY-C1";
 const helperPath = join(repoRoot, "test/agent/continue-change-sdk-helper.ts");

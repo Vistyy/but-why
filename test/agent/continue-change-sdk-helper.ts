@@ -9,13 +9,13 @@ import {
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 
-type SessionEvent = {
+export type SessionEvent = {
   readonly type: string;
   readonly isError?: boolean;
   readonly [key: string]: unknown;
 };
 
-type RuntimeCase = {
+export type RuntimeCase = {
   readonly blocked: boolean;
   readonly providerCalls: number;
   readonly events: readonly SessionEvent[];
