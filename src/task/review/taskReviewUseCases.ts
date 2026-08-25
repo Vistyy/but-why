@@ -33,6 +33,7 @@ import {
   buildTaskReviewerSystemPrompt,
 } from "../../reviewerPrompts/taskReviewerPrompt.js";
 import {
+  buildTaskSimplificationAdviceOutputCorrectionPrompt,
   buildTaskSimplificationAdvicePrompt,
   buildTaskSimplificationAdviceSystemPrompt,
 } from "../../reviewerPrompts/taskSimplificationAdvicePrompt.js";
@@ -587,6 +588,7 @@ const runTaskSimplificationAdvice = (input: {
               kind: "output_contract",
               operationName: error.operationName,
               message: error.message,
+              correctionPrompt: buildTaskSimplificationAdviceOutputCorrectionPrompt(error),
             }),
         ),
       );
@@ -614,7 +616,7 @@ const runTaskSimplificationAdvice = (input: {
           reviewBase: input.base,
         }),
         continuationPrompt: "",
-        maxOutputContractAttempts: 1,
+        maxOutputContractAttempts: 3,
         commandCwd: input.active.worktreePath,
         resourceRoot: input.active.worktreePath,
         profile,
