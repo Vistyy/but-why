@@ -164,7 +164,7 @@ type ContinueChangeInputEvent = {
 };
 
 type ContinueChangeTurnEndEvent = {
-  readonly toolResults: readonly unknown[];
+  readonly hasToolResults: boolean;
 };
 
 type ContinueChangeToolCallResult = { readonly block: true; readonly reason: string };
@@ -293,7 +293,7 @@ const adaptExtensionApi = (api: ExtensionAPI): ContinueChangeCapabilities => ({
     ),
   onTurnEnd: (handler) =>
     api.on("turn_end", (event, context) =>
-      handler({ toolResults: event.toolResults }, adaptExtensionContext(context)),
+      handler({ hasToolResults: event.toolResults.length > 0 }, adaptExtensionContext(context)),
     ),
   registerCommand: (name, options) =>
     api.registerCommand(name, {
@@ -1411,7 +1411,7 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
   });
 
   pi.onTurnEnd(async (event, ctx) => {
-    if (event.toolResults.length === 0) return;
+    if (!event.hasToolResults) return;
     if (changeId === undefined || shutDown || persisted?.paused || blockerAbortRequested) return;
     const observed = await inspectBlockerHistory(ctx, changeId, ctx.signal);
     if (shutDown || persisted?.paused || ctx.signal?.aborted) return;
