@@ -389,7 +389,7 @@ const submitTaskReview = (
               });
               taskReviewProgress = yield* startSubmitProgress(input.progress, {
                 kind: "taskReview",
-                profile: taskReviewProgressProfile(resolvedPolicy.policy.profile),
+                profile: reviewerProgressProfile(resolvedPolicy.policy.profile),
               });
               const decodeOutput = (output: unknown, reviewCall: number) =>
                 decodeTaskReviewerOutput({ attempts: reviewCall, output }).pipe(
@@ -590,57 +590,67 @@ const runTaskSimplificationAdvice = (input: {
             }),
         ),
       );
-    const execution = yield* executeAgentSession({
-      configuration: agentConfiguration(profile),
-      agentPersistence: input.input.agentPersistence,
-      linkInvocation: persistence.linkSimplificationAdviceInvocation({
-        reviewId: input.reviewId,
-      }),
-      reviewerRuntime: input.input.underengineerRuntime,
-      reviewerExecutor: input.input.reviewerExecutor,
-      decodeOutput,
-      systemPrompt: buildTaskSimplificationAdviceSystemPrompt(
-        input.policy.policy.builtInInstructions,
-      ),
-      prompt: buildTaskSimplificationAdvicePrompt({
-        proposal: input.admitted.proposal,
-        dependencyEvidence: input.admitted.dependencyEvidence,
-        reviewBase: input.base,
-      }),
-      continuationPrompt: "",
-      maxOutputContractAttempts: 1,
-      commandCwd: input.active.worktreePath,
-      resourceRoot: input.active.worktreePath,
-      profile,
-      reviewer: "underengineer",
-      sessionStorageRoot: input.input.agentSessionStorageRoot,
-      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
-      afterInvocation: ({ result }) =>
-        restoreTaskReviewWorkspaceAfterInvocation({
-          result,
-          restoreWorkspace: input.input.restoreWorkspace,
-          commandExecutor: input.active.commandExecutor,
-          commandCwd: input.active.worktreePath,
-          expectedCommitSha: input.base.commit,
-          repositoryRoot: input.input.repositoryRoot,
-          repositoryCommonDirectory: input.input.repositoryCommonDirectory,
-          workspaceId: taskReviewWorkspaceId(input.reviewId),
+    const execution = yield* runWithSubmitProgress({
+      progress: input.input.progress,
+      phase: {
+        kind: "underengineer",
+        profile: reviewerProgressProfile(profile),
+      },
+      run: executeAgentSession({
+        configuration: agentConfiguration(profile),
+        agentPersistence: input.input.agentPersistence,
+        linkInvocation: persistence.linkSimplificationAdviceInvocation({
+          reviewId: input.reviewId,
         }),
-      settleDomain: ({ result }) =>
-        Effect.succeed(
-          persistence.settleSimplificationAdvice({
-            reviewId: input.reviewId,
-            ...(result.ok
-              ? { advice: result.report, complete: true }
-              : {
-                  complete: false,
-                  failure: {
-                    operation: result.failure.operationName,
-                    message: result.failure.message,
-                  },
-                }),
-          }),
+        reviewerRuntime: input.input.underengineerRuntime,
+        reviewerExecutor: input.input.reviewerExecutor,
+        decodeOutput,
+        systemPrompt: buildTaskSimplificationAdviceSystemPrompt(
+          input.policy.policy.builtInInstructions,
         ),
+        prompt: buildTaskSimplificationAdvicePrompt({
+          proposal: input.admitted.proposal,
+          dependencyEvidence: input.admitted.dependencyEvidence,
+          reviewBase: input.base,
+        }),
+        continuationPrompt: "",
+        maxOutputContractAttempts: 1,
+        commandCwd: input.active.worktreePath,
+        resourceRoot: input.active.worktreePath,
+        profile,
+        reviewer: "underengineer",
+        sessionStorageRoot: input.input.agentSessionStorageRoot,
+        ...(input.agentEnvironment === undefined
+          ? {}
+          : { agentEnvironment: input.agentEnvironment }),
+        afterInvocation: ({ result }) =>
+          restoreTaskReviewWorkspaceAfterInvocation({
+            result,
+            restoreWorkspace: input.input.restoreWorkspace,
+            commandExecutor: input.active.commandExecutor,
+            commandCwd: input.active.worktreePath,
+            expectedCommitSha: input.base.commit,
+            repositoryRoot: input.input.repositoryRoot,
+            repositoryCommonDirectory: input.input.repositoryCommonDirectory,
+            workspaceId: taskReviewWorkspaceId(input.reviewId),
+          }),
+        settleDomain: ({ result }) =>
+          Effect.succeed(
+            persistence.settleSimplificationAdvice({
+              reviewId: input.reviewId,
+              ...(result.ok
+                ? { advice: result.report, complete: true }
+                : {
+                    complete: false,
+                    failure: {
+                      operation: result.failure.operationName,
+                      message: result.failure.message,
+                    },
+                  }),
+            }),
+          ),
+      }),
+      outcome: (result) => (result.result.ok ? "passed" : "failed"),
     });
     if (
       !execution.result.ok &&
@@ -733,7 +743,7 @@ const agentConfiguration = (profile: ResolvedPiAgentProfile): AgentSessionConfig
   thinking: profile.profile.runtimeConfig?.thinking ?? null,
 });
 
-const taskReviewProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgressProfile => ({
+const reviewerProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgressProfile => ({
   name: profile.agentProfile,
   model: profile.profile.runtimeConfig?.model ?? "unknown",
   thinking: profile.profile.runtimeConfig?.thinking ?? "default",
