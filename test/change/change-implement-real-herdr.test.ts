@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { commitButWhyConfigAndRecordDefault, createGitRepo } from "../support/by-cli.js";
 import { runTestProcess, startTestProcess } from "../support/testProcess.js";
 
 const { BY_RUN_REAL_HERDR_INTEGRATION } = process.env;
@@ -63,7 +64,7 @@ const waitForHerdr = (cwd: string, isolatedHome: string, socketPath: string): vo
   throw new Error(`Dedicated Herdr server did not become ready at ${socketPath}.`);
 };
 
-describe.skipIf(!realHerdrEnabled)("Change Implement with installed Herdr", () => {
+describe.skipIf(!realHerdrEnabled)("compiled Candidate executable with installed Herdr", () => {
   it("launches the exact normal flow in a standalone workspace rooted at the Managed Worktree", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "but-why-real-herdr-"));
     const repositoryPath = join(temporaryRoot, "repository");
@@ -113,13 +114,8 @@ describe.skipIf(!realHerdrEnabled)("Change Implement with installed Herdr", () =
     try {
       waitForHerdr(temporaryRoot, isolatedHome, socketPath);
       expect(workspaceList(temporaryRoot, isolatedHome, socketPath)).toEqual([]);
-      execute(
-        "git",
-        ["clone", "--depth", "1", "https://github.com/Vistyy/but-why.git", repositoryPath],
-        temporaryRoot,
-        isolatedHome,
-        socketPath,
-      );
+      mkdirSync(repositoryPath);
+      createGitRepo(repositoryPath);
       execute(
         process.execPath,
         [candidatePath, "init", "--id-prefix", "BY"],
@@ -127,17 +123,24 @@ describe.skipIf(!realHerdrEnabled)("Change Implement with installed Herdr", () =
         isolatedHome,
         socketPath,
       );
-      execute(
-        process.execPath,
-        [candidatePath, "change", "start"],
-        repositoryPath,
-        isolatedHome,
-        socketPath,
-      );
+      commitButWhyConfigAndRecordDefault(repositoryPath);
+      const started = JSON.parse(
+        execute(
+          process.execPath,
+          [candidatePath, "change", "start"],
+          repositoryPath,
+          isolatedHome,
+          socketPath,
+        ),
+      ) as { readonly change?: { readonly id?: unknown } };
+      const changeId = started.change?.id;
+      expect(typeof changeId).toBe("string");
+      if (typeof changeId !== "string")
+        throw new Error("Candidate Change Start did not return an ID.");
       const implementation = JSON.parse(
         execute(
           process.execPath,
-          [candidatePath, "change", "implement", "BY-C1"],
+          [candidatePath, "change", "implement", String(changeId)],
           repositoryPath,
           isolatedHome,
           socketPath,

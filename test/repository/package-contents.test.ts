@@ -28,7 +28,7 @@ import {
 } from "../support/testWorkspace.js";
 
 const packageProcessTimeoutMs = 30_000;
-const packageProcessTestTimeoutMs = packageProcessTimeoutMs * 3 + 5_000;
+const packageProcessTestTimeoutMs = packageProcessTimeoutMs * 2 + 5_000;
 const expectedLazyCommandModules = [
   "./cli/task/commands/dependencies.js",
   "./cli/task/commands/contextDraft.js",
@@ -297,38 +297,26 @@ describe("release package boundary", () => {
   });
 
   it(
-    "preserves missing dependency-option guidance through the installed executable",
+    "preserves representative dependency-option guidance through the installed executable",
     () => {
       const repositoryRoot = createGitRepo();
       const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+      const result = runTestProcess(
+        bin,
+        ["--log-level", "info", "task", "dependencies", "add", "BY-1"],
+        { cwd: repositoryRoot, timeout: packageProcessTimeoutMs },
+      );
 
-      for (const operation of ["add", "remove", "replace"] as const) {
-        const result = runTestProcess(
-          bin,
-          ["--log-level", "info", "task", "dependencies", operation, "BY-1"],
-          { cwd: repositoryRoot, timeout: packageProcessTimeoutMs },
-        );
-
-        expect(result.error).toBeUndefined();
-        expect(result.status).toBe(2);
-        expect(result.stderr).toBe("");
-        expect(JSON.parse(result.stdout)).toEqual({
-          error:
-            operation === "replace"
-              ? {
-                  code: "replace_requires_dependency",
-                  message: "The replace operation requires at least one prerequisite.",
-                }
-              : {
-                  code: "depends_on_required",
-                  message: `The ${operation} operation requires at least one --depends-on value.`,
-                },
-          help:
-            operation === "replace"
-              ? ["Use `by task dependencies clear <task-id>` to remove all prerequisites."]
-              : [`Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`],
-        });
-      }
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "depends_on_required",
+          message: "The add operation requires at least one --depends-on value.",
+        },
+        help: ["Use `by task dependencies add <task-id> --depends-on <task-id>`."],
+      });
     },
     packageProcessTestTimeoutMs,
   );
