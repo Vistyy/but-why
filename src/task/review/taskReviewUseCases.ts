@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
+import {
+  type AgentEnvironmentCommand,
+  repoAgentEnvironment,
+} from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type {
   AgentSessionConfiguration,
@@ -358,6 +361,7 @@ const submitTaskReview = (
                   } as const;
                 }
               }
+              const agentEnvironment = repoAgentEnvironment(repoConfig);
               if (completedAdvice === undefined && input.underengineerRuntime !== undefined) {
                 const adviceResult = yield* runTaskSimplificationAdvice({
                   input,
@@ -366,6 +370,7 @@ const submitTaskReview = (
                   admitted,
                   base: base.base,
                   active,
+                  ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
                 });
                 if (!adviceResult.ok) {
                   return {
@@ -374,7 +379,6 @@ const submitTaskReview = (
                   } as const;
                 }
               }
-              const agentEnvironment = repoAgentEnvironment(repoConfig);
               const history = yield* input.persistence.listForTask(taskId);
               const previous = history.length < 2 ? undefined : history.at(-2);
               const systemPrompt = buildTaskReviewerSystemPrompt(resolvedPolicy.policy.snapshot);
@@ -496,11 +500,19 @@ const submitTaskReview = (
                   } as const);
             }),
         });
-        if (!workspace.ok && input.persistence.recordSimplificationAdviceFailure !== undefined) {
-          yield* input.persistence.recordSimplificationAdviceFailure(reviewId, {
-            operation: workspace.toolingError.operationName,
-            message: workspace.toolingError.errorMessage,
-          });
+        const workspaceFailure = workspace.ok
+          ? workspace.workspaceResult?.ok === false
+            ? workspace.workspaceResult.failure
+            : undefined
+          : {
+              operation: workspace.toolingError.operationName,
+              message: workspace.toolingError.errorMessage,
+            };
+        if (
+          workspaceFailure !== undefined &&
+          input.persistence.recordSimplificationAdviceFailure !== undefined
+        ) {
+          yield* input.persistence.recordSimplificationAdviceFailure(reviewId, workspaceFailure);
         }
         const execution: WorkspaceExecution =
           workspace.ok && workspace.workspaceResult !== undefined
@@ -559,6 +571,7 @@ const runTaskSimplificationAdvice = (input: {
     readonly dependencyEvidence: TaskReviewRecord["dependencyEvidence"];
   };
   readonly base: TaskReviewBase;
+  readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly active: {
     readonly worktreePath: string;
     readonly commandExecutor: WorkspaceCommandExecutor;
@@ -640,6 +653,7 @@ const runTaskSimplificationAdvice = (input: {
       profile,
       reviewer: "underengineer",
       sessionStorageRoot: input.input.agentSessionStorageRoot,
+      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
       afterInvocation: ({ result }) =>
         Effect.gen(function* () {
           const restored = yield* Effect.either(

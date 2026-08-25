@@ -783,6 +783,8 @@ const recordSimplificationAdviceFailure = (
     UPDATE task_review_simplification_advice
     SET outcome = 'unavailable', advice = NULL, unavailable = ${JSON.stringify(failure)}
     WHERE task_review_id = ${reviewId}
+      AND outcome = 'unavailable'
+      AND json_extract(unavailable, '$.operation') = 'underengineer_pending'
   `.pipe(Effect.asVoid);
 
 const linkSimplificationAdviceInvocation = (

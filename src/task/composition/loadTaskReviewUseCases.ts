@@ -178,6 +178,9 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
           : use({
               ...judgment,
               ...(advice === undefined ? {} : { simplificationAdvice: advice }),
+              ...(advice === undefined && judgment.review.simplificationAdviceAttempt !== undefined
+                ? { simplificationAdviceAttempt: judgment.review.simplificationAdviceAttempt }
+                : {}),
             }).pipe(Effect.map((value) => ({ ok: true as const, value }))),
       ),
     );
