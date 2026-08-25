@@ -43,7 +43,6 @@ export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirem
   readonly systemPrompt: string;
   readonly prompt: string;
   readonly continuationPrompt: string;
-  readonly maxOutputContractAttempts?: number;
   readonly commandCwd: string;
   readonly resourceRoot: string;
   readonly profile: ResolvedPiAgentProfile;
@@ -208,7 +207,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
           settledResult.sessionFilePath,
           dispatch.dispatch.piSessionId,
         ) &&
-        invocationNumber < (input.maxOutputContractAttempts ?? 3);
+        invocationNumber < 3;
       const evidence: AgentExecutionEvidence = {
         agentSessionId: sessionId,
         continuationId,
