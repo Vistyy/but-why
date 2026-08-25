@@ -36,7 +36,7 @@ export const candidateValidationLayer = (input: {
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
   readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
-  readonly stallDetector?: StallDetector;
+  readonly stallDetector: StallDetector;
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
     Layer.provideMerge(
@@ -60,7 +60,7 @@ export const candidateValidationLayer = (input: {
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
           processExecutor: piReviewerProcessExecutor,
-          ...(input.stallDetector === undefined ? {} : { stallDetector: input.stallDetector }),
+          stallDetector: input.stallDetector,
         }),
       ),
     ),

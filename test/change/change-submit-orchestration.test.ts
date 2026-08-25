@@ -10,7 +10,7 @@ import type {
 } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../../src/change/change.js";
-import type { ChangeSubmissionPort } from "../../src/change/changePorts.js";
+import type { ChangeAuthorityPort, ChangeSubmissionPort } from "../../src/change/changePorts.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestReader,
@@ -36,6 +36,8 @@ const candidate = {
 const changeWithoutTaskPolicy = {
   checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
 } as const;
+const notQualifiedStallDetection = () => Effect.succeed({ kind: "not_qualified" as const });
+
 const storedAcceptanceReviewer = {
   instructions: "Review intent",
   instructionsSource: "built_in" as const,
@@ -61,6 +63,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -104,6 +107,7 @@ describe("Change Submit orchestration", () => {
             validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
             listFindings: () => Effect.succeed([]),
             listToolingFailures: () => Effect.succeed([]),
+            evaluateStallDetection: () => notQualifiedStallDetection(),
             listPhaseResults: () => Effect.succeed([]),
           }),
         ),
@@ -163,6 +167,7 @@ describe("Change Submit orchestration", () => {
         Effect.die("Acceptance Context validation was not expected"),
       listFindings: () => Effect.succeed([]),
       listToolingFailures: () => Effect.succeed([]),
+      evaluateStallDetection: () => notQualifiedStallDetection(),
       listPhaseResults: () => Effect.succeed([]),
     });
 
@@ -236,6 +241,7 @@ describe("Change Submit orchestration", () => {
             Effect.die("Acceptance Review was not expected"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
+          evaluateStallDetection: () => notQualifiedStallDetection(),
           listPhaseResults: () => Effect.succeed([]),
         });
 
@@ -303,6 +309,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -361,6 +368,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -427,6 +435,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -530,6 +539,7 @@ describe("Change Submit orchestration", () => {
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -604,6 +614,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -652,6 +663,7 @@ describe("Change Submit orchestration", () => {
             }),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
+          evaluateStallDetection: () => notQualifiedStallDetection(),
           listPhaseResults: () => Effect.succeed([]),
         });
 
@@ -697,6 +709,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -771,6 +784,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -846,6 +860,7 @@ describe("Change Submit orchestration", () => {
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -921,6 +936,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -960,6 +976,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1001,6 +1018,7 @@ describe("Change Submit orchestration", () => {
           Effect.die("Blocked Submission must not validate"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1047,6 +1065,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Duplicate validation"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1098,6 +1117,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Duplicate validation"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1157,6 +1177,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1209,6 +1230,7 @@ describe("Change Submit orchestration", () => {
           validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
+          evaluateStallDetection: () => notQualifiedStallDetection(),
           listPhaseResults: () => Effect.succeed([]),
         });
 
@@ -1250,6 +1272,7 @@ describe("Change Submit orchestration", () => {
           validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
+          evaluateStallDetection: () => notQualifiedStallDetection(),
           listPhaseResults: () => Effect.succeed([]),
         });
 
@@ -1286,6 +1309,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1316,6 +1340,7 @@ describe("Change Submit orchestration", () => {
           Effect.die("Validation must not start without a GitHub target"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1349,6 +1374,7 @@ describe("Change Submit orchestration", () => {
           }),
         listFindings: () => Effect.succeed([finding]),
         listToolingFailures: () => Effect.succeed([]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1392,6 +1418,7 @@ describe("Change Submit orchestration", () => {
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([toolingFailure]),
+        evaluateStallDetection: () => notQualifiedStallDetection(),
         listPhaseResults: () => Effect.succeed([]),
       });
 
@@ -1462,6 +1489,23 @@ const dependencies = (input: {
   let currentTargetSha: string = refreshedBase.commit;
   return {
     repositoryPath: "/repo",
+    authority: {
+      raiseImplementationBlocker: () =>
+        Effect.succeed({
+          ok: false as const,
+          code: "change_blocked" as const,
+        }),
+      resolveImplementationBlocker: () =>
+        Effect.succeed({
+          ok: false as const,
+          code: "no_active_blocker" as const,
+        }),
+      listImplementationBlockers: () => Effect.succeed(undefined),
+      listImplementationDecisions: () => Effect.succeed([]),
+      recordImplementationDecision: () =>
+        Effect.succeed({ ok: true as const, decision: {} as never }),
+      getCurrentPassingEvidence: () => Effect.succeed(undefined),
+    } satisfies ChangeAuthorityPort,
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
       getChangeForOutputById: () => Effect.succeed(input.change),

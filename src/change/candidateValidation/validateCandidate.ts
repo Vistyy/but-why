@@ -11,11 +11,10 @@ import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceRevie
 import type { ChangePolicy } from "../changePolicy.js";
 import type { ChangeAgentSessionPort } from "../changePorts.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
-import {
-  makePiAiStallDetector,
-  type StallDetectionRunGroup,
-  type StallDetector,
-  type StallDetectorResult,
+import type {
+  StallDetectionRunGroup,
+  StallDetector,
+  StallDetectorResult,
 } from "../stallDetection/stallDetector.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
@@ -96,7 +95,7 @@ export class CandidateValidationWorkspace extends Context.Tag("CandidateValidati
 type CandidateReviewerExecutionValue = {
   readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly processExecutor: ReviewerProcessExecutor;
-  readonly stallDetector?: StallDetector;
+  readonly stallDetector: StallDetector;
 };
 
 export class CandidateReviewerExecution extends Context.Tag("CandidateReviewerExecution")<
@@ -125,7 +124,7 @@ export type CandidateValidationService = {
   readonly validateAcceptanceContextCandidate: (
     input: ValidateAcceptanceContextCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
-  readonly evaluateStallDetection?: (input: {
+  readonly evaluateStallDetection: (input: {
     readonly changeId: string;
     readonly validationRunId: number;
     readonly policy: NonNullable<ChangePolicy["reviewerConfiguration"]["stallDetector"]>;
@@ -160,7 +159,7 @@ export const CandidateValidationLive = Layer.effect(
     const persistence = yield* CandidateValidationExecution;
     const reviewerExecution = yield* CandidateReviewerExecution;
     const createSnapshotWorkspace = yield* CandidateValidationWorkspace;
-    const stallDetector = reviewerExecution.stallDetector ?? makePiAiStallDetector();
+    const stallDetector = reviewerExecution.stallDetector;
     return makeCandidateValidation({
       ...paths,
       fileSystem,
@@ -328,9 +327,6 @@ const evaluateStallDetection = (
   },
 ): Effect.Effect<StallDetectionEvaluation, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (dependencies.persistence.listRunsForChange === undefined) {
-      return { kind: "not_qualified" } as const;
-    }
     const runs = yield* dependencies.persistence.listRunsForChange(input.changeId);
     const current = runs.find((run) => run.id === input.validationRunId);
     if (current === undefined || current.outcome !== "blocked") {

@@ -8,7 +8,7 @@ import {
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
-  withRepositoryStorageErrorPresentationContext,
+  StallDetectionBlockerObservationFailed,
 } from "../../src/contracts/repositoryStorageError.js";
 
 describe("Shared Repository State error classification", () => {
@@ -64,15 +64,15 @@ describe("Shared Repository State error classification", () => {
   ordinaryIt(
     "adds Stall Detection observation guidance without changing storage classification",
     () => {
-      const error = withRepositoryStorageErrorPresentationContext(
-        new RepositoryStateUnavailable({ statePath: "state.sqlite", cause: new Error("missing") }),
-        {
-          kind: "stall_detection_blocker_observation",
-          changeId: "BY-1",
-          guidance:
-            "Restore access to valid repository state, inspect the blocker with `by change blocker list BY-1`, then retry `by change submit BY-1`.",
-        },
-      );
+      const error = new StallDetectionBlockerObservationFailed({
+        storageError: new RepositoryStateUnavailable({
+          statePath: "state.sqlite",
+          cause: new Error("missing"),
+        }),
+        changeId: "BY-1",
+        guidance:
+          "Restore access to valid repository state, inspect the blocker with `by change blocker list BY-1`, then retry `by change submit BY-1`.",
+      });
       const result = repositoryStorageErrorResult(error);
 
       expect(result.exitCode).toBe(1);

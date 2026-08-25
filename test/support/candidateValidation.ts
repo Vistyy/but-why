@@ -14,6 +14,7 @@ import {
   CandidateValidationPaths,
   CandidateValidationWorkspace,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import { makePiAiStallDetector } from "../../src/change/stallDetection/stallDetector.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
@@ -70,6 +71,7 @@ export const candidateValidationForTest = (input: {
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
           processExecutor: piReviewerProcessExecutor,
+          stallDetector: makePiAiStallDetector(),
         }),
       ),
     ),

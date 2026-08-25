@@ -1,7 +1,7 @@
 import { type StructuredErrorInput, structuredError } from "./cliError.js";
 import {
-  type RepositoryStorageError,
-  repositoryStorageErrorPresentationContext,
+  type RepositoryCommandError,
+  StallDetectionBlockerObservationFailed,
 } from "./contracts/repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { StructuredObject } from "./output/structured.js";
@@ -97,9 +97,27 @@ export const stateStoreUnavailable = (idPrefix: string | undefined): CliResult =
   });
 
 export const repositoryStorageErrorResult = (
-  error: RepositoryStorageError,
+  error: RepositoryCommandError,
   idPrefix?: string,
 ): CliResult => {
+  if (error instanceof StallDetectionBlockerObservationFailed) {
+    const result = repositoryStorageErrorResult(error.storageError, idPrefix);
+    const output = result.stdout as unknown as {
+      readonly error: StructuredObject;
+      readonly help: readonly string[];
+    };
+    return {
+      ...result,
+      stdout: {
+        error: {
+          ...output.error,
+          changeId: error.changeId,
+          storageError: error.storageError._tag,
+        },
+        help: [...output.help, error.guidance],
+      },
+    };
+  }
   const result = (() => {
     switch (error._tag) {
       case "RepositoryIdentityConflict":
@@ -112,23 +130,7 @@ export const repositoryStorageErrorResult = (
         return stateStoreUnavailable(idPrefix);
     }
   })();
-  const context = repositoryStorageErrorPresentationContext(error);
-  if (context === undefined) return result;
-  const output = result.stdout as unknown as {
-    readonly error: StructuredObject;
-    readonly help: readonly string[];
-  };
-  return {
-    ...result,
-    stdout: {
-      error: {
-        ...output.error,
-        changeId: context.changeId,
-        storageError: error._tag,
-      },
-      help: [...output.help, context.guidance],
-    },
-  };
+  return result;
 };
 
 const persistedDataInvalid = (operation: string): CliResult =>

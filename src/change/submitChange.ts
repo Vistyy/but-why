@@ -1,8 +1,9 @@
 import { Effect } from "effect";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import {
+  type RepositoryCommandError,
   type RepositoryStorageError,
-  withRepositoryStorageErrorPresentationContext,
+  StallDetectionBlockerObservationFailed,
 } from "../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../submission/submissionProgress.js";
 import type {
@@ -147,13 +148,13 @@ export type ChangeSubmitInput = {
 export type ChangeSubmit = {
   readonly submit: (
     input: ChangeSubmitInput,
-  ) => Effect.Effect<ChangeSubmitResult, RepositoryStorageError>;
+  ) => Effect.Effect<ChangeSubmitResult, RepositoryCommandError>;
 };
 
 export type CandidateValidationChangeSubmit = {
   readonly submit: (
     input: ChangeSubmitInput,
-  ) => Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation>;
+  ) => Effect.Effect<ChangeSubmitResult, RepositoryCommandError, CandidateValidation>;
 };
 
 type CaptureCandidate = (
@@ -163,7 +164,7 @@ type CaptureCandidate = (
 export const openChangeSubmit = (dependencies: {
   readonly repositoryPath: string;
   readonly persistence: ChangeSubmissionPort;
-  readonly authority?: ChangeAuthorityPort;
+  readonly authority: ChangeAuthorityPort;
   readonly github: GitHubPullRequestReader;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
@@ -215,7 +216,7 @@ type SubmissionDecision =
 const submitChange = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   input: ChangeSubmitInput,
-): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
+): Effect.Effect<ChangeSubmitResult, RepositoryCommandError, CandidateValidation> =>
   Effect.gen(function* () {
     const selected = yield* selectOpenChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
@@ -426,7 +427,7 @@ const validateAndPublish = (
   target: ChangePublicationTarget,
   now: string,
   progress: SubmitProgress | undefined,
-): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
+): Effect.Effect<ChangeSubmitResult, RepositoryCommandError, CandidateValidation> =>
   Effect.gen(function* () {
     const validation = yield* CandidateValidation;
     const validationResult =
@@ -457,12 +458,6 @@ const validateAndPublish = (
         change.policy.reviewerConfiguration.stallDetector !== undefined &&
         change.policy.reviewerConfiguration.acceptanceReview !== null
       ) {
-        if (validation.evaluateStallDetection === undefined) {
-          return yield* blockedValidationResult(validation, change, candidate, {
-            validationRunId: validationResult.validationRunId,
-            outcome: "blocked",
-          });
-        }
         const stall = yield* validation.evaluateStallDetection({
           changeId: change.id,
           validationRunId: validationResult.validationRunId,
@@ -567,21 +562,8 @@ const raiseStallDetectionBlocker = (
     readonly validationRunIds: readonly number[];
   },
   now: string,
-): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
+): Effect.Effect<ChangeSubmitResult, RepositoryCommandError> =>
   Effect.gen(function* () {
-    if (dependencies.authority === undefined) {
-      const outputChange = yield* dependencies.persistence.getChangeForOutputById(change.id);
-      if (outputChange === undefined) return { ok: false, code: "change_not_found" } as const;
-      return {
-        ok: false,
-        code: "stall_detection_blocker_failed",
-        changeId: change.id,
-        candidateId: candidate.candidateId,
-        validationRunId,
-        validationRunIds: stall.validationRunIds,
-        change: outputChange,
-      } as const;
-    }
     const content = [
       "Stall Detection requested Operator investigation after repeated blocked Validation Runs.",
       `Automatic continuation is unsafe because: ${stall.reason}`,
@@ -600,12 +582,11 @@ const raiseStallDetectionBlocker = (
 
     const observed = yield* Effect.either(dependencies.persistence.getChangeById(change.id));
     if (observed._tag === "Left") {
-      const error = withRepositoryStorageErrorPresentationContext(observed.left, {
-        kind: "stall_detection_blocker_observation",
+      return yield* new StallDetectionBlockerObservationFailed({
+        storageError: observed.left,
         changeId: change.id,
         guidance: `Restore access to valid repository state, inspect the blocker with \`by change blocker list ${change.id}\`, then retry \`by change submit ${change.id}\`.`,
       });
-      return yield* error;
     }
     if (observed.right?.activeBlocker !== null && observed.right !== undefined) {
       return { ok: false, code: "change_blocked" } as const;
