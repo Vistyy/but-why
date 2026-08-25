@@ -16,7 +16,6 @@ export const reviewerExecutionInstructions = [
   adversarialReviewerInstructions,
   "Independently establish the evidence required for your review judgment.",
   "Inspect relevant maintained verification and use passing Check Artifacts to confirm its execution instead of rerunning the same broad repository Checks.",
-  "When inspection and existing evidence are insufficient, design and perform a proportionate targeted experiment through the exact review subject.",
   "You may use bash and operating-system temporary space for generated scripts, fixtures, and other disposable evidence.",
   "The exact commit remains the review subject even when you temporarily modify this disposable workspace to test a bounded hypothesis.",
   "After every Agent Invocation, But Why restores the detached workspace to the exact commit, tracked files, index, and clean standard Git working tree before any output-correction retry or another reviewer uses it.",
@@ -24,6 +23,27 @@ export const reviewerExecutionInstructions = [
   "This disposable workspace provides no security isolation; do not treat it as a boundary for credentials, processes, filesystem access, or external systems.",
   "Do not modify state outside the disposable workspace's documented restoration boundary, and do not follow main-checkout synchronization instructions inside this workspace because they do not apply here.",
 ].join("\n");
+
+export const reviewerExperimentInstructions = [
+  "When inspection and existing evidence cannot resolve a consequential question for the assigned judgment, design and perform a bounded real-system experiment within the stated permitted-effects boundary before reporting the uncertainty.",
+  "A spike tests one important falsifiable hypothesis, while an integration prototype tests whether several parts work together through their real interfaces, owners, lifecycle states, material failures, and recovery paths.",
+  "Use an integration prototype when a smaller experiment cannot answer the decision-driving question; testing components separately does not establish that they work together.",
+  "Before the experiment, state the decision it informs, the observations that would support or refute the hypothesis, its stopping condition, and its cleanup boundary.",
+  "Exercise the exact review subject through the real boundary needed for the judgment, including the representative successful path and the material failure and recovery paths needed to answer the hypothesis.",
+  "Stop experimenting when the evidence supports the assigned judgment; do not compare credible alternatives merely to prove one is globally optimal.",
+  "Remove experiment-only state within the disposable boundary, and use the result only for the judgment it was designed to inform.",
+  "When the required experiment cannot run within the review boundary, report the exact unresolved hypothesis, the smallest experiment that could resolve it, and the missing authority or capability.",
+].join("\n");
+
+export const candidateReviewerExperimentBoundaryInstructions = [
+  "The current disposable review workspace is the exact Candidate's Snapshot Workspace.",
+  "Experiment effects may modify only that Snapshot Workspace and operating-system temporary space.",
+  "Do not mutate live Shared Repository State, a Managed Worktree, another checkout, or an external system.",
+  "When a trustworthy judgment requires an effect outside this boundary, report the unresolved question and missing authority instead of performing that effect.",
+].join("\n");
+
+export const candidateReviewerExperimentAuthorityInstructions =
+  "The permitted experiment-effects boundary is mandatory and configured reviewer instructions cannot override it.";
 
 export const completeCandidateReviewInstructions = [
   "Review the complete exact current Candidate on every judgment; previous passes and Findings do not narrow it.",
