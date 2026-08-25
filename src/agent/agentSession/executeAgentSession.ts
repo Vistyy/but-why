@@ -1,3 +1,4 @@
+import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { Cause, Clock, Data, Effect, Option } from "effect";
@@ -203,6 +204,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         settledResult.sessionUsability === "unknown" &&
         settledResult.sessionReference !== undefined &&
         settledResult.sessionFilePath !== undefined &&
+        isResumableTranscript(input.sessionStorageRoot, settledResult.sessionFilePath) &&
         invocationNumber < (input.maxOutputContractAttempts ?? 3);
       const evidence: AgentExecutionEvidence = {
         agentSessionId: sessionId,
@@ -292,6 +294,24 @@ const settlementFor = <Output>(
       ? { unusableReason: result.failure.message }
       : {}),
   };
+};
+
+const isResumableTranscript = (root: string, path: string): boolean => {
+  if (safeTranscriptPath(root, path) === null) return false;
+  try {
+    const canonicalRoot = realpathSync(root);
+    const canonicalPath = realpathSync(path);
+    const candidate = relative(canonicalRoot, canonicalPath);
+    return (
+      !isAbsolute(candidate) &&
+      candidate !== "" &&
+      candidate !== ".." &&
+      !candidate.startsWith(`..${sep}`) &&
+      statSync(canonicalPath).isFile()
+    );
+  } catch {
+    return false;
+  }
 };
 
 const safeTranscriptPath = (root: string, path: string | undefined): string | null => {

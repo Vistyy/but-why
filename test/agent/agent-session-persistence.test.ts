@@ -417,6 +417,7 @@ it.effect("returns the terminal retry result with ordered Invocation evidence", 
       Effect.gen(function* () {
         const prompts: string[] = [];
         const transcript = join(root, "retry.jsonl");
+        writeFileSync(transcript, "known transcript\n");
         const result = yield* executeAgentSession({
           configuration,
           agentPersistence: persistence,
