@@ -27,6 +27,23 @@ type TestBlockerHistory = {
   resolutions: Record<string, unknown>[];
   active: Record<string, unknown> | null;
 };
+
+const validTestBlockerHistory = (resolutionContent?: string): TestBlockerHistory => {
+  const resolution =
+    resolutionContent === undefined ? null : { blockerId: 1, content: resolutionContent };
+  const blocker = {
+    id: 1,
+    changeId,
+    content: "The Operator must approve the implementation direction.",
+    resolution,
+  };
+  return {
+    blockers: [blocker],
+    resolutions: resolution === null ? [] : [resolution],
+    active: resolution === null ? blocker : null,
+  };
+};
+
 type EventHandler = (event: unknown, context: ExtensionContext) => unknown;
 type CommandHandler = (args: string, context: ExtensionContext) => unknown;
 
@@ -64,10 +81,12 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   const widgets: Array<{ readonly name: string; readonly value: unknown }> = [];
   let currentSnapshot: unknown = snapshot();
   let currentBlockerHistory: TestBlockerHistory = { blockers: [], resolutions: [], active: null };
+  let blockerInspectionOutput: string | undefined;
   let inspectionFails = false;
   let inspectionGate: Promise<void> | undefined;
   let releaseInspection: (() => void) | undefined;
   let idle = true;
+  let abortCount = 0;
   const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   const execSignals: Array<AbortSignal | undefined> = [];
   const api = {
@@ -108,7 +127,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       }
       if (installedCli && inspectionFails) return { stdout: "", stderr: "", code: 1, killed: true };
       if (installedCli && args.includes("blocker"))
-        return result(JSON.stringify(currentBlockerHistory));
+        return result(blockerInspectionOutput ?? JSON.stringify(currentBlockerHistory));
       if (installedCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
@@ -121,6 +140,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     cwd,
     sessionManager: { getBranch: () => [...entries] },
     isIdle: () => idle,
+    abort: () => {
+      abortCount += 1;
+    },
     ui: {
       notify(message: string) {
         notifications.push(message);
@@ -150,6 +172,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     getAbortedExecCount() {
       return execSignals.filter((signal) => signal?.aborted).length;
     },
+    getAbortCount() {
+      return abortCount;
+    },
     setSnapshot(next: unknown) {
       currentSnapshot = next;
     },
@@ -167,6 +192,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     },
     setBlockerHistory(next: TestBlockerHistory) {
       currentBlockerHistory = next;
+    },
+    setBlockerInspectionOutput(next: string | undefined) {
+      blockerInspectionOutput = next;
     },
     setIdle(value: boolean) {
       idle = value;
@@ -495,11 +523,7 @@ describe("packaged Change Implement continuation extension", () => {
 
   it("stops when blocker history is active even if the Change snapshot is open", async () => {
     const harness = createHarness();
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [],
-      active: { id: "blocker-1" },
-    });
+    harness.setBlockerHistory(validTestBlockerHistory());
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     await harness.emit("agent_settled");
@@ -508,13 +532,68 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
   });
 
+  it("aborts after a turn when trusted blocker state is active without pausing the session", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory(validTestBlockerHistory());
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+      await harness.emit("turn_end", { toolResults: [{}] });
+      await harness.emit("agent_end", {
+        messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+      });
+      await harness.emit("agent_settled");
+
+      expect(harness.getAbortCount()).toBe(1);
+      expect(harness.sent).toEqual([]);
+      expect(harness.entries.at(-1)).toMatchObject({ data: { paused: false } });
+      expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
+
+      harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.sent).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts and pauses for explicit recovery when trusted blocker inspection fails", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setInspectionFails(true);
+
+    await harness.emit("turn_end", { toolResults: [{}] });
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+    });
+
+    expect(harness.getAbortCount()).toBe(1);
+    expect(harness.sent).toEqual([]);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { paused: true } });
+    expect(harness.latestWidgetText()).toEqual(["! Change inspection failed"]);
+  });
+
+  it("aborts and pauses when trusted blocker JSON cannot be decoded", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setBlockerInspectionOutput("not-json");
+
+    await harness.emit("turn_end", { toolResults: [{}] });
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+    });
+
+    expect(harness.getAbortCount()).toBe(1);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { paused: true } });
+    expect(harness.latestWidgetText()).toEqual(["! Change inspection failed"]);
+  });
+
   it("handles an existing Resolution when a new bound session starts unpaused", async () => {
     const harness = createHarness();
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
-      active: null,
-    });
+    harness.setBlockerHistory(validTestBlockerHistory("Use the approved design."));
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
@@ -528,22 +607,14 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       const initialInspectionCalls = harness.getExecCallCount();
 
       await vi.advanceTimersByTimeAsync(29_999);
       expect(harness.getExecCallCount()).toBe(initialInspectionCalls);
 
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Use the approved design." }],
-        active: null,
-      });
+      harness.setBlockerHistory(validTestBlockerHistory("Use the approved design."));
       await vi.advanceTimersByTimeAsync(1);
 
       expect(harness.sent).toEqual([expect.stringContaining("Use the approved design.")]);
@@ -560,11 +631,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
       harness.setInspectionFails(true);
@@ -573,11 +640,7 @@ describe("packaged Change Implement continuation extension", () => {
       expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
 
       harness.setInspectionFails(false);
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Continue safely." }],
-        active: null,
-      });
+      harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
       await vi.advanceTimersByTimeAsync(30_000);
       expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
     } finally {
@@ -589,20 +652,12 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       await harness.runCommand("pause-change");
       const pausedInspectionCalls = harness.getExecCallCount();
 
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Continue safely." }],
-        active: null,
-      });
+      harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
       await vi.advanceTimersByTimeAsync(60_000);
       expect(harness.getExecCallCount()).toBe(pausedInspectionCalls);
       expect(harness.sent).toEqual([]);
@@ -618,11 +673,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       harness.blockInspection();
 
@@ -645,11 +696,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
       const initialInspectionCalls = harness.getExecCallCount();
 
@@ -659,19 +706,11 @@ describe("packaged Change Implement continuation extension", () => {
       expect(harness.getExecCallCount()).toBe(initialInspectionCalls);
 
       const inFlight = createHarness();
-      inFlight.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      inFlight.setBlockerHistory(validTestBlockerHistory());
       await inFlight.emit("session_start", { type: "session_start", reason: "startup" });
       inFlight.blockInspection();
       await vi.advanceTimersByTimeAsync(30_000);
-      inFlight.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [{ blockerId: 1, content: "Do not deliver after shutdown." }],
-        active: null,
-      });
+      inFlight.setBlockerHistory(validTestBlockerHistory("Do not deliver after shutdown."));
       await inFlight.emit("session_shutdown");
       await Promise.resolve();
       expect(inFlight.getAbortedExecCount()).toBeGreaterThan(0);
@@ -688,11 +727,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
     harness.setInspectionFails(false);
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ blockerId: 1, content: "Continue safely." }],
-      active: null,
-    });
+    harness.setBlockerHistory(validTestBlockerHistory("Continue safely."));
     await harness.emit("agent_settled");
 
     expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
@@ -712,11 +747,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
     harness.setSnapshot(snapshot({ findingCount: 1 }));
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
-      active: null,
-    });
+    harness.setBlockerHistory(validTestBlockerHistory("Use the approved design."));
     await harness.emit("agent_settled");
 
     expect(harness.sent).toHaveLength(1);
@@ -879,11 +910,7 @@ describe("packaged Change Implement continuation extension", () => {
     vi.useFakeTimers();
     try {
       const harness = createHarness();
-      harness.setBlockerHistory({
-        blockers: [{ id: "blocker-1" }],
-        resolutions: [],
-        active: { id: "blocker-1" },
-      });
+      harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
       harness.setSnapshot(
@@ -960,6 +987,52 @@ describe("packaged Change Implement continuation extension", () => {
       {
         blockers: [{ body: { opaque: true } }],
         resolutions: [{ blockerId: 1 }],
+        active: null,
+      },
+    ],
+    [
+      "active blocker relationship",
+      undefined,
+      {
+        blockers: [
+          {
+            id: 1,
+            changeId,
+            content: "The Operator must approve the implementation direction.",
+            resolution: null,
+          },
+        ],
+        resolutions: [],
+        active: {
+          id: 2,
+          changeId,
+          content: "The Operator must approve the implementation direction.",
+          resolution: null,
+        },
+      },
+    ],
+    [
+      "Resolution order",
+      undefined,
+      {
+        blockers: [
+          {
+            id: 1,
+            changeId,
+            content: "First blocker.",
+            resolution: { blockerId: 1, content: "First resolution." },
+          },
+          {
+            id: 2,
+            changeId,
+            content: "Second blocker.",
+            resolution: { blockerId: 2, content: "Second resolution." },
+          },
+        ],
+        resolutions: [
+          { blockerId: 2, content: "Second resolution." },
+          { blockerId: 1, content: "First resolution." },
+        ],
         active: null,
       },
     ],
