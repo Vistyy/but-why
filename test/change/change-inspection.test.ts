@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -13,7 +13,12 @@ import {
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
-import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
+import {
+  commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  passTaskReviewFixture,
+  runByInProcessEffect,
+} from "../support/by-cli.js";
 import {
   captureCandidateFixture,
   closeChangeFixture,
@@ -29,13 +34,13 @@ import {
   resolveImplementationBlockerFixture,
   runInspectionCommand,
 } from "../support/changeInspectionFixture.js";
-import {
-  cloneInitializedTestRepository,
-  createInitializedRepo,
-} from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
-import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
+import {
+  acquireTestWorkspace,
+  createTestWorkspace,
+  releaseTestWorkspace,
+} from "../support/testWorkspace.js";
 
 const firstNow = "2026-07-18T10:00:00.000Z";
 const secondNow = "2026-07-18T10:05:00.000Z";
@@ -44,14 +49,24 @@ let initializedRepoTemplate: string;
 
 beforeAll(() => {
   initializedRepoTemplate = acquireTestWorkspace();
-  createInitializedRepo(initializedRepoTemplate);
+  createGitRepo(initializedRepoTemplate);
 });
 
 afterAll(() => {
   releaseTestWorkspace(initializedRepoTemplate);
 });
 
-const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepoTemplate);
+const initializedRepoCopy = () =>
+  Effect.gen(function* () {
+    const root = yield* Effect.sync(() => {
+      const workspace = createTestWorkspace();
+      cpSync(initializedRepoTemplate, workspace, { recursive: true });
+      return workspace;
+    });
+    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+    if (initialized.status !== 0) throw new Error(initialized.stdout || initialized.stderr);
+    return root;
+  });
 
 // Retained evidence owners after broad workflow setup was removed:
 // - Change Submit Candidate selection: change-submit-orchestration.test.ts.
@@ -100,6 +115,94 @@ describe("Change inspection CLI", () => {
         { ok: false, code: "submission_in_progress" },
         { ok: false, code: "submission_in_progress" },
       ]);
+    }),
+  );
+
+  it.effect("keeps linked Task Context independent from Change blocker resolutions", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      const descriptionPath = join(root, "task.md");
+      writeFileSync(descriptionPath, "Current Task description");
+      expect(
+        (yield* runByInProcessEffect(root, [
+          "task",
+          "create",
+          "--title",
+          "Current Task title",
+          "--file",
+          descriptionPath,
+        ])).status,
+      ).toBe(0);
+      yield* passTaskReviewFixture(root, "BY-1");
+      writeFileSync(
+        join(root, ".but-why", "config.json"),
+        `${JSON.stringify(
+          {
+            idPrefix: "BY",
+            prepare: { command: "true" },
+            validation: { checks: [{ id: "test", command: "true" }] },
+            review: { acceptance: { agentProfile: { scope: "global", name: "test" } } },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      commitButWhyConfigAndRecordDefault(root);
+      const globalConfigPath = join(root, ".test-global-config.json");
+      writeFileSync(
+        globalConfigPath,
+        `${JSON.stringify(
+          {
+            agentProfiles: {
+              test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", "BY-1"],
+        undefined,
+        { globalConfigPath },
+      );
+      expect(started.status).toBe(0);
+      const changeId = (JSON.parse(started.stdout) as { change: { id: string } }).change.id;
+      const blockerPath = join(root, "blocker.md");
+      const resolutionPath = join(root, "resolution.md");
+      writeFileSync(blockerPath, "Unsafe implementation requires an operator decision.");
+      writeFileSync(resolutionPath, "Continue with the approved Task intent.");
+
+      const raised = yield* runByInProcessEffect(root, [
+        "change",
+        "blocker",
+        "raise",
+        changeId,
+        "--file",
+        blockerPath,
+      ]);
+      const resolved = yield* runByInProcessEffect(root, [
+        "change",
+        "blocker",
+        "resolve",
+        changeId,
+        "--file",
+        resolutionPath,
+      ]);
+      const context = yield* runByInProcessEffect(root, ["task", "context", "BY-1"]);
+
+      expect(raised.status).toBe(0);
+      expect(resolved.status).toBe(0);
+      expect(context.status).toBe(0);
+      expect(JSON.parse(context.stdout)).toEqual({
+        task: {
+          id: "BY-1",
+          title: "Current Task title",
+          description: "Current Task description",
+        },
+      });
     }),
   );
 
