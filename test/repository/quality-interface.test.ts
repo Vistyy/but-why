@@ -55,8 +55,14 @@ const startRunner = (lockFile: string, args: string[]) => {
   };
 };
 
-const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  startRunner(lockFile, args).done;
+const runRunner = async (lockFile: string, args: string[]): Promise<CommandResult> => {
+  const runnerProcess = startRunner(lockFile, args);
+  try {
+    return await settleWithinDeadline(runnerProcess.done, "runner workload settlement");
+  } finally {
+    await stopRunner(runnerProcess);
+  }
+};
 
 const startJust = (
   lockFile: string,
@@ -92,13 +98,16 @@ const startJust = (
   };
 };
 
-const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  settleWithinDeadline(
-    startJust(lockFile, args, {
-      PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
-    }).done,
-    "Just workload settlement",
-  );
+const runJust = async (lockFile: string, args: string[]): Promise<CommandResult> => {
+  const justProcess = startJust(lockFile, args, {
+    PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
+  });
+  try {
+    return await settleWithinDeadline(justProcess.done, "Just workload settlement");
+  } finally {
+    await stopJust(justProcess);
+  }
+};
 
 const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
   if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
@@ -371,18 +380,21 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
     const invocationsFile = join(directory, "invocations");
     createFailingQualityFixture(directory);
 
-    const result = await settleWithinDeadline(
-      startJust(
-        lockFile,
-        ["quality"],
-        {
-          QUALITY_FAILURE: failure,
-          QUALITY_INVOCATIONS: invocationsFile,
-        },
-        directory,
-      ).done,
-      "failed quality settlement",
+    const quality = startJust(
+      lockFile,
+      ["quality"],
+      {
+        QUALITY_FAILURE: failure,
+        QUALITY_INVOCATIONS: invocationsFile,
+      },
+      directory,
     );
+    let result: CommandResult;
+    try {
+      result = await settleWithinDeadline(quality.done, "failed quality settlement");
+    } finally {
+      await stopJust(quality);
+    }
 
     expect(result.status).toBe(1);
     expect(result.output).toContain(`${failure} failure marker`);
