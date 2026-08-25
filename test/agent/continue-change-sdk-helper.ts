@@ -117,7 +117,7 @@ const runRuntimeCase = async (): Promise<RuntimeCase> => {
 const main = async (): Promise<void> => {
   const result = await runRuntimeCase();
   const output = JSON.stringify(result);
-  if (output.length > maxRuntimeCaseBytes)
+  if (Buffer.byteLength(output, "utf8") > maxRuntimeCaseBytes)
     throw new Error("Runtime case result exceeded the output bound.");
   process.stdout.write(`${output}\n`);
 };

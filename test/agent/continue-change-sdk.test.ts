@@ -99,7 +99,7 @@ const runRuntimeCase = (blocked: boolean): RuntimeCase => {
     if (result.status !== 0) {
       throw new Error(result.stderr || `Pi SDK fixture exited with ${result.status}.`);
     }
-    if (result.stdout.length > maxRuntimeCaseBytes) {
+    if (Buffer.byteLength(result.stdout, "utf8") > maxRuntimeCaseBytes) {
       throw new Error("Pi SDK fixture result exceeded the output bound.");
     }
     return JSON.parse(result.stdout) as RuntimeCase;
