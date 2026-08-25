@@ -22,15 +22,23 @@ Do not require a requirement allocation matrix, complete graph, or standard plan
 ## Resolve consequential uncertainty
 
 Inspect the current repository and supported tools before retaining a consequential technical assumption.
-When inspection cannot resolve a feasibility, integration, or performance hypothesis that could materially change a Task boundary or readiness, recommend a bounded spike.
-State the decision-driving falsifiable hypothesis and the smallest real-system experiment that could support or refute it.
-State which result would support, refute, or leave the hypothesis unresolved.
-Do not use a spike when repository evidence already resolves the question or when the result cannot affect the decision.
-Do not treat plans, intuition, test doubles, or unverified external claims as confirmation of real-system behavior.
+When inspection cannot resolve a feasibility, integration, performance, lifecycle, or recovery question that could materially change Task readiness or boundaries, use a bounded real-system experiment before requesting another decision when current authority permits it.
+A spike tests one important falsifiable hypothesis.
+An integration prototype tests whether several parts work together through their real interfaces, owners, lifecycle states, material failures, and recovery paths.
+Use an integration prototype when a smaller experiment cannot answer the decision-driving question.
+Testing components separately does not establish that they work together.
 
-A spike supplies evidence for authoring decisions; it does not silently replace approved implementation work.
-Obtain the applicable approval before an experiment mutates repository or external state, introduces material risk, or incurs material cost.
-Remove experiment-owned state afterward unless production implementation is separately authorized.
+Before the experiment, state the decision it informs, the observations that would support or refute the hypothesis, the stopping condition, permitted state changes, and the cleanup boundary.
+A Task author may create and modify a manually managed disposable workspace under temporary storage without separate authorization.
+Do not open live Shared Repository State from a source or Candidate executable.
+Obtain additional approval before affecting shared external state or incurring material cost or risk.
+Remove the disposable workspace and all experiment-only state after collecting the result.
+If no permitted experiment can resolve the question, propose the exact bounded experiment and identify the authority or capability it requires.
+
+Use the experiment result only for the authoring decision it was designed to inform.
+A successful experiment does not become production implementation, accepted intent, or proof of behavior outside what it observed.
+Do not experiment when repository evidence already resolves the question or when the result cannot affect readiness or Task boundaries.
+Do not treat plans, intuition, test doubles, or unverified external claims as confirmation of real-system behavior.
 
 ## Compose individual Tasks
 

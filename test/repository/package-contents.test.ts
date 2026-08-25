@@ -215,10 +215,14 @@ describe("release package boundary", () => {
       "extensions/continue-change.ts",
       "docs/public/skills/but-why/SKILL.md",
       "docs/public/skills/but-why/references/command-guidance.md",
+      "docs/public/skills/but-why/references/blocker-triage.md",
       "docs/public/skills/but-why/references/implement-change.md",
-      "docs/public/skills/but-why/references/operator-workflow.md",
+      "docs/public/skills/but-why/references/implementation-verification.md",
+      "docs/public/skills/but-why/references/interactive-session.md",
+      "docs/public/skills/but-why/references/reconcile-change.md",
+      "docs/public/skills/but-why/references/start-work.md",
       "docs/public/skills/but-why/references/task-authoring.md",
-      "docs/public/skills/but-why/references/task-verification.md",
+      "docs/public/skills/but-why/references/task-operations.md",
     ]) {
       expect(files).toContain(required);
     }
