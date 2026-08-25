@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import type { ChangePolicy, ChangeReviewerConfiguration } from "../../src/change/changePolicy.js";
+import type { ChangeReviewerConfiguration } from "../../src/change/changePolicy.js";
 import {
   decodeSqliteChangeReviewerConfiguration,
   encodeSqliteChangeReviewerConfiguration,
@@ -235,7 +235,7 @@ it.scoped("rejects invalid Change Policy before inserting a Change", () =>
                 baseRef: "refs/remotes/origin/main",
                 baseRemoteUrl: "https://example.com/acme/repo.git",
                 managedWorktreeParent: "/tmp",
-                policy: invalidPolicy as unknown as ChangePolicy,
+                policy: invalidPolicy,
               },
               repository.idPrefix,
             ),

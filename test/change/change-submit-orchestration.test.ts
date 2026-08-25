@@ -1503,7 +1503,15 @@ const dependencies = (input: {
       listImplementationBlockers: () => Effect.succeed(undefined),
       listImplementationDecisions: () => Effect.succeed([]),
       recordImplementationDecision: () =>
-        Effect.succeed({ ok: true as const, decision: {} as never }),
+        Effect.succeed({
+          ok: true as const,
+          decision: {
+            id: 1,
+            changeId: "change-1",
+            choice: "Use the existing submission boundary",
+            rationale: "The test adapter represents a valid persisted decision.",
+          },
+        }),
       getCurrentPassingEvidence: () => Effect.succeed(undefined),
     } satisfies ChangeAuthorityPort,
     persistence: {

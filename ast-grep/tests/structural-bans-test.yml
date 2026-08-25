@@ -81,6 +81,32 @@ invalid:
   - (JSON.parse(source).known) as unknown
   - (acceptUnknown(JSON.parse(source))) as unknown
 ---
+id: chained-unknown-assertions-are-truthful
+valid:
+  - value as Type
+  - value as unknown
+  - value satisfies Type
+invalid:
+  - value as unknown as Type
+---
+id: never-assertions-are-truthful
+valid:
+  - value as unknown
+  - value as never[]
+  - value satisfies never
+invalid:
+  - value as never
+---
+id: effect-effect-assertions-are-truthful
+valid:
+  - value as Effect
+  - value as Effect.Effect
+  - value as Promise<Effect.Effect<string>>
+  - "const effect: Effect.Effect<string> = value"
+invalid:
+  - value as Effect.Effect<string>
+  - value as Effect.Effect<string, Error, Dependencies>
+---
 id: process-test-helpers-belong-to-process-boundaries
 valid:
   - runByInProcessEffect(root, ["task", "list"])
