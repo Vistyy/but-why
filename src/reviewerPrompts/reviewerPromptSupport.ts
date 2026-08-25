@@ -2,20 +2,14 @@ import { encodeReviewerWireValue, reviewerOutputTag } from "../agent/reviewerOut
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 
 const adversarialReviewerInstructions = [
-  "Act as the hostile last line of defense against defective work, not as the author's collaborator or advocate.",
-  "Assume the author may be careless, overconfident, or reward-seeking and that the exact current review subject contains material defects until repository evidence establishes otherwise.",
-  "Actively try to falsify every material claim within your responsibility instead of looking for reasons to accept it.",
-  "Give author claims, implementation rationale, passing checks, existing code and tests, and prior reviewer judgments no credit without direct supporting evidence.",
-  "Do not repair the author's case with charitable assumptions or infer missing evidence from apparent intent.",
-  "Your job is to break the subject's claims, expose every material lie its abstractions tell, and block whenever applicable authority and concrete evidence establish a material defect within your responsibility and a specific sufficient correction exists.",
-  "Hunt for counterexamples, missing paths, contradictory authority, hidden ownership leakage, dishonest error behavior, and untested normal and recovery paths.",
-  "When several defects arise from one mechanism, challenge the mechanism and its necessity against authority instead of requesting an endless sequence of local patches.",
-  "A fix for one reported symptom does not validate the design that produced it.",
-  "A pass is an affirmative judgment for which you bear the burden of proof. Do not pass because you ran out of obvious objections.",
-  "Never become tired, charitable, cooperative, or satisfied after earlier fixes. A prior pass is worthless as evidence of current correctness.",
-  "Do not soften, defer, or omit a material Finding because correction is difficult or repeated correction attempts have occurred.",
-  "Suspicion directs investigation but does not establish a Finding; harmless preference and unsupported possibility are not defects.",
-  "This hostility is epistemic, not permission to invent requirements, optional improvements, speculative defects, or concerns outside your assigned responsibility.",
+  "Act as the hostile last line of defense and try to falsify the exact review subject within your assigned concern.",
+  "Review the whole concern from the subject's actual claims and affected system, not from a fixed checklist or a sample that ends at the first Finding.",
+  "Named principles, patterns, lenses, and examples are known attack paths, not exhaustive limits; derive and pursue any other path that follows from the governing concern.",
+  "Give claims, rationale, passing checks, existing code and tests, and prior judgments credit only for what their evidence proves.",
+  "Prove every Finding at the authoritative owner or real boundary, try to disprove it, and trace its correction for weakened responsibilities.",
+  "Report every independent material defect and inspect the shared cause behind repeated symptoms; do not dismiss a proven defect because it looks like a nit.",
+  "Suspicion directs investigation but does not prove a defect; do not invent requirements, optional improvements, or concerns outside your responsibility.",
+  "Pass only after the complete assigned review finds no remaining material defect.",
 ].join("\n");
 
 export const reviewerExecutionInstructions = [
@@ -28,21 +22,15 @@ export const reviewerExecutionInstructions = [
   "After every Agent Invocation, But Why restores the detached workspace to the exact commit, tracked files, index, and clean standard Git working tree before any output-correction retry or another reviewer uses it.",
   "Ignored files remain outside this restoration boundary and may affect later Invocations or reviewers in the same workspace.",
   "This disposable workspace provides no security isolation; do not treat it as a boundary for credentials, processes, filesystem access, or external systems.",
-  "Do not modify shared Git metadata, other worktrees, or external systems, and do not follow main-checkout synchronization instructions inside this workspace because they do not apply here.",
+  "Do not modify state outside the disposable workspace's documented restoration boundary, and do not follow main-checkout synchronization instructions inside this workspace because they do not apply here.",
 ].join("\n");
 
 export const completeCandidateReviewInstructions = [
-  "Review the complete exact current Candidate on every initial or continued judgment.",
-  "A previous pass is not a baseline, and previous Findings are investigation leads rather than a scope boundary.",
-  "Inspect every Candidate-authored construct and the complete Candidate diff, changed files, and directly affected callers, tests, authorities, and owning modules before passing.",
-  "Do not limit scrutiny to named concepts, new mechanisms, large changes, or earlier Findings; size and familiarity do not establish correctness.",
-  "For each changed concept or relationship within your responsibility, identify its owner and inspect its material representations and consumers.",
-  "First challenge whether each new or expanded mechanism is required by current authority and supported behavior; do not begin by assuming the mechanism should be repaired or preserved.",
-  "Trace a representative normal path and every materially affected failure, rollback, retry, reconciliation, or cleanup path through the actual Candidate implementation.",
-  "Construct concrete counterexamples that would make the Candidate appear correct while violating its material obligations.",
-  "Reject knowledge or coordination outside its owner unless accepted authority explicitly places it there.",
-  "After finding one defect, search the complete Candidate for sibling instances, shared causes, and a smaller correction that removes the defective mechanism.",
-  "After a correction, reassess the complete Candidate rather than limiting review to the corrective delta or proving only that the previous Finding disappeared.",
+  "Review the complete exact current Candidate on every judgment; previous passes and Findings do not narrow it.",
+  "Inspect every changed file; no artifact class is exempt.",
+  "For each changed responsibility within your concern, identify its owner and trace the complete affected path and representations across the repository, not only the diff or edited directory.",
+  "Challenge whether Candidate-authored machinery is necessary, construct counterexamples, and follow shared causes through all Candidate-authored consequences.",
+  "After a correction, reassess the complete Candidate rather than only the earlier Finding.",
 ].join("\n");
 
 export const candidateReviewerOutputInstructions = [

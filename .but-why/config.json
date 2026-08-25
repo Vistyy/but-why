@@ -17,15 +17,15 @@
     ]
   },
   "review": {
-    "specialists": ["standards", "verification"]
+    "specialists": ["removal", "standards"]
   },
   "reviewers": {
-    "standards": {
-      "instructionsFile": ".but-why/reviewers/standards.md",
+    "removal": {
+      "instructionsFile": ".but-why/reviewers/removal.md",
       "agentProfile": { "scope": "global", "name": "reviewer" }
     },
-    "verification": {
-      "instructionsFile": ".but-why/reviewers/verification.md",
+    "standards": {
+      "instructionsFile": ".but-why/reviewers/standards.md",
       "agentProfile": { "scope": "global", "name": "reviewer" }
     }
   }
