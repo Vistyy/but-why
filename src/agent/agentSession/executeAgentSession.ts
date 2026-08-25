@@ -202,7 +202,6 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         !settledResult.ok &&
         settledResult.failure.kind === "output_contract" &&
         settledResult.sessionUsability === "unknown" &&
-        settledResult.sessionReference !== undefined &&
         settledResult.sessionFilePath !== undefined &&
         isResumableTranscript(
           input.sessionStorageRoot,
