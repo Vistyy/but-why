@@ -25,7 +25,7 @@ export const byExecutable = "by";
 const inProcessExecutablePath = join(repoRoot, "dist/main.js");
 
 // Keep CLI process sentinels bounded without changing Vitest's global timeout.
-const cliProcessTimeoutMs = 30_000;
+const cliProcessTimeoutMs = 25_000;
 const buildProcessTimeoutMs = 20_000;
 
 export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
