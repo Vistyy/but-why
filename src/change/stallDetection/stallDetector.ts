@@ -55,15 +55,26 @@ export type StallDetector = {
   readonly judge: (input: StallDetectionInput) => Effect.Effect<StallDetectorResult>;
 };
 
-const responseSchema = Schema.Struct({
-  decision: Schema.Literal("continue", "stop"),
-  reason: Schema.String.pipe(Schema.filter((value) => value.trim().length > 0)),
-});
-
 const decodeResponse = (value: unknown, policy: StallDetectorPolicy) => {
-  if (policy.responseContract !== stallDetectorResponseContract) {
+  const contract = /^\{"decision":"([^"|]+)"\|"([^"|]+)","reason":"([^"]+)"\}$/u.exec(
+    policy.responseContract,
+  );
+  if (contract === null) {
     throw new Error("The frozen Stall Detector response contract is invalid.");
   }
+  const firstDecision = contract[1];
+  const secondDecision = contract[2];
+  if (
+    (firstDecision !== "continue" && firstDecision !== "stop") ||
+    (secondDecision !== "continue" && secondDecision !== "stop") ||
+    firstDecision === secondDecision
+  ) {
+    throw new Error("The frozen Stall Detector response contract is invalid.");
+  }
+  const responseSchema = Schema.Struct({
+    decision: Schema.Literal(firstDecision, secondDecision),
+    reason: Schema.String.pipe(Schema.filter((reason) => reason.trim().length > 0)),
+  });
   return Schema.decodeUnknownSync(responseSchema, {
     onExcessProperty: "error",
   })(value);
