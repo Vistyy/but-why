@@ -4,6 +4,7 @@ import {
   completeCandidateReviewInstructions,
   previousFindingsPrompt,
   reviewerExecutionInstructions,
+  reviewerExperimentInstructions,
 } from "./reviewerPromptSupport.js";
 
 const universalSpecialistInstructions = [
@@ -39,6 +40,7 @@ export const buildSpecialistReviewerSystemPrompt = (input: {
 }): string =>
   [
     reviewerExecutionInstructions,
+    reviewerExperimentInstructions,
     completeCandidateReviewInstructions,
     `Configured concern: ${input.specialist}`,
     input.instructions,

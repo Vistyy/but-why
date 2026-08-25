@@ -5,6 +5,7 @@ import {
   previousFindingsPrompt,
   type ReviewerFindingHistory,
   reviewerExecutionInstructions,
+  reviewerExperimentInstructions,
 } from "./reviewerPromptSupport.js";
 
 export const defaultAcceptanceInstructions = [
@@ -34,6 +35,7 @@ const acceptanceAuthorityInstructions = [
 export const buildAcceptanceReviewerSystemPrompt = (instructions: string): string =>
   [
     reviewerExecutionInstructions,
+    reviewerExperimentInstructions,
     completeCandidateReviewInstructions,
     ...(instructions === defaultAcceptanceInstructions ? [] : [instructions]),
     universalAcceptanceInstructions,

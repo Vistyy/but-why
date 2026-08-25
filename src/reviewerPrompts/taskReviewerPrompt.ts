@@ -1,5 +1,8 @@
 import { reviewerOutputTag } from "../agent/reviewerOutputWire.js";
-import { reviewerExecutionInstructions } from "./reviewerPromptSupport.js";
+import {
+  reviewerExecutionInstructions,
+  reviewerExperimentInstructions,
+} from "./reviewerPromptSupport.js";
 
 export const taskReviewBuiltInInstructions = [
   "TASK REVIEW SCOPE",
@@ -17,8 +20,9 @@ export const taskReviewBuiltInInstructions = [
   "CONSEQUENTIAL TECHNICAL PREMISES",
   "For every premise that the proposal relies on for feasibility, Task boundaries, or readiness, identify the exact behavior that must compose.",
   "Distinguish direct evidence for that complete behavior from evidence about only an API, component, prototype, test double, or local path.",
-  "Report a Finding when the proposal commits production work while a decision-changing feasibility, integration, or performance hypothesis remains unresolved after inspection.",
-  "For that Finding, recommend a bounded spike and state the falsifiable hypothesis and the smallest real-system experiment that could resolve it.",
+  "Before reporting an unresolved consequential premise, perform a permitted bounded experiment when it can answer the question within the disposable Review Base workspace.",
+  "Report a Finding when the proposal commits production work while a decision-changing feasibility, integration, performance, lifecycle, or recovery hypothesis remains unresolved after inspection and any capable permitted experiment.",
+  "For that Finding, state the falsifiable hypothesis, the smallest real-system experiment that could resolve it, and the missing authority or capability that prevented the Review from resolving it.",
   "Return no Finding only when the consequential premise is directly established or cannot affect Task boundaries or readiness.",
   "Do not require an experiment merely because implementation is difficult, and do not redesign the implementation.",
   "",
@@ -59,6 +63,7 @@ export const buildTaskReviewerSystemPrompt = (policy: {
 }): string =>
   [
     reviewerExecutionInstructions,
+    reviewerExperimentInstructions,
     taskReviewCurrentJudgmentInstructions,
     policy.builtInInstructions,
     ...(policy.guidance === null
