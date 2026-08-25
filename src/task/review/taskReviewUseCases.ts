@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { parseTaggedReviewerTextOutput } from "../../agent/reviewerOutputWire.js";
 import {
   type AgentEnvironmentCommand,
   repoAgentEnvironment,
@@ -601,6 +602,7 @@ const runTaskSimplificationAdvice = (input: {
         reviewerRuntime: input.input.underengineerRuntime,
         reviewerExecutor: input.input.reviewerExecutor,
         decodeOutput,
+        parseOutput: parseTaggedReviewerTextOutput,
         systemPrompt: buildTaskSimplificationAdviceSystemPrompt(
           input.policy.policy.builtInInstructions,
         ),

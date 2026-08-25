@@ -40,6 +40,7 @@ export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirem
     output: unknown,
     invocation: number,
   ) => ReturnType<Parameters<ReviewerAgentRuntime<Output>["review"]>[0]["decodeOutput"]>;
+  readonly parseOutput?: (stdout: string) => unknown;
   readonly systemPrompt: string;
   readonly prompt: string;
   readonly continuationPrompt: string;
@@ -110,6 +111,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
           reviewerExecutor: input.reviewerExecutor,
           reviewer: input.reviewer,
           decodeOutput: (output) => input.decodeOutput(output, invocationNumber),
+          ...(input.parseOutput === undefined ? {} : { parseOutput: input.parseOutput }),
           systemPrompt: input.systemPrompt,
           prompt: dispatch.dispatch.resumed
             ? invocationNumber === 1
