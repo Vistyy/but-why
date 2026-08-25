@@ -106,7 +106,7 @@ describe("Shared Repository State initialization coordination", () => {
                   ORDER BY migration_id
                 `,
               );
-              expect(migrations).toEqual([{ migrationId: 1 }]);
+              expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }]);
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
                 (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
@@ -193,7 +193,7 @@ describe("Shared Repository State initialization coordination", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 1,
+              migrationCount: 2,
             });
             writeFileSync(releasePath, "release\n");
             expect((yield* Effect.promise(() => holder.done)).status).toBe(0);

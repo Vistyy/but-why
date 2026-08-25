@@ -12,6 +12,10 @@ import type {
   TaskReviewRecord,
   TaskReviewToolingFailure,
 } from "./taskReview.js";
+import type {
+  TaskSimplificationAdvice,
+  TaskSimplificationAdvicePolicy,
+} from "./taskSimplificationAdvice.js";
 
 export type AdmitTaskReviewInput = {
   readonly taskId: PublicTaskId;
@@ -75,18 +79,21 @@ export type CompleteTaskReviewSuccess =
       readonly outcome: "passed";
       readonly review: PassedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: "todo" };
+      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
     }
   | {
       readonly ok: true;
       readonly outcome: "blocked";
       readonly review: BlockedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: "new" };
+      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
     }
   | {
       readonly ok: true;
       readonly outcome: "tooling_failed";
       readonly review: ToolingFailedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: TaskState };
+      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
     };
 
 export type CompleteTaskReviewResult =
@@ -94,6 +101,26 @@ export type CompleteTaskReviewResult =
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" };
 
 export type TaskReviewPersistence = {
+  readonly getCompletedSimplificationAdvice?: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
+  readonly createSimplificationAdviceAttempt?: (input: {
+    readonly reviewId: number;
+    readonly configuration?: TaskSimplificationAdvicePolicy;
+  }) => Effect.Effect<void, RepositoryStorageError>;
+  readonly recordSimplificationAdviceFailure?: (
+    reviewId: number,
+    failure: TaskReviewToolingFailure,
+  ) => Effect.Effect<void, RepositoryStorageError>;
+  readonly linkSimplificationAdviceInvocation?: (input: {
+    readonly reviewId: number;
+  }) => AgentSessionSqlLink;
+  readonly settleSimplificationAdvice?: (input: {
+    readonly reviewId: number;
+    readonly advice?: TaskSimplificationAdvice;
+    readonly failure?: TaskReviewToolingFailure;
+    readonly complete: boolean;
+  }) => AgentSessionSqlLink;
   readonly reuseJudgment: (
     taskId: PublicTaskId,
     now: string,

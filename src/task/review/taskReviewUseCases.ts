@@ -12,8 +12,12 @@ import {
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
+import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
-import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../../contracts/repositoryStorageError.js";
 import {
   type DisposableWorkspaceIntegrityFailed,
   type DisposableWorktreeInspection,
@@ -29,6 +33,11 @@ import {
   buildTaskReviewerSystemPrompt,
 } from "../../reviewerPrompts/taskReviewerPrompt.js";
 import {
+  buildTaskSimplificationAdvicePrompt,
+  buildTaskSimplificationAdviceSystemPrompt,
+  taskSimplificationAdviceBuiltInInstructions,
+} from "../../reviewerPrompts/taskSimplificationAdvicePrompt.js";
+import {
   runAfterSubmitProgressStarted,
   runWithSubmitProgress,
   type StartedSubmitProgress,
@@ -43,7 +52,10 @@ import type {
   TaskReviewRecord,
   TaskReviewToolingFailure,
 } from "./taskReview.js";
-import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
+import type {
+  TaskReviewPolicyResolutionResult,
+  TaskSimplificationAdvicePolicyResolutionResult,
+} from "./taskReviewConfig.js";
 import { settleTaskReviewEvidence } from "./taskReviewEvidenceSettlement.js";
 import { decodeTaskReviewerOutput, type TaskReviewerOutput } from "./taskReviewerOutput.js";
 import type {
@@ -52,9 +64,20 @@ import type {
   TaskReviewPersistence,
 } from "./taskReviewPersistence.js";
 import { taskReviewWorkspaceId } from "./taskReviewWorkspace.js";
+import type {
+  TaskSimplificationAdvice,
+  TaskSimplificationAdviceAttempt,
+} from "./taskSimplificationAdvice.js";
+import {
+  decodeTaskSimplificationAdviceOutput,
+  type TaskSimplificationAdviceOutput,
+} from "./taskSimplificationAdviceOutput.js";
 
 export type TaskReviewSubmitResult =
-  | CompleteTaskReviewSuccess
+  | (CompleteTaskReviewSuccess & {
+      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
+      readonly simplificationAdviceAttempt?: TaskSimplificationAdviceAttempt | null;
+    })
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
   | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
@@ -91,6 +114,9 @@ export type TaskReviewIdentityInspection =
   | { readonly verified: false; readonly message: string };
 
 export type TaskReviewInspectionUseCases = {
+  readonly getCompletedSimplificationAdvice?: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
   readonly getById: (
     reviewId: number,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
@@ -152,11 +178,16 @@ export const openTaskReviewUseCases = (input: {
     repoConfig: RepoConfig,
     baseCommit: string,
   ) => TaskReviewPolicyResolutionResult;
+  readonly resolveSimplificationAdvicePolicy?: (
+    repoConfig: RepoConfig,
+    baseCommit: string,
+  ) => TaskSimplificationAdvicePolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
   readonly admission?: TaskReviewAdmissionPersistence;
   readonly agentSessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
+  readonly underengineerRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
     repositoryRoot: string,
@@ -185,6 +216,10 @@ export const openTaskReviewUseCases = (input: {
 }): TaskReviewUseCases => ({
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
+  getCompletedSimplificationAdvice: (taskId) =>
+    input.persistence.getCompletedSimplificationAdvice
+      ? input.persistence.getCompletedSimplificationAdvice(taskId)
+      : Effect.succeed(undefined),
   getById: input.persistence.getById,
   getLatestForTask: input.persistence.getLatestForTask,
   listForTask: input.persistence.listForTask,
@@ -232,6 +267,33 @@ const submitTaskReview = (
     });
     if (!admitted.ok) return admitted;
     const reviewId = admitted.review.id;
+    const completedAdvice = input.persistence.getCompletedSimplificationAdvice
+      ? yield* input.persistence.getCompletedSimplificationAdvice(taskId)
+      : undefined;
+    const advicePolicy =
+      completedAdvice === undefined && input.underengineerRuntime !== undefined
+        ? input.resolveSimplificationAdvicePolicy === undefined
+          ? {
+              ok: true as const,
+              policy: {
+                profile: resolvedPolicy.policy.profile,
+                builtInInstructions: taskSimplificationAdviceBuiltInInstructions,
+              },
+            }
+          : input.resolveSimplificationAdvicePolicy(repoConfig, base.base.commit)
+        : undefined;
+    if (completedAdvice === undefined && input.underengineerRuntime !== undefined) {
+      if (input.persistence.createSimplificationAdviceAttempt === undefined) {
+        return yield* new RepositoryPersistedDataInvalid({
+          operationName: "record Task Simplification Advice attempt",
+          cause: new Error("Task Simplification Advice persistence is unavailable."),
+        });
+      }
+      yield* input.persistence.createSimplificationAdviceAttempt({
+        reviewId,
+        ...(advicePolicy?.ok === true ? { configuration: advicePolicy.policy } : {}),
+      });
+    }
 
     let taskReviewProgress: StartedSubmitProgress | undefined;
     const result = yield* runAfterSubmitProgressStarted({
@@ -293,6 +355,22 @@ const submitTaskReview = (
                         ? "Repository Preparation timed out."
                         : `Repository Preparation exited with code ${prepared.right.exitCode}.`,
                     },
+                  } as const;
+                }
+              }
+              if (completedAdvice === undefined && input.underengineerRuntime !== undefined) {
+                const adviceResult = yield* runTaskSimplificationAdvice({
+                  input,
+                  reviewId,
+                  policy: advicePolicy,
+                  admitted,
+                  base: base.base,
+                  active,
+                });
+                if (!adviceResult.ok) {
+                  return {
+                    ok: false,
+                    failure: adviceResult.failure,
                   } as const;
                 }
               }
@@ -418,6 +496,12 @@ const submitTaskReview = (
                   } as const);
             }),
         });
+        if (!workspace.ok && input.persistence.recordSimplificationAdviceFailure !== undefined) {
+          yield* input.persistence.recordSimplificationAdviceFailure(reviewId, {
+            operation: workspace.toolingError.operationName,
+            message: workspace.toolingError.errorMessage,
+          });
+        }
         const execution: WorkspaceExecution =
           workspace.ok && workspace.workspaceResult !== undefined
             ? workspace.workspaceResult
@@ -450,11 +534,184 @@ const submitTaskReview = (
           if (active === undefined) return { ok: false, code: "task_review_not_found" } as const;
           return { ok: false, code: "task_review_recovery_required", review: active } as const;
         }
-        return completed;
+        const advice = input.persistence.getCompletedSimplificationAdvice
+          ? yield* input.persistence.getCompletedSimplificationAdvice(taskId)
+          : undefined;
+        return {
+          ...completed,
+          ...(advice !== undefined ? { simplificationAdvice: advice } : {}),
+          ...(advice === undefined
+            ? { simplificationAdviceAttempt: completed.review.simplificationAdviceAttempt ?? null }
+            : {}),
+        };
       }),
       outcome: (result) => (result.ok && result.outcome === "passed" ? "passed" : "failed"),
     });
     return result;
+  });
+
+const runTaskSimplificationAdvice = (input: {
+  readonly input: Parameters<typeof openTaskReviewUseCases>[0];
+  readonly reviewId: number;
+  readonly policy: TaskSimplificationAdvicePolicyResolutionResult | undefined;
+  readonly admitted: {
+    readonly proposal: TaskReviewRecord["proposal"];
+    readonly dependencyEvidence: TaskReviewRecord["dependencyEvidence"];
+  };
+  readonly base: TaskReviewBase;
+  readonly active: {
+    readonly worktreePath: string;
+    readonly commandExecutor: WorkspaceCommandExecutor;
+  };
+}): Effect.Effect<
+  { readonly ok: true } | { readonly ok: false; readonly failure: TaskReviewToolingFailure },
+  RepositoryStorageError
+> =>
+  Effect.gen(function* () {
+    const persistence = input.input.persistence;
+    if (
+      persistence.recordSimplificationAdviceFailure === undefined ||
+      persistence.linkSimplificationAdviceInvocation === undefined ||
+      persistence.settleSimplificationAdvice === undefined ||
+      input.input.underengineerRuntime === undefined
+    ) {
+      return {
+        ok: false,
+        failure: {
+          operation: "run_underengineer",
+          message: "Task Simplification Advice persistence or execution is unavailable.",
+        },
+      } as const;
+    }
+    if (input.policy === undefined || !input.policy.ok) {
+      const failure = {
+        operation: "resolve_underengineer_configuration",
+        message:
+          input.policy === undefined
+            ? "Underengineer configuration was not resolved."
+            : input.policy.message,
+      } as const;
+      yield* persistence.recordSimplificationAdviceFailure(input.reviewId, failure);
+      return { ok: true } as const;
+    }
+    const profile = input.policy.policy.profile;
+    const decodeOutput = (output: unknown, attempts: number) =>
+      decodeTaskSimplificationAdviceOutput({ attempts, output }).pipe(
+        Effect.mapError(
+          (error) =>
+            new ReviewerExecutionFailed({
+              kind: "output_contract",
+              operationName: error.operationName,
+              message: error.message,
+            }),
+        ),
+      );
+    const settleSimplificationAdvice = persistence.settleSimplificationAdvice;
+    if (settleSimplificationAdvice === undefined) {
+      return {
+        ok: false,
+        failure: {
+          operation: "run_underengineer",
+          message: "Task Simplification Advice settlement is unavailable.",
+        },
+      } as const;
+    }
+    const execution = yield* executeAgentSession({
+      configuration: agentConfiguration(profile),
+      agentPersistence: input.input.agentPersistence,
+      linkInvocation: persistence.linkSimplificationAdviceInvocation({
+        reviewId: input.reviewId,
+      }),
+      reviewerRuntime: input.input.underengineerRuntime,
+      reviewerExecutor: input.input.reviewerExecutor,
+      decodeOutput,
+      systemPrompt: buildTaskSimplificationAdviceSystemPrompt(
+        input.policy.policy.builtInInstructions,
+      ),
+      prompt: buildTaskSimplificationAdvicePrompt({
+        proposal: input.admitted.proposal,
+        dependencyEvidence: input.admitted.dependencyEvidence,
+        reviewBase: input.base,
+      }),
+      continuationPrompt: "",
+      maxOutputContractAttempts: 1,
+      commandCwd: input.active.worktreePath,
+      resourceRoot: input.active.worktreePath,
+      profile,
+      reviewer: "underengineer",
+      sessionStorageRoot: input.input.agentSessionStorageRoot,
+      afterInvocation: ({ result }) =>
+        Effect.gen(function* () {
+          const restored = yield* Effect.either(
+            Effect.uninterruptible(
+              input.input.restoreWorkspace({
+                commandExecutor: input.active.commandExecutor,
+                commandCwd: input.active.worktreePath,
+                expectedCommitSha: input.base.commit,
+                workspaceIdentity: {
+                  repositoryRoot: input.input.repositoryRoot,
+                  repositoryCommonDirectory: input.input.repositoryCommonDirectory,
+                  workspaceId: taskReviewWorkspaceId(input.reviewId),
+                },
+              }),
+            ),
+          );
+          return restored._tag === "Right"
+            ? result
+            : ({
+                ok: false as const,
+                failure: {
+                  kind: "process_execution" as const,
+                  operationName: "verify_task_review_workspace",
+                  message: restored.left.message,
+                  sessionUsability: "unknown" as const,
+                  ...(result.sessionReference === undefined
+                    ? {}
+                    : { sessionReference: result.sessionReference }),
+                  ...(result.sessionFilePath === undefined
+                    ? {}
+                    : { sessionFilePath: result.sessionFilePath }),
+                },
+                sessionUsability: "unknown" as const,
+                attempts: result.attempts,
+                stdout: result.stdout,
+                ...(result.sessionReference === undefined
+                  ? {}
+                  : { sessionReference: result.sessionReference }),
+                ...(result.sessionFilePath === undefined
+                  ? {}
+                  : { sessionFilePath: result.sessionFilePath }),
+              } satisfies ReviewerAgentResult<TaskSimplificationAdviceOutput>);
+        }),
+      settleDomain: ({ result }) =>
+        Effect.succeed(
+          settleSimplificationAdvice({
+            reviewId: input.reviewId,
+            ...(result.ok
+              ? { advice: result.report, complete: true }
+              : {
+                  complete: false,
+                  failure: {
+                    operation: result.failure.operationName,
+                    message: result.failure.message,
+                  },
+                }),
+          }),
+        ),
+    });
+    if (
+      !execution.result.ok &&
+      execution.result.failure.operationName === "verify_task_review_workspace"
+    ) {
+      return {
+        ok: false,
+        failure: {
+          operation: "verify_task_review_workspace",
+          message: execution.result.failure.message,
+        },
+      } as const;
+    }
+    return { ok: true } as const;
   });
 
 const taskReviewIntegrityFailure = (

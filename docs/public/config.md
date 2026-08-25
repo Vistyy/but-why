@@ -72,7 +72,7 @@ But Why freezes it in Shared Repository State and derives Task IDs as `<id-prefi
 `agentEnvironment.command` is an optional non-empty argument list for headless reviewers.
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
-`review` selects Task Review policy, Acceptance Review policy, and Specialists.
+`review` selects Task Review policy, Underengineer policy, Acceptance Review policy, and Specialists.
 `reviewers` supplies Specialist instruction files.
 `agentProfiles` supplies Repo Agent Profiles.
 
@@ -129,10 +129,15 @@ Any Check Finding stops reviewer phases for that Candidate.
 ## Task Review
 
 Repo Config and Global Config may select `review.task.agentProfile` and `review.task.instructionsFile`.
+
+Repo Config and Global Config may select `review.underengineer.agentProfile` for the one-time Task Simplification Advice attempt.
+The Underengineer profile uses the same Agent Profile fallback as Task Review when neither configuration selects one.
+Underengineer has no configurable guidance file.
 The Agent Profile selection resolves from Repo Config, then Global Config, then `defaultAgentProfile`.
 A Repo selection may reference a Repo or Global Agent Profile through its explicit scope.
 
 Task Review uses at most one optional guidance file.
+The Underengineer receives only its mandatory built-in prompt and the exact Task Review Proposal, captured Task Dependency evidence, and Review Base.
 The Repo Config file takes precedence over the Global Config file.
 Repo paths and Repo Agent Profile resources resolve from the exact captured Review Base workspace.
 Global paths and Global Agent Profile resources resolve from the Global Config directory.

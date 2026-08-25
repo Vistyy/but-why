@@ -8,6 +8,7 @@ import { isPackageAgentResource } from "../../contracts/agentConfig.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { TaskReviewPolicySnapshot } from "./taskReview.js";
+import type { TaskSimplificationAdvicePolicy } from "./taskSimplificationAdvice.js";
 
 export type ResolvedTaskReviewPolicy = {
   readonly profile: ResolvedReviewerPiAgentProfile;
@@ -17,6 +18,44 @@ export type ResolvedTaskReviewPolicy = {
 export type TaskReviewPolicyResolutionResult =
   | { readonly ok: true; readonly policy: ResolvedTaskReviewPolicy }
   | { readonly ok: false; readonly message: string };
+
+export type TaskSimplificationAdvicePolicyResolutionResult =
+  | { readonly ok: true; readonly policy: TaskSimplificationAdvicePolicy }
+  | { readonly ok: false; readonly message: string };
+
+export const resolveTaskSimplificationAdvicePolicy = (input: {
+  readonly repoConfig: RepoConfig;
+  readonly globalConfig: GlobalConfig;
+  readonly globalConfigDirectory: string;
+  readonly builtInInstructions: string;
+}): TaskSimplificationAdvicePolicyResolutionResult => {
+  const profileResolution = resolveAgentProfile({
+    ...(input.repoConfig.review?.underengineer?.agentProfile === undefined
+      ? {}
+      : { repoSelection: input.repoConfig.review.underengineer.agentProfile }),
+    ...(input.globalConfig.review?.underengineer?.agentProfile === undefined
+      ? {}
+      : { globalSelection: input.globalConfig.review.underengineer.agentProfile }),
+    ...(input.globalConfig.defaultAgentProfile === undefined
+      ? {}
+      : { defaultSelection: input.globalConfig.defaultAgentProfile }),
+    ...(input.repoConfig.agentProfiles === undefined
+      ? {}
+      : { repoProfiles: input.repoConfig.agentProfiles }),
+    ...(input.globalConfig.agentProfiles === undefined
+      ? {}
+      : { globalProfiles: input.globalConfig.agentProfiles }),
+    globalConfigDirectory: input.globalConfigDirectory,
+  });
+  if (!profileResolution.ok) {
+    return { ok: false, message: profileResolutionMessage(profileResolution.error) };
+  }
+  const profile = profileResolution.resolved;
+  const resources = validateTaskReviewResources(profile);
+  return resources.ok
+    ? { ok: true, policy: { profile, builtInInstructions: input.builtInInstructions } }
+    : resources;
+};
 
 export const resolveTaskReviewPolicy = (input: {
   readonly repoConfig: RepoConfig;

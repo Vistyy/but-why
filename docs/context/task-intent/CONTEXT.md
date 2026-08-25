@@ -64,6 +64,18 @@ Context and direct Task Dependency identity are the only reuse identity fields.
 Repository state, Review Base, policy, configuration, dependency content, and dependency lifecycle do not affect reuse.
 _Avoid_: Task Submission, Acceptance Review, Validation Run
 
+**Task Simplification Advice**:
+Non-authoritative advice produced by one Underengineer attempt before the Task Reviewer runs.
+Completed Advice identifies the practical core outcome and contains up to two optional subtractive simplification options, or explains why no substantial safe simplification is supported.
+Advice cannot add requirements, create Findings, change the Task Review outcome, approve a Task, or prevent a valid New-to-Todo transition.
+The first completed Advice belongs to the Task and remains unchanged across later Task changes, Task Revision, and Task Submission.
+_Avoid_: Finding, Task Review judgment, Task requirement
+
+**Underengineer**:
+The separate Agent Session and Agent Invocation that produce one Task Simplification Advice attempt in the Task Review disposable workspace.
+The Underengineer receives the exact Task Review Proposal, captured Task Dependency evidence, and Review Base with its mandatory built-in prompt and resolved Agent Profile.
+_Avoid_: Task Reviewer, Task Agent Session
+
 **Task Agent Session**:
 An Agent Session owned by one Task under one compatible resolved Task Review policy.
 It can continue across changed proposals so the reviewer can reuse repository orientation, but it does not reuse an earlier judgment.

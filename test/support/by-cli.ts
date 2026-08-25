@@ -11,6 +11,7 @@ import { type CliResult, runCli } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
+import type { TaskSimplificationAdviceOutput } from "../../src/task/review/taskSimplificationAdviceOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import type { CancellationUseCases } from "../../src/taskChange/cancelTaskChange.js";
@@ -130,6 +131,7 @@ type InProcessCliOptions = {
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
+  readonly underengineerAgentRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly writeStderr?: (message: string) => void;
 };
@@ -166,6 +168,9 @@ const runByInProcessEffectRaw = (
     ...(options.taskReviewerAgentRuntime === undefined
       ? {}
       : { taskReviewerAgentRuntime: options.taskReviewerAgentRuntime }),
+    ...(options.underengineerAgentRuntime === undefined
+      ? {}
+      : { underengineerAgentRuntime: options.underengineerAgentRuntime }),
     ...(options.interactiveSessionHost === undefined
       ? {}
       : { interactiveSessionHost: options.interactiveSessionHost }),

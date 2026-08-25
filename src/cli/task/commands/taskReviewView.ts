@@ -60,6 +60,30 @@ export const taskReviewView = (
     id: review.agentSessionId ?? null,
     invocations: (review.agentInvocations ?? []).map(agentInvocationView),
   },
+  ...(review.simplificationAdviceAttempt === undefined
+    ? {}
+    : {
+        simplificationAdviceAttempt:
+          review.simplificationAdviceAttempt === null
+            ? null
+            : {
+                state: review.simplificationAdviceAttempt.state,
+                advice: review.simplificationAdviceAttempt.advice,
+                unavailable: review.simplificationAdviceAttempt.unavailable,
+                configuration:
+                  review.simplificationAdviceAttempt.configuration === null
+                    ? null
+                    : simplificationAdvicePolicyView(
+                        review.simplificationAdviceAttempt.configuration,
+                      ),
+                agentSession: {
+                  id: review.simplificationAdviceAttempt.agentSessionId ?? null,
+                  invocations: (review.simplificationAdviceAttempt.agentInvocations ?? []).map(
+                    agentInvocationView,
+                  ),
+                },
+              },
+      }),
 });
 
 const taskReviewRecoveryActions = (
@@ -75,6 +99,14 @@ const taskReviewRecoveryActions = (
     `Run \`by task review abandon ${review.id} --reason "..."\` after the process stops.`,
   ];
 };
+
+const simplificationAdvicePolicyView = (policy: {
+  readonly profile: TaskReviewPolicySnapshot["profile"];
+  readonly builtInInstructions: string;
+}) => ({
+  profile: taskReviewProfileView(policy.profile),
+  builtInInstructions: policy.builtInInstructions,
+});
 
 const taskReviewPolicyView = (policy: TaskReviewPolicySnapshot) => ({
   profile: taskReviewProfileView(policy.profile),

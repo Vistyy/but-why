@@ -28,6 +28,13 @@ import type {
   TaskReviewPersistence,
 } from "../../review/taskReviewPersistence.js";
 import { expectedTaskReviewWorkspacePath } from "../../review/taskReviewWorkspace.js";
+import {
+  decodeTaskSimplificationAdvice,
+  decodeTaskSimplificationAdvicePolicy,
+  type TaskSimplificationAdvice,
+  type TaskSimplificationAdviceAttempt,
+  type TaskSimplificationAdvicePolicy,
+} from "../../review/taskSimplificationAdvice.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../taskId.js";
 
 const reviewColumns = `
@@ -84,6 +91,26 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
+    getCompletedSimplificationAdvice: (taskId) =>
+      repository.transaction("read Task Simplification Advice", (sql) =>
+        readCompletedSimplificationAdvice(sql, taskId, repository.idPrefix),
+      ),
+    createSimplificationAdviceAttempt: (input) =>
+      repository.transactionImmediate("record Task Simplification Advice attempt", (sql) =>
+        createSimplificationAdviceAttempt(sql, input),
+      ),
+    recordSimplificationAdviceFailure: (reviewId, failure) =>
+      repository.transactionImmediate("record unavailable Task Simplification Advice", (sql) =>
+        recordSimplificationAdviceFailure(sql, reviewId, failure),
+      ),
+    linkSimplificationAdviceInvocation:
+      (input): AgentSessionSqlLink =>
+      (sql, invocationId) =>
+        linkSimplificationAdviceInvocation(sql, input.reviewId, invocationId),
+    settleSimplificationAdvice:
+      (input): AgentSessionSqlLink =>
+      (sql, invocationId) =>
+        settleSimplificationAdvice(sql, { ...input, invocationId }),
     reuseJudgment: (taskId, now) =>
       repository.transactionImmediate("reuse Task Review judgment", (sql) =>
         reuseTaskReviewJudgment(sql, taskId, now, repository.idPrefix, repository.commonDirectory),
@@ -592,6 +619,7 @@ const decodeReview = (
         reviewer_configuration AS configuration FROM tasks WHERE id = ${row.taskId}
     `;
     const invocations = yield* readAgentInvocations(sql, row.id);
+    const simplificationAdviceAttempt = yield* readSimplificationAdviceAttempt(sql, row.id);
     return yield* Effect.try({
       try: (): TaskReviewRecord => {
         const cleanupPending = decodeBoolean(row.cleanupPending, "Task Review cleanup obligation");
@@ -645,6 +673,7 @@ const decodeReview = (
             ? {}
             : { agentInvocations: invocations.map(decodeAgentInvocation) }),
           ...(policyMatchesInvocationEvidence ? { reviewerConfiguration: policy } : {}),
+          ...(simplificationAdviceAttempt === null ? {} : { simplificationAdviceAttempt }),
         };
       },
       catch: (cause) =>
@@ -704,6 +733,188 @@ const requireTaskReviewInvocationEvidence = (
       );
     }
   }).pipe(Effect.asVoid);
+
+const readCompletedSimplificationAdvice = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  idPrefix: string,
+) =>
+  Effect.flatMap(
+    sql<{ readonly advice: string }>`
+      SELECT advice FROM task_simplification_advice
+      WHERE task_id = ${internalTaskId(taskId, idPrefix)}
+    `,
+    (rows) => {
+      const row = rows[0];
+      return row === undefined
+        ? Effect.succeed(undefined)
+        : Effect.try({
+            try: () => decodeTaskSimplificationAdvice(JSON.parse(row.advice)),
+            catch: (cause) =>
+              new RepositoryPersistedDataInvalid({
+                operationName: "read Task Simplification Advice",
+                cause,
+              }),
+          });
+    },
+  );
+
+const createSimplificationAdviceAttempt = (
+  sql: SqlClient.SqlClient,
+  input: { readonly reviewId: number; readonly configuration?: TaskSimplificationAdvicePolicy },
+) =>
+  sql`
+    INSERT INTO task_review_simplification_advice (
+      task_review_id, outcome, advice, unavailable, configuration, agent_session_id
+    ) VALUES (
+      ${input.reviewId}, 'unavailable', NULL, ${JSON.stringify({
+        operation: "underengineer_pending",
+        message: "Task Simplification Advice attempt is pending.",
+      })}, ${input.configuration === undefined ? null : JSON.stringify(input.configuration)}, NULL
+    )
+  `.pipe(Effect.asVoid);
+
+const recordSimplificationAdviceFailure = (
+  sql: SqlClient.SqlClient,
+  reviewId: number,
+  failure: TaskReviewToolingFailure,
+) =>
+  sql`
+    UPDATE task_review_simplification_advice
+    SET outcome = 'unavailable', advice = NULL, unavailable = ${JSON.stringify(failure)}
+    WHERE task_review_id = ${reviewId}
+  `.pipe(Effect.asVoid);
+
+const linkSimplificationAdviceInvocation = (
+  sql: SqlClient.SqlClient,
+  reviewId: number,
+  invocationId: number,
+) =>
+  Effect.gen(function* () {
+    const sessions = yield* sql<{ readonly agentSessionId: number }>`
+      SELECT continuation.agent_session_id AS agentSessionId
+      FROM agent_invocations AS invocation
+      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+      WHERE invocation.id = ${invocationId}
+    `;
+    const session = sessions[0];
+    if (session === undefined) {
+      return yield* invalid("link Task Simplification Advice Invocation", "Invocation is missing");
+    }
+    yield* sql`
+      UPDATE task_review_simplification_advice
+      SET agent_session_id = ${session.agentSessionId}
+      WHERE task_review_id = ${reviewId} AND agent_session_id IS NULL
+    `;
+    yield* sql`
+      INSERT INTO task_review_simplification_advice_invocations (task_review_id, agent_invocation_id)
+      VALUES (${reviewId}, ${invocationId})
+    `;
+  }).pipe(Effect.asVoid);
+
+const settleSimplificationAdvice = (
+  sql: SqlClient.SqlClient,
+  input: {
+    readonly reviewId: number;
+    readonly invocationId: number;
+    readonly advice?: TaskSimplificationAdvice;
+    readonly failure?: TaskReviewToolingFailure;
+    readonly complete: boolean;
+  },
+) =>
+  Effect.gen(function* () {
+    const row = yield* sql<{ readonly taskId: number }>`
+      SELECT task_id AS taskId FROM task_reviews WHERE id = ${input.reviewId}
+    `;
+    if (row[0] === undefined)
+      return yield* invalid("settle Task Simplification Advice", "Review missing");
+    if (input.complete && input.advice !== undefined) {
+      yield* sql`
+        INSERT INTO task_simplification_advice (task_id, review_id, advice)
+        VALUES (${row[0].taskId}, ${input.reviewId}, ${JSON.stringify(input.advice)})
+        ON CONFLICT(task_id) DO NOTHING
+      `;
+      yield* sql`
+        UPDATE task_review_simplification_advice
+        SET outcome = 'completed', advice = ${JSON.stringify(input.advice)}, unavailable = NULL
+        WHERE task_review_id = ${input.reviewId}
+      `;
+    } else {
+      const failure = input.failure ?? {
+        operation: "run_underengineer",
+        message: "Underengineer did not produce Task Simplification Advice.",
+      };
+      yield* sql`
+        UPDATE task_review_simplification_advice
+        SET outcome = 'unavailable', advice = NULL, unavailable = ${JSON.stringify(failure)}
+        WHERE task_review_id = ${input.reviewId}
+      `;
+    }
+  }).pipe(Effect.asVoid);
+
+type AdviceInvocationRow = AgentInvocationRow;
+
+const readSimplificationAdviceAttempt = (
+  sql: SqlClient.SqlClient,
+  reviewId: number,
+): Effect.Effect<
+  TaskSimplificationAdviceAttempt | null,
+  SqlError | RepositoryPersistedDataInvalid
+> =>
+  Effect.gen(function* () {
+    const attempts = yield* sql<{
+      readonly outcome: string;
+      readonly advice: string | null;
+      readonly unavailable: string | null;
+      readonly configuration: string | null;
+      readonly agentSessionId: number | null;
+    }>`
+      SELECT outcome, advice, unavailable, configuration, agent_session_id AS agentSessionId
+      FROM task_review_simplification_advice WHERE task_review_id = ${reviewId}
+    `;
+    const attempt = attempts[0];
+    if (attempt === undefined) return null;
+    const invocations = yield* sql<AdviceInvocationRow>`
+      SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
+        invocation.continuation_id AS continuationId, invocation.created_at AS createdAt,
+        invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
+        invocation.input_tokens AS inputTokens, invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.cache_write_tokens AS cacheWriteTokens, invocation.output_tokens AS outputTokens,
+        invocation.total_tokens AS totalTokens, continuation.harness, continuation.provider,
+        continuation.model, continuation.thinking, continuation.transcript_path AS transcriptPath,
+        continuation.unusable_reason AS unusableReason
+      FROM task_review_simplification_advice_invocations AS link
+      JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+      WHERE link.task_review_id = ${reviewId} ORDER BY invocation.id
+    `;
+    return yield* Effect.try({
+      try: () => ({
+        state: attempt.outcome as "completed" | "unavailable",
+        advice:
+          attempt.advice === null
+            ? null
+            : decodeTaskSimplificationAdvice(JSON.parse(attempt.advice)),
+        unavailable:
+          attempt.unavailable === null
+            ? null
+            : decodeTaskReviewToolingFailure(JSON.parse(attempt.unavailable)),
+        configuration:
+          attempt.configuration === null
+            ? null
+            : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration)),
+        ...(attempt.agentSessionId === null ? {} : { agentSessionId: attempt.agentSessionId }),
+        ...(invocations.length === 0
+          ? {}
+          : { agentInvocations: invocations.map(decodeAgentInvocation) }),
+      }),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "read Task Simplification Advice attempt",
+          cause,
+        }),
+    });
+  });
 
 const readAgentInvocations = (
   sql: SqlClient.SqlClient,

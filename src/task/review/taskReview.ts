@@ -3,6 +3,7 @@ import { resolvedReviewerPiAgentProfileSchema } from "../../agent/agentProfiles.
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
 import { nonBlankStringSchema } from "../../contracts/agentConfig.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
+import type { TaskSimplificationAdviceAttempt } from "./taskSimplificationAdvice.js";
 
 export type TaskReviewOutcome = "passed" | "blocked" | "tooling_failed";
 
@@ -74,4 +75,5 @@ export type TaskReviewRecord = {
   readonly agentSessionId?: number;
   readonly agentInvocations?: readonly AgentInvocationRecord[];
   readonly reviewerConfiguration?: TaskReviewPolicySnapshot;
+  readonly simplificationAdviceAttempt?: TaskSimplificationAdviceAttempt | null;
 };

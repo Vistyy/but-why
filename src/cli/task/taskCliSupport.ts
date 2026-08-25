@@ -25,6 +25,7 @@ import type {
   TaskReviewRecoveryUseCases,
   TaskReviewSubmissionUseCases,
 } from "../../task/review/taskReviewUseCases.js";
+import type { TaskSimplificationAdviceOutput } from "../../task/review/taskSimplificationAdviceOutput.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
@@ -47,6 +48,7 @@ export type TaskCommandEnvironment = {
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
   readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
+  readonly underengineerAgentRuntime?: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly writeStderr?: (message: string) => void;
 };
@@ -162,6 +164,9 @@ export const withTaskReviewSubmission = (
             ...(environment.taskReviewerAgentRuntime === undefined
               ? {}
               : { reviewerRuntime: environment.taskReviewerAgentRuntime }),
+            ...(environment.underengineerAgentRuntime === undefined
+              ? {}
+              : { underengineerRuntime: environment.underengineerAgentRuntime }),
             ...(environment.writeStderr === undefined
               ? {}
               : { progress: stderrSubmitProgress(environment.writeStderr) }),
