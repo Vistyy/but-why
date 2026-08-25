@@ -64,10 +64,9 @@ export const taskReviewView = (
   ...(review.simplificationAdviceAttempt === undefined
     ? {}
     : {
-        simplificationAdviceAttempt:
-          review.simplificationAdviceAttempt === null
-            ? null
-            : taskSimplificationAdviceAttemptView(review.simplificationAdviceAttempt),
+        simplificationAdviceAttempt: taskSimplificationAdviceAttemptView(
+          review.simplificationAdviceAttempt,
+        ),
       }),
 });
 

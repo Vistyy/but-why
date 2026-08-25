@@ -264,7 +264,6 @@ it.effect("observes final Task Review restoration and restoration failure", () =
         let reviewerCalls = 0;
         const persistence: TaskReviewPersistence = {
           getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
-          createSimplificationAdviceAttempt: () => Effect.void,
           recordSimplificationAdviceFailure: () => Effect.void,
           linkSimplificationAdviceInvocation: defaultAgentLink,
           settleSimplificationAdvice: () => () => Effect.void,
@@ -471,7 +470,6 @@ it.effect("returns a reused judgment before every repository and reviewer collab
     const unused = () => Effect.die("Unexpected persistence operation");
     const persistence: TaskReviewPersistence = {
       getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
-      createSimplificationAdviceAttempt: () => Effect.void,
       recordSimplificationAdviceFailure: () => Effect.void,
       linkSimplificationAdviceInvocation: defaultAgentLink,
       settleSimplificationAdvice: () => () => Effect.void,
@@ -609,7 +607,6 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
       const unused = () => Effect.die("Unexpected persistence operation");
       const persistence: TaskReviewPersistence = {
         getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
-        createSimplificationAdviceAttempt: () => Effect.void,
         recordSimplificationAdviceFailure: () => Effect.void,
         linkSimplificationAdviceInvocation: defaultAgentLink,
         settleSimplificationAdvice: () => () => Effect.void,

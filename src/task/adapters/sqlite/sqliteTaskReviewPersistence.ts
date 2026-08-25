@@ -33,7 +33,6 @@ import {
   decodeTaskSimplificationAdvicePolicy,
   type TaskSimplificationAdvice,
   type TaskSimplificationAdviceAttempt,
-  type TaskSimplificationAdvicePolicy,
 } from "../../review/taskSimplificationAdvice.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../taskId.js";
 
@@ -95,10 +94,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transaction("read Task Simplification Advice", (sql) =>
         readCompletedSimplificationAdvice(sql, taskId, repository.idPrefix),
       ),
-    createSimplificationAdviceAttempt: (input) =>
-      repository.transactionImmediate("record Task Simplification Advice attempt", (sql) =>
-        createSimplificationAdviceAttempt(sql, input),
-      ),
     recordSimplificationAdviceFailure: (reviewId, failure) =>
       repository.transactionImmediate("record unavailable Task Simplification Advice", (sql) =>
         recordSimplificationAdviceFailure(sql, reviewId, failure),
@@ -158,6 +153,17 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             now,
             `Task Review abandonment confirmed that the reviewer process stopped. ${reason}`,
           );
+          yield* sql`
+            UPDATE task_review_simplification_advice
+            SET outcome = 'unavailable', advice = NULL,
+              unavailable = ${JSON.stringify({
+                operation: "task_review_abandoned",
+                message: `Task Review abandonment confirmed that the Underengineer process stopped. ${reason}`,
+              })}
+            WHERE task_review_id = ${reviewId}
+              AND outcome = 'unavailable'
+              AND json_extract(unavailable, '$.operation') = 'underengineer_pending'
+          `;
           return yield* completeReview(
             sql,
             reviewId,
@@ -396,6 +402,23 @@ export const admitTaskReview = (
     `;
     const reviewId = inserted[0]?.id;
     if (reviewId === undefined) return yield* invalid("admit Task Review", "Review ID is missing");
+    if (input.simplificationAdvice !== undefined) {
+      yield* sql`
+        INSERT INTO task_review_simplification_advice (
+          task_review_id, outcome, advice, unavailable, configuration
+        ) VALUES (
+          ${reviewId}, 'unavailable', NULL, ${JSON.stringify({
+            operation: "underengineer_pending",
+            message: "Task Simplification Advice attempt is pending.",
+          })},
+          ${
+            input.simplificationAdvice.configuration === undefined
+              ? null
+              : JSON.stringify(input.simplificationAdvice.configuration)
+          }
+        )
+      `;
+    }
     const stored = yield* getReview(sql, reviewId, idPrefix, repositoryCommonDirectory);
     if (stored === undefined) return yield* invalid("admit Task Review", "Review disappeared");
     return {
@@ -762,21 +785,6 @@ const readCompletedSimplificationAdvice = (
     },
   );
 
-const createSimplificationAdviceAttempt = (
-  sql: SqlClient.SqlClient,
-  input: { readonly reviewId: number; readonly configuration?: TaskSimplificationAdvicePolicy },
-) =>
-  sql`
-    INSERT INTO task_review_simplification_advice (
-      task_review_id, outcome, advice, unavailable, configuration
-    ) VALUES (
-      ${input.reviewId}, 'unavailable', NULL, ${JSON.stringify({
-        operation: "underengineer_pending",
-        message: "Task Simplification Advice attempt is pending.",
-      })}, ${input.configuration === undefined ? null : JSON.stringify(input.configuration)}
-    )
-  `.pipe(Effect.asVoid);
-
 const recordSimplificationAdviceFailure = (
   sql: SqlClient.SqlClient,
   reviewId: number,
@@ -876,25 +884,47 @@ const readSimplificationAdviceAttempt = (
             WHERE invocation.id = ${attempt.agentInvocationId}
           `;
     return yield* Effect.try({
-      try: () => ({
-        state: attempt.outcome as "completed" | "unavailable",
-        advice:
-          attempt.advice === null
-            ? null
-            : decodeTaskSimplificationAdvice(JSON.parse(attempt.advice) as unknown),
-        unavailable:
-          attempt.unavailable === null
-            ? null
-            : decodeTaskReviewToolingFailure(JSON.parse(attempt.unavailable) as unknown),
-        configuration:
+      try: () => {
+        const configuration =
           attempt.configuration === null
             ? null
-            : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration) as unknown),
-        ...(invocations[0] === undefined ? {} : { agentSessionId: invocations[0].agentSessionId }),
-        ...(invocations.length === 0
-          ? {}
-          : { agentInvocations: invocations.map(decodeAgentInvocation) }),
-      }),
+            : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration) as unknown);
+        const invocationEvidence = {
+          ...(invocations[0] === undefined
+            ? {}
+            : { agentSessionId: invocations[0].agentSessionId }),
+          ...(invocations.length === 0
+            ? {}
+            : { agentInvocations: invocations.map(decodeAgentInvocation) }),
+        };
+        if (attempt.outcome === "completed") {
+          if (attempt.advice === null || attempt.unavailable !== null) {
+            throw new Error("Completed Task Simplification Advice has inconsistent result fields.");
+          }
+          return {
+            state: "completed" as const,
+            advice: decodeTaskSimplificationAdvice(JSON.parse(attempt.advice) as unknown),
+            unavailable: null,
+            configuration,
+            ...invocationEvidence,
+          };
+        }
+        if (attempt.outcome === "unavailable") {
+          if (attempt.advice !== null || attempt.unavailable === null) {
+            throw new Error(
+              "Unavailable Task Simplification Advice has inconsistent result fields.",
+            );
+          }
+          return {
+            state: "unavailable" as const,
+            advice: null,
+            unavailable: decodeTaskReviewToolingFailure(JSON.parse(attempt.unavailable) as unknown),
+            configuration,
+            ...invocationEvidence,
+          };
+        }
+        throw new Error(`Unknown Task Simplification Advice outcome: ${attempt.outcome}`);
+      },
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
           operationName: "read Task Simplification Advice attempt",

@@ -74,8 +74,8 @@ import {
 
 export type TaskReviewSubmitResult =
   | (CompleteTaskReviewSuccess & {
-      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
-      readonly simplificationAdviceAttempt?: TaskSimplificationAdviceAttempt | null;
+      readonly simplificationAdvice?: TaskSimplificationAdvice;
+      readonly simplificationAdviceAttempt?: TaskSimplificationAdviceAttempt;
     })
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
@@ -255,26 +255,27 @@ const submitTaskReview = (
         message: resolvedPolicy.message,
       } as const;
     }
+    const completedAdvice = yield* input.persistence.getCompletedSimplificationAdvice(taskId);
+    const advicePolicy =
+      completedAdvice === undefined
+        ? input.resolveSimplificationAdvicePolicy(repoConfig, base.base.commit)
+        : undefined;
     const admitted = yield* admission.admit({
       taskId,
       policy: resolvedPolicy.policy.snapshot,
       baseRef: base.base.ref,
       baseCommit: base.base.commit,
       now,
+      ...(completedAdvice === undefined
+        ? {
+            simplificationAdvice: {
+              ...(advicePolicy?.ok === true ? { configuration: advicePolicy.policy } : {}),
+            },
+          }
+        : {}),
     });
     if (!admitted.ok) return admitted;
     const reviewId = admitted.review.id;
-    const completedAdvice = yield* input.persistence.getCompletedSimplificationAdvice(taskId);
-    const advicePolicy =
-      completedAdvice === undefined
-        ? input.resolveSimplificationAdvicePolicy(repoConfig, base.base.commit)
-        : undefined;
-    if (completedAdvice === undefined) {
-      yield* input.persistence.createSimplificationAdviceAttempt({
-        reviewId,
-        ...(advicePolicy?.ok === true ? { configuration: advicePolicy.policy } : {}),
-      });
-    }
 
     let taskReviewProgress: StartedSubmitProgress | undefined;
     const result = yield* runAfterSubmitProgressStarted({
@@ -521,8 +522,8 @@ const submitTaskReview = (
         return {
           ...completed,
           ...(advice !== undefined ? { simplificationAdvice: advice } : {}),
-          ...(advice === undefined
-            ? { simplificationAdviceAttempt: completed.review.simplificationAdviceAttempt ?? null }
+          ...(advice === undefined && completed.review.simplificationAdviceAttempt !== undefined
+            ? { simplificationAdviceAttempt: completed.review.simplificationAdviceAttempt }
             : {}),
         };
       }),

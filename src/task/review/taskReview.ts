@@ -75,5 +75,5 @@ export type TaskReviewRecord = {
   readonly agentSessionId?: number;
   readonly agentInvocations?: readonly AgentInvocationRecord[];
   readonly reviewerConfiguration?: TaskReviewPolicySnapshot;
-  readonly simplificationAdviceAttempt?: TaskSimplificationAdviceAttempt | null;
+  readonly simplificationAdviceAttempt?: TaskSimplificationAdviceAttempt;
 };

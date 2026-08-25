@@ -20,6 +20,9 @@ import type {
 export type AdmitTaskReviewInput = {
   readonly taskId: PublicTaskId;
   readonly policy: TaskReviewPolicySnapshot;
+  readonly simplificationAdvice?: {
+    readonly configuration?: TaskSimplificationAdvicePolicy;
+  };
   readonly baseRef: string;
   readonly baseCommit: string;
   readonly now: string;
@@ -79,21 +82,21 @@ export type CompleteTaskReviewSuccess =
       readonly outcome: "passed";
       readonly review: PassedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: "todo" };
-      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
+      readonly simplificationAdvice?: TaskSimplificationAdvice;
     }
   | {
       readonly ok: true;
       readonly outcome: "blocked";
       readonly review: BlockedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: "new" };
-      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
+      readonly simplificationAdvice?: TaskSimplificationAdvice;
     }
   | {
       readonly ok: true;
       readonly outcome: "tooling_failed";
       readonly review: ToolingFailedTaskReviewRecord;
       readonly task: { readonly id: string; readonly state: TaskState };
-      readonly simplificationAdvice?: TaskSimplificationAdvice | null;
+      readonly simplificationAdvice?: TaskSimplificationAdvice;
     };
 
 export type CompleteTaskReviewResult =
@@ -104,10 +107,6 @@ export type TaskReviewPersistence = {
   readonly getCompletedSimplificationAdvice: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
-  readonly createSimplificationAdviceAttempt: (input: {
-    readonly reviewId: number;
-    readonly configuration?: TaskSimplificationAdvicePolicy;
-  }) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordSimplificationAdviceFailure: (
     reviewId: number,
     failure: TaskReviewToolingFailure,
