@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { RuntimeCase } from "./continue-change-sdk-helper.js";
 import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
+import type { RuntimeCase } from "./continue-change-sdk-helper.js";
 
 const changeId = "BY-C1";
 const helperPath = join(repoRoot, "test/agent/continue-change-sdk-helper.ts");
