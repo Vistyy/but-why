@@ -115,6 +115,45 @@ rule:
                     stopBy: neighbor
               stopBy: neighbor
 ---
+# Assertions that cross an unknown value twice hide the unsupported step.
+id: chained-unknown-assertions-are-truthful
+language: TypeScript
+severity: error
+message: Do not chain TypeScript assertions through unknown (value as unknown as Type); establish the value at its boundary, narrow it truthfully, or keep one justified assertion.
+files:
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+  - src/**/*.ts
+  - test/**/*.ts
+rule:
+  pattern: $VALUE as unknown as $TYPE
+---
+# A never assertion hides an inaccurate fixture or contract instead of proving it.
+id: never-assertions-are-truthful
+language: TypeScript
+severity: error
+message: Do not assert a value as never; return a structurally valid value, narrow the interface, or model the impossible state.
+files:
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+  - src/**/*.ts
+  - test/**/*.ts
+rule:
+  pattern: $VALUE as never
+---
+# Effect-returning Adapters must expose their real contract rather than assert one at the call site.
+id: effect-effect-assertions-are-truthful
+language: TypeScript
+severity: error
+message: Do not assert a whole value as Effect.Effect; return an Effect with an accurate contract or adjust the Adapter interface.
+files:
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+  - src/**/*.ts
+  - test/**/*.ts
+rule:
+  pattern: $VALUE as Effect.Effect<$$$ARGS>
+---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
 language: TypeScript

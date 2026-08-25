@@ -42,9 +42,13 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
       ),
   }));
 
+type UntrustedCreateChangeStartInput = Omit<CreateChangeStartInput, "policy"> & {
+  readonly policy: unknown;
+};
+
 export const createChange = (
   sql: SqlClient.SqlClient,
-  input: CreateChangeStartInput,
+  input: UntrustedCreateChangeStartInput,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
@@ -65,7 +69,7 @@ export const insertLinkedChange = (
 
 const insertChangeRow = (
   sql: SqlClient.SqlClient,
-  input: CreateChangeStartInput,
+  input: UntrustedCreateChangeStartInput,
   acceptanceContext: AcceptanceContextSnapshotV1 | null,
   idPrefix: string,
 ) =>

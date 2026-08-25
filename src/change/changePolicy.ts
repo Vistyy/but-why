@@ -134,7 +134,7 @@ const decodeChangePolicy = (value: unknown): ChangePolicy => {
   };
 };
 
-export const encodeSqliteChangePolicy = (policy: ChangePolicy) => {
+export const encodeSqliteChangePolicy = (policy: unknown) => {
   const decoded = decodeChangePolicy(policy);
   return {
     reviewerConfiguration: encodeSqliteChangeReviewerConfiguration(decoded.reviewerConfiguration),
