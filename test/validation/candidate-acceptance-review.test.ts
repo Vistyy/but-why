@@ -16,6 +16,7 @@ import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapt
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
+import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -27,6 +28,7 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
+import { removeRegisteredTestGitWorktree } from "../support/testGit.js";
 import { runTestProcess } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
@@ -366,89 +368,106 @@ const runReviewPhases = (
       mkdirSync(dirname(worktreePath), { recursive: true });
       git(ready.repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
 
-      yield* persistence.execution.recordCheckResult({
-        validationRunId: started.validationRunId,
-        producer: "quality",
-        outcome: "passed",
-        artifactRecords: [
-          {
-            ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
-            validationRunId: started.validationRunId,
-            phase: "checks",
-            producer: "quality",
-            path: `${started.validationRunId}/checks/quality/stdout.txt`,
-            originalBytes: 0,
-            storedBytes: 0,
-            truncated: false,
-          },
-        ],
-      });
-      const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
-        Effect.sync(() => {
-          const result = runTestProcess("bash", ["-lc", command], {
-            cwd: options?.cwd ?? worktreePath,
-          });
-          return {
-            exitCode: result.status ?? 1,
-            stdout: result.stdout,
-            stderr: result.stderr,
-          };
-        });
-      const acceptance = yield* runAcceptanceReviewPhase({
-        validationRunId: started.validationRunId,
-        changeId: captured.changeId,
-        candidate: {
-          candidateId: captured.candidateId,
-          changeBaseSha: captured.changeBaseSha,
-          headSha: captured.headSha,
-        },
-        acceptanceContext,
-        implementationDecisions: [],
-        policy: policy.acceptanceReview,
-        ...(policy.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: policy.agentEnvironment }),
-        runtime: ready.reviewerAgentRuntime,
-        commandExecutor,
-        reviewerExecutor: unusedReviewerExecutor,
-        artifactsRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
-        artifactMaxBytes: maxValidationArtifactBytes,
-        commandCwd: worktreePath,
-        resourceRoot: worktreePath,
-        workspaceIdentity: {
-          repositoryRoot: ready.repo,
-          repositoryCommonDirectory,
-          workspaceId: `validation-run-${started.validationRunId}`,
-        },
-        sessionStorageRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
-        restoreWorkspace: restoreDisposableWorkspace,
-        agentPersistence: persistence.agentPersistence,
-        getAgentSession: persistence.agentSessions.getAgentSession,
-        linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
-        settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
-        recordAcceptanceResult: persistence.execution.recordAcceptanceResult,
-        allowedUntrackedFiles: [],
-        listArtifacts: persistence.reads.listArtifacts,
-        listPreviousCandidateReviewerFindings:
-          persistence.execution.listPreviousCandidateReviewerFindings,
-      }).pipe(Effect.provide(NodeFileSystem.layer));
-      git(ready.repo, "worktree", "remove", "--force", "--", worktreePath);
-      yield* persistence.execution.complete({
-        validationRunId: started.validationRunId,
-        outcome: acceptance.outcome,
-      });
-      return acceptance.outcome === "tooling_failed"
-        ? {
-            ok: false as const,
-            validationRunId: started.validationRunId,
-            outcome: acceptance.outcome,
-          }
-        : {
-            ok: true as const,
-            reused: false as const,
-            validationRunId: started.validationRunId,
-            outcome: acceptance.outcome,
-          };
+      const result = yield* Effect.acquireUseRelease(
+        Effect.succeed(undefined),
+        () =>
+          Effect.gen(function* () {
+            yield* persistence.execution.recordCheckResult({
+              validationRunId: started.validationRunId,
+              producer: "quality",
+              outcome: "passed",
+              artifactRecords: [
+                {
+                  ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
+                  validationRunId: started.validationRunId,
+                  phase: "checks",
+                  producer: "quality",
+                  path: `${started.validationRunId}/checks/quality/stdout.txt`,
+                  originalBytes: 0,
+                  storedBytes: 0,
+                  truncated: false,
+                },
+              ],
+            });
+            const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
+              Effect.gen(function* () {
+                const result = runTestProcess("bash", ["-lc", command], {
+                  cwd: options?.cwd ?? worktreePath,
+                });
+                if (result.error !== undefined) {
+                  return yield* new WorkspaceCommandExecutionFailed({
+                    message: result.error.message,
+                  });
+                }
+                if (result.status === null) {
+                  return yield* new WorkspaceCommandExecutionFailed({
+                    message: "Test command exited without a status.",
+                  });
+                }
+                return {
+                  exitCode: result.status,
+                  stdout: result.stdout,
+                  stderr: result.stderr,
+                };
+              });
+            const acceptance = yield* runAcceptanceReviewPhase({
+              validationRunId: started.validationRunId,
+              changeId: captured.changeId,
+              candidate: {
+                candidateId: captured.candidateId,
+                changeBaseSha: captured.changeBaseSha,
+                headSha: captured.headSha,
+              },
+              acceptanceContext,
+              implementationDecisions: [],
+              policy: policy.acceptanceReview,
+              ...(policy.agentEnvironment === undefined
+                ? {}
+                : { agentEnvironment: policy.agentEnvironment }),
+              runtime: ready.reviewerAgentRuntime,
+              commandExecutor,
+              reviewerExecutor: unusedReviewerExecutor,
+              artifactsRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
+              artifactMaxBytes: maxValidationArtifactBytes,
+              commandCwd: worktreePath,
+              resourceRoot: worktreePath,
+              workspaceIdentity: {
+                repositoryRoot: ready.repo,
+                repositoryCommonDirectory,
+                workspaceId: `validation-run-${started.validationRunId}`,
+              },
+              sessionStorageRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
+              restoreWorkspace: restoreDisposableWorkspace,
+              agentPersistence: persistence.agentPersistence,
+              getAgentSession: persistence.agentSessions.getAgentSession,
+              linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
+              settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
+              recordAcceptanceResult: persistence.execution.recordAcceptanceResult,
+              allowedUntrackedFiles: [],
+              listArtifacts: persistence.reads.listArtifacts,
+              listPreviousCandidateReviewerFindings:
+                persistence.execution.listPreviousCandidateReviewerFindings,
+            }).pipe(Effect.provide(NodeFileSystem.layer));
+            yield* persistence.execution.complete({
+              validationRunId: started.validationRunId,
+              outcome: acceptance.outcome,
+            });
+            return acceptance.outcome === "tooling_failed"
+              ? {
+                  ok: false as const,
+                  validationRunId: started.validationRunId,
+                  outcome: acceptance.outcome,
+                }
+              : {
+                  ok: true as const,
+                  reused: false as const,
+                  validationRunId: started.validationRunId,
+                  outcome: acceptance.outcome,
+                };
+          }),
+        () => Effect.sync(() => removeRegisteredTestGitWorktree(ready.repo, worktreePath)),
+      );
+      return result;
     }),
   );
 

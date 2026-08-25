@@ -11,7 +11,7 @@ import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcessExpectExit, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Snapshot Workspace Git cleanup verification", () => {
@@ -122,9 +122,12 @@ describe("Snapshot Workspace Git cleanup verification", () => {
       expect(git(worktreePath, "rev-parse", "HEAD")).toBe(expectedCommitSha);
       expect(git(worktreePath, "show", "HEAD:tracked")).toBe("candidate");
       expect(git(worktreePath, "status", "--porcelain=v1")).toBe("");
-      expect(
-        runTestProcess("git", ["symbolic-ref", "--quiet", "HEAD"], { cwd: worktreePath }).status,
-      ).not.toBe(0);
+      runTestProcessExpectExit(
+        "git",
+        ["symbolic-ref", "--quiet", "HEAD"],
+        { cwd: worktreePath },
+        1,
+      );
     }),
   );
 

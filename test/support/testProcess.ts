@@ -173,3 +173,19 @@ export const runTestProcessOrThrow = (
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout.trim();
 };
+
+export const runTestProcessExpectExit = (
+  command: string,
+  args: readonly string[],
+  options: TestProcessOptions,
+  expectedExitCode: number,
+): SpawnSyncReturns<string> => {
+  const result = runTestProcess(command, args, options);
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== expectedExitCode) {
+    throw new Error(
+      `${command} ${args.join(" ")} exited with ${String(result.status)}; expected ${String(expectedExitCode)}.`,
+    );
+  }
+  return result;
+};

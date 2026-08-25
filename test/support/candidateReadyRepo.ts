@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createInitializedRepo } from "./initializedRepo.js";
-import { runTestProcess } from "./testProcess.js";
+import { runTestProcessOrThrow } from "./testProcess.js";
 
 export const candidateReadyRepo = (workspace?: string): string => {
   const root = createInitializedRepo(workspace);
@@ -92,11 +92,8 @@ export const setCandidateChangePolicy = (
   }
 };
 
-export const git = (cwd: string, ...args: readonly string[]): string => {
-  const result = runTestProcess("git", args, { cwd });
-  if (result.status !== 0) throw new Error(result.stderr);
-  return result.stdout.trim();
-};
+export const git = (cwd: string, ...args: readonly string[]): string =>
+  runTestProcessOrThrow("git", args, { cwd });
 
 export const commonDirectory = (root: string): string =>
   git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");

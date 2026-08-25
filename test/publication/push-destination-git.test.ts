@@ -1,18 +1,15 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { runTestProcess } from "../support/testProcess.js";
+import { runTestProcessExpectExit, runTestProcessOrThrow } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const git = (cwd: string, ...args: readonly string[]): string => {
-  const result = runTestProcess("git", args, { cwd });
-  if (result.status !== 0) throw new Error(result.stderr);
-  return result.stdout.trim();
-};
+const git = (cwd: string, ...args: readonly string[]): string =>
+  runTestProcessOrThrow("git", args, { cwd });
 
 describe("Git push destination binding", () => {
   it("resolves effective destinations and binds a checked destination across later config changes", () => {
-    const root = mkdtempSync(join(tmpdir(), "by-push-destination-"));
+    const root = createTestWorkspace();
     const source = join(root, "source");
     const intended = join(root, "intended.git");
     const redirected = join(root, "redirected.git");
@@ -52,9 +49,12 @@ describe("Git push destination binding", () => {
     );
 
     expect(git(intended, "rev-parse", "refs/heads/candidate")).toBe(candidate);
-    expect(
-      runTestProcess("git", ["rev-parse", "--verify", "refs/heads/candidate"], { cwd: redirected })
-        .status,
-    ).not.toBe(0);
+    const missingCandidate = runTestProcessExpectExit(
+      "git",
+      ["rev-parse", "--verify", "refs/heads/candidate"],
+      { cwd: redirected },
+      128,
+    );
+    expect(missingCandidate.stderr).not.toBe("");
   });
 });
