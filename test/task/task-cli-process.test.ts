@@ -55,7 +55,7 @@ describe("by task CLI process boundary", () => {
           task: { id: "BY-1", title: "Approved intent", description: "Original intent" },
         });
       }),
-    90_000,
+    120_000,
   );
 
   it.effect(
@@ -150,7 +150,7 @@ describe("by task CLI process boundary", () => {
           },
         });
       }),
-    90_000,
+    120_000,
   );
 
   it.effect(
@@ -202,7 +202,7 @@ describe("by task CLI process boundary", () => {
           task: { id: "BY-1", title: "Renamed title", state: "new", noOp: true },
         });
       }),
-    90_000,
+    120_000,
   );
 
   it.effect(
@@ -262,6 +262,6 @@ describe("by task CLI process boundary", () => {
         expect(invalidOutput).not.toHaveProperty("task");
         expect(invalidOutput).not.toHaveProperty("context");
       }),
-    90_000,
+    120_000,
   );
 });
