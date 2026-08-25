@@ -263,6 +263,18 @@ rule:
     - kind: import_statement
     - regex: '[\\s\\S]*from\\s+["`][^"`]*task/adapters/sqlite/[^"`]*["`][\\s\\S]*'
 ---
+# Task/Change coordination receives Change SQLite operations from composition instead of importing Change Adapters.
+id: task-change-coordination-uses-composed-change-operations
+language: TypeScript
+severity: error
+message: Do not import Change SQLite Adapters from Task/Change coordination Adapters because Change composition owns concrete Change Adapter selection; receive operation-specific Change functions through the coordination Adapter interface.
+files:
+  - src/taskChange/adapters/**/*.ts
+rule:
+  all:
+    - kind: import_statement
+    - regex: '[\\s\\S]*from\\s+["`][^"`]*change/adapters/sqlite/[^"`]*["`][\\s\\S]*'
+---
 # Repository Runtime is the only production owner of the Shared Repository State database lifecycle.
 id: repository-sql-layer-belongs-to-repository-runtime
 language: TypeScript

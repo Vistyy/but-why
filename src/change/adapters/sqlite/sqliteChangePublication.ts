@@ -1,6 +1,6 @@
-import type { ChangePublication } from "../change/change.js";
-import { parseGitHubRemoteUrl } from "../submissionEnvironment/adapters/githubTarget.js";
-import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";
+import { parseGitHubRemoteUrl } from "../../../submissionEnvironment/adapters/githubTarget.js";
+import { parseRemoteChangeBaseRef } from "../../../submissionEnvironment/remoteChangeBaseRef.js";
+import type { ChangePublication } from "../../change.js";
 import { decodeStoredPositiveInteger, decodeStoredString } from "./sqliteChangeValueDecoders.js";
 
 export type SqliteChangePublicationRow = {

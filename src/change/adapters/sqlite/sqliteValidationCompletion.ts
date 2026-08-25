@@ -1,11 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
-import type { CandidateValidationOutcome } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ChangePolicy } from "../change/changePolicy.js";
-import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { CandidateValidationOutcome } from "../../candidateValidation/candidateValidationRunStore.js";
+import type { ChangePolicy } from "../../changePolicy.js";
+import { type ValidationPhase, validationPhase } from "../../validationRun/validationRun.js";
 import {
   listValidationArtifacts,
   listValidationFindings,

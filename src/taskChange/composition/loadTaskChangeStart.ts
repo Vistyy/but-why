@@ -4,6 +4,7 @@ import {
   resolveChangeStartGitIntent,
 } from "../../change/adapters/changeStartGit.js";
 import type { ChangeStartGitOperations } from "../../change/changeStartGitOperations.js";
+import { taskChangeStartChangeOperations } from "../../change/composition/loadChangePersistence.js";
 import { resolveChangePolicyAtCommit } from "../../change/composition/resolveChangePolicy.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
@@ -22,7 +23,10 @@ export const openTaskChangeStartOperation = (input: {
   readonly context: LocalRepositoryContext;
   readonly globalConfigPath: string;
 }) =>
-  openSqliteTaskChangeStartPersistence(taskChangeStartTaskOperations).pipe(
+  openSqliteTaskChangeStartPersistence(
+    taskChangeStartTaskOperations,
+    taskChangeStartChangeOperations,
+  ).pipe(
     Effect.map(
       (store) =>
         (

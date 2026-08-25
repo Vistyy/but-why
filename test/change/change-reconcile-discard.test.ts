@@ -4,6 +4,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import type { ChangeCleanupOperation } from "../../src/change/cleanupTerminalChange.js";
+import { taskChangeStartChangeOperations } from "../../src/change/composition/loadChangePersistence.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import {
@@ -52,7 +53,10 @@ const sqlConfig = (fixture: ReconcileFixture): RepositorySqlConfig => ({
 
 const createTerminalChange = (fixture: ReconcileFixture) =>
   Effect.gen(function* () {
-    const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+    const starts = yield* openSqliteChangeStartPersistence(
+      taskChangeStartTaskOperations,
+      taskChangeStartChangeOperations,
+    );
     const changes = yield* openSqliteChangeTestDependencies();
 
     const created = yield* starts.create({
@@ -229,7 +233,10 @@ describe("Change reconciliation discard boundary", () => {
   it.effect("rejects discard for an open Change before observing the owned pull request", () =>
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
-        const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+        const starts = yield* openSqliteChangeStartPersistence(
+          taskChangeStartTaskOperations,
+          taskChangeStartChangeOperations,
+        );
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* starts.create({
           baseRef: "refs/heads/main",

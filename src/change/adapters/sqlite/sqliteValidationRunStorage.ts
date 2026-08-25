@@ -1,15 +1,14 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type {
   ActiveCandidateValidationRun,
   CandidateValidationRunRecord,
-} from "../change/candidateValidation/candidateValidationRunStore.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { type ChangePolicy, decodeSqliteChangePolicy } from "../change/changePolicy.js";
-import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+} from "../../candidateValidation/candidateValidationRunStore.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import { type ChangePolicy, decodeSqliteChangePolicy } from "../../changePolicy.js";
+import { deriveAcceptanceContext } from "../../validationRun/acceptanceContextSnapshot.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
   encodeSqliteAcceptanceContextSnapshot,

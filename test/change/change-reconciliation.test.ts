@@ -2,14 +2,15 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { decodeSqliteAcceptanceContextSnapshot } from "../../src/change/adapters/sqlite/sqliteAcceptanceContextSnapshot.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/change/adapters/sqlite/sqliteValidationInputSnapshot.js";
 import { internalChangeId } from "../../src/change/changeId.js";
 import type { ChangeReconciliationPort } from "../../src/change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
+import { taskChangeStartChangeOperations } from "../../src/change/composition/loadChangePersistence.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
@@ -63,7 +64,10 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+          const starts = yield* openSqliteChangeStartPersistence(
+            taskChangeStartTaskOperations,
+            taskChangeStartChangeOperations,
+          );
           const created = yield* starts.create({
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
@@ -158,7 +162,10 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+          const starts = yield* openSqliteChangeStartPersistence(
+            taskChangeStartTaskOperations,
+            taskChangeStartChangeOperations,
+          );
           const created = yield* starts.create({
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
@@ -266,7 +273,10 @@ describe("by change reconcile", () => {
         const taskId = publicTaskId(createdTask.task.id);
         yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
-        const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+        const starts = yield* openSqliteChangeStartPersistence(
+          taskChangeStartTaskOperations,
+          taskChangeStartChangeOperations,
+        );
         const prepared = yield* starts.prepareTask(taskId);
         if (!prepared.ok) throw new Error(prepared.code);
         const created = yield* starts.create({
@@ -401,7 +411,10 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+          const starts = yield* openSqliteChangeStartPersistence(
+            taskChangeStartTaskOperations,
+            taskChangeStartChangeOperations,
+          );
           const created = yield* starts.create({
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/widgets.git",
@@ -502,7 +515,10 @@ describe("by change reconcile", () => {
           const taskId = publicTaskId(createdTask.task.id);
           yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
-          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+          const starts = yield* openSqliteChangeStartPersistence(
+            taskChangeStartTaskOperations,
+            taskChangeStartChangeOperations,
+          );
           const prepared = yield* starts.prepareTask(taskId);
           if (!prepared.ok) throw new Error(prepared.code);
           const created = yield* starts.create({
@@ -619,7 +635,10 @@ describe("by change reconcile", () => {
           const taskId = publicTaskId(createdTask.task.id);
           yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
-          const starts = yield* openSqliteChangeStartPersistence(taskChangeStartTaskOperations);
+          const starts = yield* openSqliteChangeStartPersistence(
+            taskChangeStartTaskOperations,
+            taskChangeStartChangeOperations,
+          );
           const prepared = yield* starts.prepareTask(taskId);
           if (!prepared.ok) throw new Error(prepared.code);
           const created = yield* starts.create({

@@ -1,4 +1,4 @@
-import type { ChangeCloseReason, ChangeState } from "../change/change.js";
+import type { ChangeCloseReason, ChangeState } from "../../change.js";
 
 export const decodeStoredString = (value: unknown, field: string): string => {
   if (typeof value !== "string") throw new Error(`${field} is not a string`);

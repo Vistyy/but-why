@@ -1,12 +1,12 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangeRecord, ChangeState } from "../change/change.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { ChangeListRecord, ChangeReadPort } from "../change/changePorts.js";
-import type { ListChangesInput } from "../change/changeStore.js";
-import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangeRecord, ChangeState } from "../../change.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import type { ChangeListRecord, ChangeReadPort } from "../../changePorts.js";
+import type { ListChangesInput } from "../../changeStore.js";
+import { deriveAcceptanceContext } from "../../validationRun/acceptanceContextSnapshot.js";
 import {
   decodeImplementationDecisions,
   readImplementationBlockerHistory,

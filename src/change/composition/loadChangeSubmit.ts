@@ -6,17 +6,17 @@ import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
-import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
-import { openSqliteChangeAgentSessionPort } from "../../sqlite/sqliteChangeAgentSessionPersistence.js";
-import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { refreshRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
 import { openSqliteTaskChangeSubmissionCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import { taskChangeCompletionOperations } from "../../taskChange/composition/loadTaskChangePersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../adapters/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteCandidatePublicationPort } from "../adapters/sqlite/sqliteCandidatePublicationPersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../adapters/sqlite/sqliteCandidateValidationExecutionPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../adapters/sqlite/sqliteChangeAgentSessionPersistence.js";
+import { openSqliteChangeAuthorityPort } from "../adapters/sqlite/sqliteChangeAuthorityPersistence.js";
+import { openSqliteChangeSubmissionPort } from "../adapters/sqlite/sqliteChangeSubmissionPersistence.js";
 import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,

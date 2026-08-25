@@ -6,13 +6,13 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
+import { openSqliteChangeStartPersistence } from "../../src/change/adapters/sqlite/sqliteChangeStartPersistence.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import {
   stallDetectorPrompt,
   stallDetectorResponseContract,
 } from "../../src/change/stallDetection/stallDetector.js";
 import { defaultAcceptanceInstructions } from "../../src/reviewerPrompts/acceptanceReviewerPrompt.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {

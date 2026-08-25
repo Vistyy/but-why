@@ -1,9 +1,9 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { publicChangeId } from "../change/changeId.js";
-import type { ChangeReconciliationPort } from "../change/changePorts.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { publicChangeId } from "../../changeId.js";
+import type { ChangeReconciliationPort } from "../../changePorts.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";
 import {

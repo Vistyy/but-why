@@ -1,12 +1,12 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
 import type {
   ImplementationBlocker,
   ImplementationBlockerHistory,
-} from "../change/implementationBlocker.js";
-import type { ImplementationDecision } from "../change/implementationDecision.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+} from "../../implementationBlocker.js";
+import type { ImplementationDecision } from "../../implementationDecision.js";
 
 export type StoredImplementationDecisionRow = {
   readonly id: number;

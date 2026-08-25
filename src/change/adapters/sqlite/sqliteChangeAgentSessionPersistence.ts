@@ -1,17 +1,16 @@
 import { Effect } from "effect";
-
-import { internalChangeId } from "../change/changeId.js";
-import type { ChangeReviewerConfiguration } from "../change/changePolicy.js";
-import type { ChangeAgentSessionPort } from "../change/changePorts.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { internalChangeId } from "../../changeId.js";
+import type { ChangeReviewerConfiguration } from "../../changePolicy.js";
+import type { ChangeAgentSessionPort } from "../../changePorts.js";
 import {
   type ChangeReviewerPolicy,
   decodeChangeReviewerConfiguration,
   decodeSqliteChangeReviewerConfiguration,
   sameChangeReviewerPolicy,
-} from "../change/changeReviewerConfiguration.js";
-import { validationPhase } from "../change/validationRun/validationRun.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+} from "../../changeReviewerConfiguration.js";
+import { validationPhase } from "../../validationRun/validationRun.js";
 import { requireValidationPosition } from "./sqliteValidationPosition.js";
 
 export const openSqliteChangeAgentSessionPort = () =>

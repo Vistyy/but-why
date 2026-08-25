@@ -1,15 +1,15 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type {
   CandidateCaptureChange,
   CandidateCapturePersistence,
   CommitCandidateCaptureInput,
-} from "../change/candidateCapture/candidateCapturePersistence.js";
-import { changeState } from "../change/change.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+} from "../../candidateCapture/candidateCapturePersistence.js";
+import { changeState } from "../../change.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
 import {
   candidateReadColumns,
   decodeCandidate,

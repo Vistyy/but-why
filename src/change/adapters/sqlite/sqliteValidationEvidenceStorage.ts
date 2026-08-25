@@ -4,21 +4,21 @@ import { Effect } from "effect";
 import {
   decodeSqliteAgentInvocation,
   type SqliteAgentInvocationRow,
-} from "../agent/agentSession/adapters/sqlite/sqliteAgentInvocation.js";
+} from "../../../agent/agentSession/adapters/sqlite/sqliteAgentInvocation.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   assertValidationArtifactRecord,
   assertValidationToolingFailureEvidence,
   decodeValidationFindingEvidence,
-} from "../change/candidateValidation/candidateValidationEvidence.js";
+} from "../../candidateValidation/candidateValidationEvidence.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationPhaseResult,
   CandidateValidationToolingFailure,
-} from "../change/candidateValidation/candidateValidationRunStore.js";
-import { validationPhase } from "../change/validationRun/validationRun.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+} from "../../candidateValidation/candidateValidationRunStore.js";
+import { validationPhase } from "../../validationRun/validationRun.js";
 import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 

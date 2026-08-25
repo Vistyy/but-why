@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { openSqliteCandidateCapturePersistence } from "../../src/change/adapters/sqlite/sqliteCandidateCapturePersistence.js";
 import { localCandidateCaptureGit } from "../../src/change/candidateCapture/adapters/localGitCandidate.js";
 import {
   type CaptureLocalCandidateInput,
@@ -8,7 +9,6 @@ import {
   openCandidateCapture,
 } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import { repositorySqlLayer } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { runTestProcess } from "./testProcess.js";
 
 export const captureLocalCandidate = (input: CaptureLocalCandidateInput) =>

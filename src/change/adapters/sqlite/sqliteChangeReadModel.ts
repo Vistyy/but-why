@@ -1,9 +1,9 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangeCleanup, ChangeRecord } from "../change/change.js";
-import { publicChangeId } from "../change/changeId.js";
-import { decodeSqliteChangePolicy } from "../change/changePolicy.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangeCleanup, ChangeRecord } from "../../change.js";
+import { publicChangeId } from "../../changeId.js";
+import { decodeSqliteChangePolicy } from "../../changePolicy.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {

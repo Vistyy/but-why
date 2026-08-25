@@ -1,9 +1,8 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
-import type { ChangeValidationReadPort } from "../change/validation/changeValidationPorts.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import type { ChangeValidationReadPort } from "../../validation/changeValidationPorts.js";
 import {
   readCandidateById,
   readCandidatesForChange,

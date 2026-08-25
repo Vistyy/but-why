@@ -1,10 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangeCleanup, ChangePublication } from "../change/change.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { ReconciliationChange } from "../change/changePorts.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangeCleanup, ChangePublication } from "../../change.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import type { ReconciliationChange } from "../../changePorts.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,

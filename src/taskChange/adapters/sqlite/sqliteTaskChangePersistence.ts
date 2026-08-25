@@ -8,7 +8,6 @@ import {
   type RepositoryStorageError,
 } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { completeMergedChange as completeChangeOnly } from "../../../sqlite/sqliteCompleteMergedChangeStorage.js";
 import type { TaskState } from "../../../task/lifecycle.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
@@ -74,6 +73,18 @@ export type TaskChangeTaskMutationOperations = {
 };
 
 export type TaskChangeCompletionOperations = {
+  readonly completeChange: (
+    sql: SqlClient.SqlClient,
+    input: CompleteMergedChangeInput,
+    idPrefix: string,
+  ) => Effect.Effect<
+    | { readonly ok: true; readonly changed: boolean }
+    | {
+        readonly ok: false;
+        readonly code: "change_not_found" | "change_already_closed" | "publication_mismatch";
+      },
+    SqlError | RepositoryPersistedDataInvalid
+  >;
   readonly getTaskById: TaskReadOperation["getTaskById"];
   readonly completeTask: (
     sql: SqlClient.SqlClient,
@@ -207,7 +218,7 @@ export const completeLinkedChange = (
       }
     }
 
-    const result = yield* completeChangeOnly(sql, input, idPrefix);
+    const result = yield* operations.completeChange(sql, input, idPrefix);
     if (!result.ok) return result;
     if (link !== undefined && taskDecision?.state === "todo") {
       yield* operations.completeTask(sql, link.taskId, input.now, idPrefix);

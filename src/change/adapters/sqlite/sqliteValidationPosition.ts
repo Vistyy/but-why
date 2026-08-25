@@ -1,11 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
-
-import type { CandidateValidationRunRecord } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ChangePolicy } from "../change/changePolicy.js";
-import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import type { CandidateValidationRunRecord } from "../../candidateValidation/candidateValidationRunStore.js";
+import type { ChangePolicy } from "../../changePolicy.js";
+import { type ValidationPhase, validationPhase } from "../../validationRun/validationRun.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 export const decodeValidationPhase = (value: string): ValidationPhase => {
