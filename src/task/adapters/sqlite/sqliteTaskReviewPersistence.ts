@@ -1,15 +1,19 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
+import {
+  decodeSqliteAgentInvocation,
+  type SqliteAgentInvocationRow,
+} from "../../../agent/agentSession/adapters/sqlite/sqliteAgentInvocation.js";
 import { settleUnsettledAgentInvocations } from "../../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type {
   AgentInvocationRecord,
   AgentSessionSqlLink,
-  AgentThinking,
 } from "../../../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { decodeReviewerFindingCore } from "../../../contracts/reviewerFinding.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type { TaskState } from "../../lifecycle.js";
 import {
   decodeTaskReviewPolicySnapshot,
@@ -58,31 +62,8 @@ type ReviewRow = {
   readonly cleanupBlockingReason: string | null;
 };
 
-type TaskReviewInvocationEvidenceRow = {
-  readonly invocationId: number;
-  readonly settledAt: string | null;
-  readonly settlementKind: string | null;
+type TaskReviewInvocationEvidenceRow = SqliteAgentInvocationRow & {
   readonly taskOwned: number;
-};
-
-type AgentInvocationRow = {
-  readonly id: number;
-  readonly agentSessionId: number;
-  readonly continuationId: number;
-  readonly createdAt: string;
-  readonly settledAt: string | null;
-  readonly settlementKind: string | null;
-  readonly inputTokens: number | null;
-  readonly cachedInputTokens: number | null;
-  readonly cacheWriteTokens: number | null;
-  readonly outputTokens: number | null;
-  readonly totalTokens: number | null;
-  readonly harness: string;
-  readonly provider: string | null;
-  readonly model: string;
-  readonly thinking: string | null;
-  readonly transcriptPath: string | null;
-  readonly unusableReason: string | null;
 };
 
 export const openSqliteTaskReviewPersistence = (): Effect.Effect<
@@ -221,9 +202,13 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             input.toolingFailure === undefined
               ? undefined
               : yield* decodeTaskReviewToolingFailureEffect(operationName, input.toolingFailure);
-          const invocations = yield* readTaskReviewInvocationEvidence(sql, input.reviewId);
+          const invocations = yield* readTaskReviewInvocationEvidence(
+            sql,
+            input.reviewId,
+            operationName,
+          );
           const terminal = invocations.at(-1);
-          if (terminal?.invocationId !== invocationId) {
+          if (terminal?.invocation.id !== invocationId) {
             return yield* invalid(
               operationName,
               "Only the terminal linked Invocation can settle the Task Review",
@@ -231,10 +216,10 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           }
           if (
             invocations.some(
-              (invocation) =>
-                invocation.taskOwned !== 1 ||
-                invocation.settledAt === null ||
-                invocation.settlementKind === null,
+              (evidence) =>
+                evidence.taskOwned !== 1 ||
+                evidence.invocation.settledAt === null ||
+                evidence.invocation.settlementKind === null,
             )
           ) {
             return yield* invalid(
@@ -248,7 +233,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               "A completed Agent Task Review settlement cannot contain a Tooling Failure",
             );
           }
-          if (input.complete && terminal.settlementKind !== "returned") {
+          if (input.complete && terminal.invocation.settlementKind !== "returned") {
             return yield* invalid(
               operationName,
               "Passing and Finding-blocked Task Reviews require a returned terminal Invocation",
@@ -710,7 +695,7 @@ const decodeReview = (
           ...(invocationSessionId === undefined ? {} : { agentSessionId: invocationSessionId }),
           ...(invocations.length === 0
             ? {}
-            : { agentInvocations: invocations.map(decodeAgentInvocation) }),
+            : { agentInvocations: invocations.map(decodeSqliteAgentInvocation) }),
           ...(policyMatchesInvocationEvidence ? { reviewerConfiguration: policy } : {}),
           ...(simplificationAdviceAttempt === null ? {} : { simplificationAdviceAttempt }),
         };
@@ -720,21 +705,42 @@ const decodeReview = (
     });
   });
 
-const readTaskReviewInvocationEvidence = (sql: SqlClient.SqlClient, reviewId: number) =>
-  sql<TaskReviewInvocationEvidenceRow>`
-    SELECT link.agent_invocation_id AS invocationId,
-      invocation.settled_at AS settledAt,
-      invocation.settlement_kind AS settlementKind,
-      CASE WHEN task.reviewer_agent_session_id = continuation.agent_session_id
-        THEN 1 ELSE 0 END AS taskOwned
-    FROM task_review_agent_invocations AS link
-    JOIN task_reviews AS review ON review.id = link.task_review_id
-    JOIN tasks AS task ON task.id = review.task_id
-    JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
-    JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-    WHERE link.task_review_id = ${reviewId}
-    ORDER BY link.agent_invocation_id
-  `;
+const readTaskReviewInvocationEvidence = (
+  sql: SqlClient.SqlClient,
+  reviewId: number,
+  operationName: string,
+) =>
+  Effect.flatMap(
+    sql<TaskReviewInvocationEvidenceRow>`
+      SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
+        invocation.continuation_id AS continuationId, invocation.created_at AS createdAt,
+        invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
+        invocation.input_tokens AS inputTokens,
+        invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.cache_write_tokens AS cacheWriteTokens,
+        invocation.output_tokens AS outputTokens,
+        invocation.total_tokens AS totalTokens,
+        continuation.harness, continuation.provider, continuation.model, continuation.thinking,
+        continuation.transcript_path AS transcriptPath,
+        continuation.unusable_reason AS unusableReason,
+        CASE WHEN task.reviewer_agent_session_id = continuation.agent_session_id
+          THEN 1 ELSE 0 END AS taskOwned
+        FROM task_review_agent_invocations AS link
+        JOIN task_reviews AS review ON review.id = link.task_review_id
+        JOIN tasks AS task ON task.id = review.task_id
+        JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+        JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+        WHERE link.task_review_id = ${reviewId}
+        ORDER BY link.agent_invocation_id
+    `,
+    (rows) =>
+      decodePersisted(operationName, () =>
+        rows.map(({ taskOwned, ...row }) => ({
+          taskOwned,
+          invocation: decodeSqliteAgentInvocation(row),
+        })),
+      ),
+  );
 
 const requireTaskReviewInvocationEvidence = (
   sql: SqlClient.SqlClient,
@@ -742,7 +748,11 @@ const requireTaskReviewInvocationEvidence = (
   outcome: "passed" | "blocked" | "tooling_failed",
 ) =>
   Effect.gen(function* () {
-    const invocations = yield* readTaskReviewInvocationEvidence(sql, reviewId);
+    const invocations = yield* readTaskReviewInvocationEvidence(
+      sql,
+      reviewId,
+      "complete Task Review",
+    );
     if ((outcome === "passed" || outcome === "blocked") && invocations.length === 0) {
       return yield* invalid(
         "complete Task Review",
@@ -751,10 +761,10 @@ const requireTaskReviewInvocationEvidence = (
     }
     if (
       invocations.some(
-        (invocation) =>
-          invocation.taskOwned !== 1 ||
-          invocation.settledAt === null ||
-          invocation.settlementKind === null,
+        (evidence) =>
+          evidence.taskOwned !== 1 ||
+          evidence.invocation.settledAt === null ||
+          evidence.invocation.settlementKind === null,
       )
     ) {
       return yield* invalid(
@@ -764,7 +774,7 @@ const requireTaskReviewInvocationEvidence = (
     }
     if (
       (outcome === "passed" || outcome === "blocked") &&
-      invocations.at(-1)?.settlementKind !== "returned"
+      invocations.at(-1)?.invocation.settlementKind !== "returned"
     ) {
       return yield* invalid(
         "complete Task Review",
@@ -892,7 +902,7 @@ const readSimplificationAdviceAttempt = (
     const invocations =
       attempt.agentInvocationId === null
         ? []
-        : yield* sql.unsafe<AgentInvocationRow>(
+        : yield* sql.unsafe<SqliteAgentInvocationRow>(
             `SELECT ${agentInvocationProjection} ${agentInvocationJoins} WHERE invocation.id = ?`,
             [attempt.agentInvocationId],
           );
@@ -902,7 +912,7 @@ const readSimplificationAdviceAttempt = (
           attempt.configuration === null
             ? null
             : decodeTaskSimplificationAdvicePolicy(JSON.parse(attempt.configuration) as unknown);
-        const decodedInvocations = invocations.map(decodeAgentInvocation);
+        const decodedInvocations = invocations.map(decodeSqliteAgentInvocation);
         const firstInvocation = decodedInvocations[0];
         const firstPersistedInvocation = invocations[0];
         const invocationEvidence =
@@ -960,7 +970,7 @@ const readSimplificationAdviceAttempt = (
   });
 
 const readAgentInvocations = (sql: SqlClient.SqlClient, reviewId: number) =>
-  sql.unsafe<AgentInvocationRow>(
+  sql.unsafe<SqliteAgentInvocationRow>(
     `SELECT ${agentInvocationProjection}
       FROM task_review_agent_invocations AS link
       JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
@@ -1209,79 +1219,6 @@ const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string, idPrefix: 
         id: publicTaskIdFromInternal(dependency.id, idPrefix),
       })),
   );
-
-const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord => {
-  const settlementKind = decodeAgentInvocationSettlementKind(row.settlementKind);
-  const tokenValues = [
-    row.inputTokens,
-    row.cachedInputTokens,
-    row.cacheWriteTokens,
-    row.outputTokens,
-    row.totalTokens,
-  ];
-  const hasTokens = tokenValues.some((value) => value !== null);
-  if (hasTokens && tokenValues.some((value) => value === null)) {
-    throw new Error("Incomplete Agent Invocation token evidence");
-  }
-  if (row.harness !== "pi") throw new Error(`Invalid Agent Harness: ${row.harness}`);
-  const thinking = decodeAgentThinking(row.thinking);
-  return {
-    id: row.id,
-    continuationId: row.continuationId,
-    createdAt: row.createdAt,
-    settledAt: row.settledAt,
-    settlementKind,
-    usage: hasTokens
-      ? {
-          inputTokens: row.inputTokens as number,
-          cachedInputTokens: row.cachedInputTokens as number,
-          cacheWriteTokens: row.cacheWriteTokens as number,
-          outputTokens: row.outputTokens as number,
-          totalTokens: row.totalTokens as number,
-        }
-      : null,
-    continuation: {
-      id: row.continuationId,
-      agentSessionId: row.agentSessionId,
-      harness: "pi",
-      provider: row.provider,
-      model: row.model,
-      thinking,
-      transcriptPath: row.transcriptPath,
-      unusableReason: row.unusableReason,
-    },
-  };
-};
-
-const decodeAgentThinking = (value: string | null): AgentThinking | null => {
-  if (value === null) return null;
-  switch (value) {
-    case "off":
-    case "minimal":
-    case "low":
-    case "medium":
-    case "high":
-    case "xhigh":
-      return value;
-    default:
-      throw new Error(`Invalid Agent thinking level: ${value}`);
-  }
-};
-
-const decodeAgentInvocationSettlementKind = (
-  value: string | null,
-): AgentInvocationRecord["settlementKind"] => {
-  if (value === null) return null;
-  switch (value) {
-    case "returned":
-    case "launch_failed":
-    case "failed":
-    case "return_unknown":
-      return value;
-    default:
-      throw new Error(`Invalid Agent Invocation settlement kind: ${value}`);
-  }
-};
 
 const parseReviewOutcome = (value: string | null): TaskReviewRecord["outcome"] => {
   if (value === null || value === "passed" || value === "blocked" || value === "tooling_failed") {
