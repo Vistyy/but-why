@@ -1005,6 +1005,8 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     expect(progress).toEqual([
       "Repository Preparation started\n",
       expect.stringMatching(/^Repository Preparation passed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
+      "Underengineer started: profile=default model=provider/default thinking=default\n",
+      expect.stringMatching(/^Underengineer failed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
       "Task Review started: profile=task-review model=provider/repo-model thinking=high\n",
       expect.stringMatching(/^Task Review passed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
     ]);
