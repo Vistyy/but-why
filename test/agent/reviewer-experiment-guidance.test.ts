@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildAcceptanceReviewerSystemPrompt,
-  defaultAcceptanceInstructions,
-} from "../../src/reviewerPrompts/acceptanceReviewerPrompt.js";
+import { buildAcceptanceReviewerSystemPrompt } from "../../src/reviewerPrompts/acceptanceReviewerPrompt.js";
 import { buildSpecialistReviewerSystemPrompt } from "../../src/reviewerPrompts/specialistReviewerPrompt.js";
 import { buildTaskReviewerSystemPrompt } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { buildTaskSimplificationAdviceSystemPrompt } from "../../src/reviewerPrompts/taskSimplificationAdvicePrompt.js";
@@ -27,27 +24,35 @@ describe("reviewer experiment guidance", () => {
     });
 
     expectExperimentGuidance(prompt);
-    expect(prompt).toContain("exact Review Base workspace");
+    expect(prompt).toContain("disposable Task Review workspace is at the exact Review Base commit");
     expect(prompt).toContain("Do not mutate live Shared Repository State");
   });
 
   it("gives Acceptance Reviewers bounded experiment authority", () => {
-    const prompt = buildAcceptanceReviewerSystemPrompt(defaultAcceptanceInstructions);
+    const configuredInstructions = "Configured acceptance instructions.";
+    const prompt = buildAcceptanceReviewerSystemPrompt(configuredInstructions);
 
     expectExperimentGuidance(prompt);
     expect(prompt).toContain("exact Candidate's Snapshot Workspace");
     expect(prompt).toContain("Do not mutate live Shared Repository State");
+    expect(prompt.indexOf(configuredInstructions)).toBeLessThan(
+      prompt.indexOf("The permitted experiment-effects boundary is mandatory"),
+    );
   });
 
   it("gives Specialist Reviewers bounded experiment authority", () => {
+    const configuredInstructions = "Judge the standards concern.";
     const prompt = buildSpecialistReviewerSystemPrompt({
       specialist: "standards",
-      instructions: "Judge the standards concern.",
+      instructions: configuredInstructions,
     });
 
     expectExperimentGuidance(prompt);
     expect(prompt).toContain("exact Candidate's Snapshot Workspace");
     expect(prompt).toContain("Do not mutate live Shared Repository State");
+    expect(prompt.indexOf(configuredInstructions)).toBeLessThan(
+      prompt.indexOf("The permitted experiment-effects boundary is mandatory"),
+    );
   });
 
   it("does not broaden Task Simplification Advice with experiment duties", () => {

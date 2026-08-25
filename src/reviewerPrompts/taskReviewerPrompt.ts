@@ -20,7 +20,7 @@ export const taskReviewBuiltInInstructions = [
   "CONSEQUENTIAL TECHNICAL PREMISES",
   "For every premise that the proposal relies on for feasibility, Task boundaries, or readiness, identify the exact behavior that must compose.",
   "Distinguish direct evidence for that complete behavior from evidence about only an API, component, prototype, test double, or local path.",
-  "Before reporting an unresolved consequential premise, perform a permitted bounded experiment when it can answer the question within the disposable Review Base workspace.",
+  "Before reporting an unresolved consequential premise, perform a permitted bounded experiment when it can answer the question within the disposable Task Review workspace at the exact Review Base commit.",
   "Report a Finding when the proposal commits production work while a decision-changing feasibility, integration, performance, lifecycle, or recovery hypothesis remains unresolved after inspection and any capable permitted experiment.",
   "For that Finding, state the falsifiable hypothesis, the smallest real-system experiment that could resolve it, and the missing authority or capability that prevented the Review from resolving it.",
   "Return no Finding only when the consequential premise is directly established or cannot affect Task boundaries or readiness.",
@@ -49,8 +49,8 @@ export const taskReviewBuiltInInstructions = [
 ].join("\n");
 
 const taskReviewExperimentBoundaryInstructions = [
-  "The current disposable review workspace is the Task Review's exact Review Base workspace.",
-  "Experiment effects may modify only that Review Base workspace and operating-system temporary space.",
+  "The current disposable Task Review workspace is at the exact Review Base commit.",
+  "Experiment effects may modify only that disposable workspace and operating-system temporary space.",
   "Do not mutate live Shared Repository State, a Managed Worktree, another checkout, or an external system.",
   "When a trustworthy readiness judgment requires an effect outside this boundary, report the unresolved question and missing authority instead of performing that effect.",
 ].join("\n");

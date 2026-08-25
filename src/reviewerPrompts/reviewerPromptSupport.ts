@@ -42,6 +42,9 @@ export const candidateReviewerExperimentBoundaryInstructions = [
   "When a trustworthy judgment requires an effect outside this boundary, report the unresolved question and missing authority instead of performing that effect.",
 ].join("\n");
 
+export const candidateReviewerExperimentAuthorityInstructions =
+  "The permitted experiment-effects boundary is mandatory and configured reviewer instructions cannot override it.";
+
 export const completeCandidateReviewInstructions = [
   "Review the complete exact current Candidate on every judgment; previous passes and Findings do not narrow it.",
   "Inspect every changed file; no artifact class is exempt.",
