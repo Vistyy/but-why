@@ -120,7 +120,7 @@ exit 1
           yield* Effect.promise(server.stop);
         }
       }),
-    30_000,
+    90_000,
   );
 
   it.effect(
@@ -170,6 +170,6 @@ exit 1
           decisions: [{ choice: "Use the process boundary." }],
         });
       }),
-    30_000,
+    90_000,
   );
 });

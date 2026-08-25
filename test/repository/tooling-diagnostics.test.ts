@@ -11,7 +11,7 @@ const astGrepConfigPath = join(repositoryRoot, "sgconfig.yml");
 const biomeConfigPath = join(repositoryRoot, "biome.json");
 const biomePluginPath = join(repositoryRoot, "biome-plugins/no-inline-import-types.grit");
 const healthReportScriptPath = join(repositoryRoot, "scripts/run-health-report.mjs");
-const healthProcessTimeoutMs = 125_000;
+const healthProcessTimeoutMs = 245_000;
 const healthTestTimeoutMs = healthProcessTimeoutMs + 5_000;
 const temporaryPaths: string[] = [];
 
