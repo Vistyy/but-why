@@ -1066,5 +1066,11 @@ const initializedRepository = (): string => {
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });
 
-const gitConfig = (cwd: string, key: string): string =>
-  runTestProcess("git", ["config", "--get-all", key], { cwd }).stdout.trim();
+const gitConfig = (cwd: string, key: string): string => {
+  const result = runTestProcess("git", ["config", "--get-all", key], { cwd });
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0 && result.status !== 1) {
+    throw new Error(result.stderr || result.stdout);
+  }
+  return result.stdout.trim();
+};
