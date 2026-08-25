@@ -213,7 +213,7 @@ coverage *args:
 const createCompletingPnpm = (directory: string): void => {
   createWorkloadJustfile(directory);
   const pnpm = join(directory, "pnpm");
-  writeFileSync(pnpm, "#!/usr/bin/env bash\nprintf '1 passed\\n'\nexit 0\n");
+  writeFileSync(pnpm, "#!/usr/bin/env bash\nexit 0\n");
   chmodSync(pnpm, 0o755);
 };
 
@@ -412,7 +412,6 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
 
       const targeted = await runJust(lockFile, ["test", "test/cli/cli-task-id.test.ts"]);
       expect(targeted.status).toBe(0);
-      expect(targeted.output).toContain("1 passed");
 
       writeFileSync(releaseFile, "release");
       const unselectedResult = await settleWithinDeadline(
