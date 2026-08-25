@@ -1,15 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  ModelRuntime,
-  SessionManager,
-} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { repoRoot } from "../support/by-cli.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 type SessionEvent = {
   readonly type: string;
@@ -28,9 +22,10 @@ type RuntimeCase = {
 };
 
 const changeId = "BY-C1";
-const extensionPath = join(repoRoot, "extensions/continue-change.ts");
-const environment = process.env as { PATH?: string };
-const originalPath = environment.PATH ?? "";
+const helperPath = join(repoRoot, "test/agent/continue-change-sdk-helper.ts");
+const tsxLoader = join(repoRoot, "node_modules/tsx/dist/loader.mjs");
+const helperProcessTimeoutMs = 10_000;
+const maxRuntimeCaseBytes = 1_000_000;
 
 const snapshot = {
   change: {
@@ -92,84 +87,31 @@ const textMessages = (messages: readonly unknown[]): readonly string[] =>
     });
   });
 
-const continuationState = (session: { readonly sessionManager: SessionManager }) => {
-  const entries = session.sessionManager
-    .getBranch()
-    .filter(
-      (entry) => entry.type === "custom" && entry.customType === "but-why-change-continuation",
-    );
-  const latest = entries.at(-1);
-  const data = latest?.type === "custom" ? latest.data : undefined;
-  return isRecord(data)
-    ? (data as Record<string, unknown> & { readonly paused?: boolean })
-    : undefined;
-};
-
-const runRuntimeCase = async (blocked: boolean): Promise<RuntimeCase> => {
+const runRuntimeCase = (blocked: boolean): RuntimeCase => {
   const directory = mkdtempSync(join(tmpdir(), "but-why-pi-sdk-"));
-  const agentDirectory = join(directory, "agent");
   const byDirectory = join(directory, "bin");
-  mkdirSync(agentDirectory);
   mkdirSync(byDirectory);
   createFakeBy(byDirectory, blocked);
-  const faux = fauxProvider({ provider: "but-why-test" });
-  faux.setResponses([
-    fauxAssistantMessage(
-      fauxToolCall("bash", { command: "printf 'tool completed'" }, { id: "tool-call-1" }),
-      { stopReason: "toolUse" },
-    ),
-    fauxAssistantMessage(fauxText("second scripted response")),
-  ]);
-  const modelRuntime = await ModelRuntime.create({
-    allowModelNetwork: false,
-    refreshOnCreate: false,
-  });
-  modelRuntime.registerNativeProvider(faux.provider);
-  const resourceLoader = new DefaultResourceLoader({
-    cwd: repoRoot,
-    agentDir: agentDirectory,
-    additionalExtensionPaths: [extensionPath],
-  });
-  await resourceLoader.reload();
-  const { session, extensionsResult } = await createAgentSession({
-    cwd: repoRoot,
-    agentDir: agentDirectory,
-    model: faux.getModel(),
-    modelRuntime,
-    resourceLoader,
-    sessionManager: SessionManager.inMemory(repoRoot),
-    thinkingLevel: "off",
-    tools: ["bash"],
-  });
-  const extensionErrors: unknown[] = [];
-  const events: SessionEvent[] = [];
-  const unsubscribe = session.subscribe((event) => {
-    events.push(event as SessionEvent);
-  });
-  environment.PATH = `${byDirectory}:${originalPath}`;
   try {
-    expect(extensionsResult.errors).toEqual([]);
-    await session.bindExtensions({
-      onError: (error) => extensionErrors.push(error),
-    });
-    await session.prompt(`Change identity: ${changeId}.`);
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(extensionErrors).toEqual([]);
-    return {
-      blocked,
-      providerCalls: faux.state.callCount,
-      events,
-      messages: session.messages,
-      idle: !session.isStreaming,
-      continuationState: continuationState(session),
-      extensionErrors,
-    };
+    const result = runTestProcess(
+      process.execPath,
+      ["--import", tsxLoader, helperPath, repoRoot, blocked ? "blocked" : "normal"],
+      {
+        cwd: directory,
+        env: { PATH: `${byDirectory}:${process.env["PATH"] ?? ""}` },
+        timeout: helperProcessTimeoutMs,
+      },
+    );
+    if (result.error !== undefined) throw result.error;
+    if (result.status !== 0) {
+      throw new Error(result.stderr || `Pi SDK fixture exited with ${result.status}.`);
+    }
+    if (result.stdout.length > maxRuntimeCaseBytes) {
+      throw new Error("Pi SDK fixture result exceeded the output bound.");
+    }
+    return JSON.parse(result.stdout) as RuntimeCase;
   } finally {
-    unsubscribe();
-    session.dispose();
-    faux.setResponses([]);
     rmSync(directory, { recursive: true, force: true });
-    environment.PATH = originalPath;
   }
 };
 
