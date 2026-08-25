@@ -65,8 +65,8 @@ Repository state, Review Base, policy, configuration, dependency content, and de
 _Avoid_: Task Submission, Acceptance Review, Validation Run
 
 **Task Simplification Advice**:
-Non-authoritative advice produced by one Underengineer attempt before the Task Reviewer runs.
-Completed Advice identifies the practical core outcome and contains up to two optional subtractive simplification options, or explains why no substantial safe simplification is supported.
+One nonblank Markdown block of non-authoritative advice produced by one Underengineer attempt before the Task Reviewer runs.
+The Advice recommends the best supported safe simplification or explains why no safe simplification is supported, with enough reasoning to understand what would be removed and why the retained result remains sufficient.
 Advice cannot add requirements, create Findings, change the Task Review outcome, approve a Task, or prevent a valid New-to-Todo transition.
 The first completed Advice belongs to the Task and remains unchanged across later Task changes, Task Revision, and Task Submission.
 _Avoid_: Finding, Task Review judgment, Task requirement

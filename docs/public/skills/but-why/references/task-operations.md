@@ -37,13 +37,11 @@ Finding-blocked and tooling-failed Reviews remain history and are not reusable j
 A later authorized submission of an unchanged New Task proposal runs a new Task Review.
 
 Inspect the complete structured result, including its Task Review outcome and `simplificationAdvice`, regardless of whether the Review passed, reported Findings, or had a Tooling Failure.
-Completed Task Simplification Advice is non-authoritative and independent of the Task Review judgment.
-In the Operator response, state whether Task Submission returned completed advice with options, completed advice with no options, or unavailable advice.
-When it contains options, summarize each option and its material trade-offs to the Operator.
-When it contains no options, state that no safe simplification was proposed and include its reason when useful.
+Completed Task Simplification Advice is one Markdown string, is non-authoritative, and is independent of the Task Review judgment.
+In the Operator response, report the complete Advice when Task Submission returns it.
 When `simplificationAdvice.state` is `unavailable`, report the relevant tooling evidence without treating that unavailability as a Task Review failure.
-Do not apply an option automatically.
-If the Operator selects an option, revise the proposed Task under Task Recording Authorization and obtain new Task Submission Authorization before submitting it again.
+Do not apply Advice automatically.
+If the Operator selects a simplification, revise the proposed Task under Task Recording Authorization and obtain new Task Submission Authorization before submitting it again.
 For an unlinked Todo Task whose Review passed, run `<but-why> task revise <task-id>` before recording the revised proposal.
 When the Review has Findings, simplification advice may inform the revision but does not replace resolving every applicable Finding.
 
