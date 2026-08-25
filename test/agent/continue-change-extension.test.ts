@@ -1,9 +1,13 @@
 import { fileURLToPath } from "node:url";
 
-import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
-import continueChange from "../../extensions/continue-change.js";
+import {
+  type ContinueChangeCapabilities,
+  type ContinueChangeContext,
+  runContinueChange,
+} from "../../extensions/continue-change.js";
 
 const changeId = "BY-C1";
 
@@ -27,7 +31,6 @@ type TestBlockerHistory = {
   resolutions: Record<string, unknown>[];
   active: Record<string, unknown> | null;
 };
-
 const validTestBlockerHistory = (resolutionContent?: string): TestBlockerHistory => {
   const resolution =
     resolutionContent === undefined ? null : { blockerId: 1, content: resolutionContent };
@@ -44,13 +47,49 @@ const validTestBlockerHistory = (resolutionContent?: string): TestBlockerHistory
   };
 };
 
-type EventHandler = (event: unknown, context: ExtensionContext) => unknown;
-type CommandHandler = (args: string, context: ExtensionContext) => unknown;
+type CommandHandler = (args: string, context: ContinueChangeContext) => unknown;
+type EventHandlers = {
+  tool_call: Parameters<ContinueChangeCapabilities["onToolCall"]>[0];
+  session_start: Parameters<ContinueChangeCapabilities["onSessionStart"]>[0];
+  session_shutdown: Parameters<ContinueChangeCapabilities["onSessionShutdown"]>[0];
+  agent_end: Parameters<ContinueChangeCapabilities["onAgentEnd"]>[0];
+  agent_settled: Parameters<ContinueChangeCapabilities["onAgentSettled"]>[0];
+  input: Parameters<ContinueChangeCapabilities["onInput"]>[0];
+  turn_end: Parameters<ContinueChangeCapabilities["onTurnEnd"]>[0];
+};
+type EventValues = {
+  tool_call: Parameters<EventHandlers["tool_call"]>[0];
+  session_start: unknown;
+  session_shutdown: unknown;
+  agent_end: Parameters<EventHandlers["agent_end"]>[0];
+  agent_settled: unknown;
+  input: Parameters<EventHandlers["input"]>[0];
+  turn_end: Parameters<EventHandlers["turn_end"]>[0];
+};
+type EventCall =
+  | [event: "tool_call", value: EventValues["tool_call"]]
+  | [event: "session_start", value?: unknown]
+  | [event: "session_shutdown", value?: unknown]
+  | [event: "agent_end", value: EventValues["agent_end"]]
+  | [event: "agent_settled", value?: unknown]
+  | [event: "input", value: EventValues["input"]]
+  | [event: "turn_end", value: EventValues["turn_end"]];
 
 const sourceCwd = fileURLToPath(new URL("../../", import.meta.url));
 
 const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
-  const handlers = new Map<string, EventHandler>();
+  const missingEventHandler = (): never => {
+    throw new Error("Missing registered continuation event handler");
+  };
+  const handlers: EventHandlers = {
+    tool_call: missingEventHandler,
+    session_start: missingEventHandler,
+    session_shutdown: missingEventHandler,
+    agent_end: missingEventHandler,
+    agent_settled: missingEventHandler,
+    input: missingEventHandler,
+    turn_end: missingEventHandler,
+  };
   const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
     {
@@ -89,14 +128,32 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   let abortCount = 0;
   const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   const execSignals: Array<AbortSignal | undefined> = [];
-  const api = {
-    on(event: string, handler: EventHandler) {
-      handlers.set(event, handler);
+  const api: ContinueChangeCapabilities = {
+    onToolCall(handler) {
+      handlers.tool_call = handler;
+    },
+    onSessionStart(handler) {
+      handlers.session_start = handler;
+    },
+    onSessionShutdown(handler) {
+      handlers.session_shutdown = handler;
+    },
+    onAgentEnd(handler) {
+      handlers.agent_end = handler;
+    },
+    onAgentSettled(handler) {
+      handlers.agent_settled = handler;
+    },
+    onInput(handler) {
+      handlers.input = handler;
+    },
+    onTurnEnd(handler) {
+      handlers.turn_end = handler;
     },
     registerCommand(name: string, options: { handler: CommandHandler }) {
       commands.set(name, options.handler);
     },
-    appendEntry(_type: string, data: unknown) {
+    appendContinuationState(data) {
       entries.push({
         type: "custom",
         id: `custom-${entries.length}`,
@@ -134,12 +191,13 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
       return { stdout: "", stderr: "", code: 1, killed: false };
     },
-  } as unknown as ExtensionAPI;
-  continueChange(api);
-  const context = {
+  };
+  runContinueChange(api);
+  const context: ContinueChangeContext = {
     cwd,
     sessionManager: { getBranch: () => [...entries] },
     isIdle: () => idle,
+    signal: undefined,
     abort: () => {
       abortCount += 1;
     },
@@ -147,11 +205,29 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       notify(message: string) {
         notifications.push(message);
       },
-      setWidget(name: string, value: unknown) {
-        widgets.push({ name, value });
+      setWidget(value) {
+        widgets.push({ name: "but-why-change-watcher", value });
       },
     },
-  } as unknown as ExtensionContext;
+  };
+  async function emit(...args: EventCall) {
+    switch (args[0]) {
+      case "tool_call":
+        return await handlers.tool_call(args[1], context);
+      case "session_start":
+        return await handlers.session_start(context);
+      case "session_shutdown":
+        return await handlers.session_shutdown(context);
+      case "agent_end":
+        return await handlers.agent_end(args[1], context);
+      case "agent_settled":
+        return await handlers.agent_settled(context);
+      case "input":
+        return await handlers.input(args[1], context);
+      case "turn_end":
+        return await handlers.turn_end(args[1], context);
+    }
+  }
   return {
     handlers,
     context,
@@ -209,11 +285,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       if (typeof value !== "function") return undefined;
       return value(undefined, { fg: (color: string) => color }).render(80);
     },
-    async emit(event: string, value: unknown = {}) {
-      const handler = handlers.get(event);
-      if (handler === undefined) throw new Error(`Missing ${event} handler`);
-      return await handler(value, context);
-    },
+    emit,
   };
 };
 
@@ -539,7 +611,7 @@ describe("packaged Change Implement continuation extension", () => {
       harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
-      await harness.emit("turn_end", { toolResults: [{}] });
+      await harness.emit("turn_end", { hasToolResults: true });
       await harness.emit("agent_end", {
         messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
       });
@@ -565,7 +637,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setInspectionFails(true);
 
-    await harness.emit("turn_end", { toolResults: [{}] });
+    await harness.emit("turn_end", { hasToolResults: true });
     await harness.emit("agent_end", {
       messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
     });
@@ -581,7 +653,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setBlockerInspectionOutput("not-json");
 
-    await harness.emit("turn_end", { toolResults: [{}] });
+    await harness.emit("turn_end", { hasToolResults: true });
     await harness.emit("agent_end", {
       messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
     });
