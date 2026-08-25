@@ -539,7 +539,7 @@ describe("packaged Change Implement continuation extension", () => {
       harness.setBlockerHistory(validTestBlockerHistory());
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
-      await harness.emit("turn_end");
+      await harness.emit("turn_end", { toolResults: [{}] });
       await harness.emit("agent_end", {
         messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
       });
@@ -565,7 +565,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setInspectionFails(true);
 
-    await harness.emit("turn_end");
+    await harness.emit("turn_end", { toolResults: [{}] });
     await harness.emit("agent_end", {
       messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
     });
@@ -581,7 +581,7 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setBlockerInspectionOutput("not-json");
 
-    await harness.emit("turn_end");
+    await harness.emit("turn_end", { toolResults: [{}] });
     await harness.emit("agent_end", {
       messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
     });
