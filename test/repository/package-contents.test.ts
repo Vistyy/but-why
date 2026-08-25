@@ -28,7 +28,9 @@ import {
 } from "../support/testWorkspace.js";
 
 const packageProcessTimeoutMs = 30_000;
-const packageProcessTestTimeoutMs = packageProcessTimeoutMs * 2 + 5_000;
+const packageGuidanceTestTimeoutMs = 40_000;
+const packageBaselineTestTimeoutMs = 70_000;
+const packageLinkedWorktreeTestTimeoutMs = 75_000;
 const expectedLazyCommandModules = [
   "./cli/task/commands/dependencies.js",
   "./cli/task/commands/contextDraft.js",
@@ -318,7 +320,7 @@ describe("release package boundary", () => {
         help: ["Use `by task dependencies add <task-id> --depends-on <task-id>`."],
       });
     },
-    packageProcessTestTimeoutMs,
+    packageGuidanceTestTimeoutMs,
   );
 
   it.effect(
@@ -379,7 +381,7 @@ describe("release package boundary", () => {
         ),
       );
     },
-    packageProcessTestTimeoutMs,
+    packageBaselineTestTimeoutMs,
   );
 
   it(
@@ -414,7 +416,7 @@ describe("release package boundary", () => {
         join(dirname(linkedWorktree), `${basename(linkedWorktree)}-worktrees`),
       );
     },
-    packageProcessTestTimeoutMs,
+    packageLinkedWorktreeTestTimeoutMs,
   );
 
   it.effect(

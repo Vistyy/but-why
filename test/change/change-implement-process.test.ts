@@ -13,6 +13,8 @@ import { createChangeImplementFixture } from "../support/changeImplementFixture.
 import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
+const changeImplementProcessTestTimeoutMs = 40_000;
+
 describe("compiled Candidate executable stdin and Herdr boundary", () => {
   it.effect(
     "forwards piped stdin through the compiled Candidate executable to Herdr",
@@ -119,6 +121,6 @@ exit 1
           yield* Effect.promise(server.stop);
         }
       }),
-    90_000,
+    changeImplementProcessTestTimeoutMs,
   );
 });
