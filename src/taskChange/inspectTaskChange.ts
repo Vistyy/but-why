@@ -29,12 +29,10 @@ export const queryTaskChangeProjection = (
     const change = yield* dependencies.changes.getChangeById(link.changeId);
     if (change === undefined) return null;
     if (change.acceptanceContext === null) {
-      return yield* Effect.fail(
-        new RepositoryPersistedDataInvalid({
-          operationName: "read Task Change projection",
-          cause: new Error("Linked Change has no Acceptance Context"),
-        }),
-      );
+      return yield* new RepositoryPersistedDataInvalid({
+        operationName: "read Task Change projection",
+        cause: new Error("Linked Change has no Acceptance Context"),
+      });
     }
     if (change.state === "closed") return { id: change.id };
     if (change.activeBlocker !== null) return { id: change.id, activity: "blocked" };

@@ -41,9 +41,9 @@ const persistenceFor = (overrides: {
 }): ValidationRunAbandonmentPort => ({
   getAbandonmentContext: () => Effect.succeed(abandonmentContext),
   getRunById: () => Effect.succeed(runningRun),
-  recordToolingFailure: overrides.recordToolingFailure ?? (() => Effect.succeed(undefined)),
-  recordWorkspaceCleanup: overrides.recordWorkspaceCleanup ?? (() => Effect.succeed(undefined)),
-  abandon: overrides.abandon ?? (() => Effect.succeed(undefined)),
+  recordToolingFailure: overrides.recordToolingFailure ?? (() => Effect.void),
+  recordWorkspaceCleanup: overrides.recordWorkspaceCleanup ?? (() => Effect.void),
+  abandon: overrides.abandon ?? (() => Effect.void),
 });
 
 describe("Validation Run abandonment cleanup seam", () => {

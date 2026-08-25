@@ -381,8 +381,6 @@ const submitTaskReview = (
                   } as const;
                 }
               }
-              const history = yield* input.persistence.listForTask(taskId);
-              const previous = history.length < 2 ? undefined : history.at(-2);
               const systemPrompt = buildTaskReviewerSystemPrompt(resolvedPolicy.policy.snapshot);
               const prompt = buildTaskReviewerPrompt({
                 proposal: admitted.proposal,
@@ -419,11 +417,7 @@ const submitTaskReview = (
                 decodeOutput,
                 systemPrompt,
                 prompt,
-                continuationPrompt: buildTaskReviewContinuationPrompt({
-                  previousProposal: previous?.proposal,
-                  currentPrompt: prompt,
-                  currentProposal: admitted.proposal,
-                }),
+                continuationPrompt: buildTaskReviewContinuationPrompt(prompt),
                 commandCwd: active.worktreePath,
                 resourceRoot: active.worktreePath,
                 profile: resolvedPolicy.policy.profile,
@@ -833,38 +827,8 @@ export const abandonTaskReview = (
       : abandoned;
   });
 
-const buildTaskReviewContinuationPrompt = (input: {
-  readonly previousProposal: TaskReviewRecord["proposal"] | undefined;
-  readonly currentProposal: TaskReviewRecord["proposal"];
-  readonly currentPrompt: string;
-}): string =>
+const buildTaskReviewContinuationPrompt = (currentPrompt: string): string =>
   [
     "Continue the compatible Task Agent Session with the complete current proposal below.",
-    "Deterministic proposal diff from the most recent prior Review:",
-    JSON.stringify({
-      previous: input.previousProposal ?? null,
-      current: input.currentProposal,
-      changed: proposalDiff(input.previousProposal, input.currentProposal),
-    }),
-    "",
-    input.currentPrompt,
-  ].join("\n");
-
-const proposalDiff = (
-  previous: TaskReviewRecord["proposal"] | undefined,
-  current: TaskReviewRecord["proposal"],
-) => ({
-  title:
-    previous === undefined || previous.title === current.title
-      ? null
-      : { before: previous.title, after: current.title },
-  description:
-    previous === undefined || previous.description === current.description
-      ? null
-      : { before: previous.description, after: current.description },
-  dependencyIds:
-    previous === undefined ||
-    JSON.stringify(previous.dependencyIds) === JSON.stringify(current.dependencyIds)
-      ? null
-      : { before: previous.dependencyIds, after: current.dependencyIds },
-});
+    currentPrompt,
+  ].join("\n\n");
