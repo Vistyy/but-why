@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { parseTaggedReviewerTextOutput } from "../../agent/reviewerOutputWire.js";
 import {
   type AgentEnvironmentCommand,
   repoAgentEnvironment,
@@ -16,6 +15,7 @@ import {
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
+import { parseTaggedReviewerTextOutput } from "../../agent/reviewerOutputWire.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";

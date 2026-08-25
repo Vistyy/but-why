@@ -10,11 +10,11 @@ import type {
   ReviewerProcessExecutor,
   ReviewerProcessResult,
 } from "../../src/agent/reviewerExecution.js";
-import { parseTaggedReviewerTextOutput } from "../../src/agent/reviewerOutputWire.js";
 import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
 } from "../../src/agent/reviewerOutput.js";
+import { parseTaggedReviewerTextOutput } from "../../src/agent/reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/reviewerPrompts/reviewerPromptSupport.js";
 
 const decodeEmptyFindings = (output: unknown) =>
