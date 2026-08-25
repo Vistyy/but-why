@@ -849,7 +849,21 @@ const settleSimplificationAdvice = (
     }
   }).pipe(Effect.asVoid);
 
-type AdviceInvocationRow = AgentInvocationRow;
+const agentInvocationProjection = `
+  invocation.id, continuation.agent_session_id AS agentSessionId,
+  invocation.continuation_id AS continuationId, invocation.created_at AS createdAt,
+  invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
+  invocation.input_tokens AS inputTokens, invocation.cached_input_tokens AS cachedInputTokens,
+  invocation.cache_write_tokens AS cacheWriteTokens, invocation.output_tokens AS outputTokens,
+  invocation.total_tokens AS totalTokens, continuation.harness, continuation.provider,
+  continuation.model, continuation.thinking, continuation.transcript_path AS transcriptPath,
+  continuation.unusable_reason AS unusableReason
+`;
+
+const agentInvocationJoins = `
+  FROM agent_invocations AS invocation
+  JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+`;
 
 const readSimplificationAdviceAttempt = (
   sql: SqlClient.SqlClient,
@@ -875,19 +889,10 @@ const readSimplificationAdviceAttempt = (
     const invocations =
       attempt.agentInvocationId === null
         ? []
-        : yield* sql<AdviceInvocationRow>`
-            SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
-              invocation.continuation_id AS continuationId, invocation.created_at AS createdAt,
-              invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
-              invocation.input_tokens AS inputTokens, invocation.cached_input_tokens AS cachedInputTokens,
-              invocation.cache_write_tokens AS cacheWriteTokens, invocation.output_tokens AS outputTokens,
-              invocation.total_tokens AS totalTokens, continuation.harness, continuation.provider,
-              continuation.model, continuation.thinking, continuation.transcript_path AS transcriptPath,
-              continuation.unusable_reason AS unusableReason
-            FROM agent_invocations AS invocation
-            JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-            WHERE invocation.id = ${attempt.agentInvocationId}
-          `;
+        : yield* sql.unsafe<AgentInvocationRow>(
+            `SELECT ${agentInvocationProjection} ${agentInvocationJoins} WHERE invocation.id = ?`,
+            [attempt.agentInvocationId],
+          );
     return yield* Effect.try({
       try: () => {
         const configuration =
@@ -938,28 +943,16 @@ const readSimplificationAdviceAttempt = (
     });
   });
 
-const readAgentInvocations = (
-  sql: SqlClient.SqlClient,
-  reviewId: number,
-) => sql<AgentInvocationRow>`
-  SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
-    invocation.continuation_id AS continuationId,
-    invocation.created_at AS createdAt, invocation.settled_at AS settledAt,
-    invocation.settlement_kind AS settlementKind,
-    invocation.input_tokens AS inputTokens,
-    invocation.cached_input_tokens AS cachedInputTokens,
-    invocation.cache_write_tokens AS cacheWriteTokens,
-    invocation.output_tokens AS outputTokens,
-    invocation.total_tokens AS totalTokens,
-    continuation.harness, continuation.provider, continuation.model, continuation.thinking,
-    continuation.transcript_path AS transcriptPath,
-    continuation.unusable_reason AS unusableReason
-  FROM task_review_agent_invocations AS link
-  JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
-  JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-  WHERE link.task_review_id = ${reviewId}
-  ORDER BY invocation.id ASC
-`;
+const readAgentInvocations = (sql: SqlClient.SqlClient, reviewId: number) =>
+  sql.unsafe<AgentInvocationRow>(
+    `SELECT ${agentInvocationProjection}
+      FROM task_review_agent_invocations AS link
+      JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+      WHERE link.task_review_id = ?
+      ORDER BY invocation.id ASC`,
+    [reviewId],
+  );
 
 const linkAgentInvocation = (
   sql: SqlClient.SqlClient,
