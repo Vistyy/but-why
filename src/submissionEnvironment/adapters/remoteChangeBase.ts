@@ -59,7 +59,11 @@ const selectPublicationRemote = (
       return configuredUrl.ok && isGitHubRemoteUrl(configuredUrl.stdout);
     });
   if (remoteNames.length === 0) return { ok: false, code: "publication_remote_missing" };
-  if (remoteNames.length === 1) return { ok: true, remoteName: remoteNames[0] as string };
+  if (remoteNames.length === 1) {
+    const [remoteName] = remoteNames;
+    if (remoteName === undefined) return { ok: false, code: "publication_remote_missing" };
+    return { ok: true, remoteName };
+  }
   const upstreamRemote = invokingBranchUpstreamRemote(cwd);
   if (upstreamRemote !== undefined && remoteNames.includes(upstreamRemote)) {
     return { ok: true, remoteName: upstreamRemote };
