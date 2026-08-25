@@ -28,9 +28,58 @@ type CommandResult = {
   output: string;
 };
 
+type StartedCommand = {
+  readonly child: ReturnType<typeof startTestProcess>;
+  readonly closed: boolean;
+  readonly done: Promise<CommandResult>;
+};
+
+const awaitProcessDone = (process: StartedCommand, description: string): Promise<CommandResult> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    process.done,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(`Timed out after ${settlementDeadlineMs}ms waiting for ${description}.`),
+          ),
+        settlementDeadlineMs,
+      );
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+};
+
+const signalProcessGroup = (process: StartedCommand, signal: NodeJS.Signals): void => {
+  if (process.child.pid === undefined) {
+    process.child.kill(signal);
+    return;
+  }
+  try {
+    globalThis.process.kill(-process.child.pid, signal);
+  } catch {
+    process.child.kill(signal);
+  }
+};
+
+const stopProcess = async (process: StartedCommand, description: string): Promise<void> => {
+  if (process.closed) return;
+  signalProcessGroup(process, "SIGTERM");
+  try {
+    await awaitProcessDone(process, description);
+  } catch (error) {
+    signalProcessGroup(process, "SIGKILL");
+    await awaitProcessDone(process, `${description} after SIGKILL`);
+    throw error;
+  }
+};
+
 const startRunner = (lockFile: string, args: string[]) => {
   const child = startTestProcess("bash", [runner, ...args], {
     cwd: dirname(lockFile),
+    detached: true,
     env: {
       BY_CAPACITY_LOCK_FILE: lockFile,
       BY_CAPACITY_LOCK_HELD: "0",
@@ -43,11 +92,18 @@ const startRunner = (lockFile: string, args: string[]) => {
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
+  let closed = false;
   const done = new Promise<CommandResult>((resolveResult) => {
-    child.on("close", (status) => resolveResult({ status, output }));
+    child.on("close", (status) => {
+      closed = true;
+      resolveResult({ status, output });
+    });
   });
   return {
     child,
+    get closed() {
+      return closed;
+    },
     done,
     get output() {
       return output;
@@ -55,10 +111,14 @@ const startRunner = (lockFile: string, args: string[]) => {
   };
 };
 
-const runRunner = async (lockFile: string, args: string[]): Promise<CommandResult> => {
+const runRunner = async (
+  lockFile: string,
+  args: string[],
+  description: string,
+): Promise<CommandResult> => {
   const runnerProcess = startRunner(lockFile, args);
   try {
-    return await settleWithinDeadline(runnerProcess.done, "runner workload settlement");
+    return await awaitProcessDone(runnerProcess, description);
   } finally {
     await stopRunner(runnerProcess);
   }
@@ -86,11 +146,18 @@ const startJust = (
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
+  let closed = false;
   const done = new Promise<CommandResult>((resolveResult) => {
-    child.on("close", (status) => resolveResult({ status, output }));
+    child.on("close", (status) => {
+      closed = true;
+      resolveResult({ status, output });
+    });
   });
   return {
     child,
+    get closed() {
+      return closed;
+    },
     done,
     get output() {
       return output;
@@ -103,26 +170,22 @@ const runJust = async (lockFile: string, args: string[]): Promise<CommandResult>
     PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
   });
   try {
-    return await settleWithinDeadline(justProcess.done, "Just workload settlement");
+    return await awaitProcessDone(justProcess, "Just workload settlement");
   } finally {
     await stopJust(justProcess);
   }
 };
 
-const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
-  if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
-  await settleWithinDeadline(runnerProcess.done, "runner settlement after stop");
-};
+const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> =>
+  stopProcess(runnerProcess, "runner settlement after stop");
 
 const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Signals): void => {
   if (justProcess.child.pid === undefined) throw new Error("The Just process has no PID");
   process.kill(-justProcess.child.pid, signal);
 };
 
-const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> => {
-  if (justProcess.child.exitCode === null) signalJust(justProcess, "SIGTERM");
-  await settleWithinDeadline(justProcess.done, "Just settlement after stop");
-};
+const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> =>
+  stopProcess(justProcess, "Just settlement after stop");
 
 const waitForFile = (file: string): Promise<string> =>
   observeUntil({
@@ -475,14 +538,16 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
 
-    const failed = await settleWithinDeadline(
-      runRunner(lockFile, ["test", "sh", "-c", "exit 7"]),
+    const failed = await runRunner(
+      lockFile,
+      ["test", "sh", "-c", "exit 7"],
       "failed workload settlement",
     );
     expect(failed.status).toBe(7);
 
-    const succeeded = await settleWithinDeadline(
-      runRunner(lockFile, ["test", "sh", "-c", "exit 0"]),
+    const succeeded = await runRunner(
+      lockFile,
+      ["test", "sh", "-c", "exit 0"],
       "successful workload settlement",
     );
     expect(succeeded.status).toBe(0);
@@ -573,8 +638,9 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
     const nestedCommand = `${runner} 'nested internal' sh -c 'printf nested-success'`;
-    const result = await settleWithinDeadline(
-      runRunner(lockFile, ["test", "sh", "-c", nestedCommand]),
+    const result = await runRunner(
+      lockFile,
+      ["test", "sh", "-c", nestedCommand],
       "nested workload settlement",
     );
     expect(result.status).toBe(0);
