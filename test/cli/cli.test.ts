@@ -97,9 +97,12 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("classifies Change Submit as a long-running command in generated help", () =>
+  it.effect.each([
+    ["Task Submit", ["task", "submit", "--help"]],
+    ["Change Submit", ["change", "submit", "--help"]],
+  ] as const)("classifies %s as a long-running command in generated help", ([_name, args]) =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["change", "submit", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, args);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");

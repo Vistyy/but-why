@@ -260,7 +260,7 @@ const taskRenameCommand = withCliHandler(
     ),
 );
 const taskSubmitCommand = withCliHandler(
-  leaf("submit", "Submit a New Task for review.", {
+  leaf("submit", "Submit a New Task for review. This is a long-running command.", {
     taskId: taskIdArgument,
   }),
   (values, environment) =>
