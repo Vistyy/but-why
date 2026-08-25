@@ -43,7 +43,7 @@ describe("host interruption boundary", () => {
       Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(() => Effect.sync(() => events.push("finalized")));
-          yield* Effect.never;
+          return yield* Effect.never;
         }),
       ),
       (result) => {
