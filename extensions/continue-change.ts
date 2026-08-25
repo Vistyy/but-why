@@ -115,6 +115,10 @@ type InspectionResult =
     }
   | { readonly ok: false; readonly transient: boolean; readonly message: string };
 
+type BlockerInspectionResult =
+  | { readonly ok: true; readonly blockerHistory: BlockerHistory }
+  | { readonly ok: false; readonly message: string };
+
 const stateEntry = "but-why-change-continuation";
 const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
@@ -476,6 +480,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   let settling = false;
   let pauseGeneration = 0;
   let shutDown = false;
+  let blockerAbortRequested = false;
   let activeInspectionAbortController: AbortController | undefined;
   let pollingTimer: ReturnType<typeof setTimeout> | undefined;
   let watcherDisplay: WatcherDisplay = { kind: "implementing", pullRequestUrl: null };
@@ -641,6 +646,35 @@ export default function continueChange(pi: ExtensionAPI): void {
     cwd: string,
     signal?: AbortSignal,
   ): Promise<RunResult> => run("by", commandArgs, cwd, signal);
+
+  const inspectBlockerHistory = async (
+    ctx: ExtensionContext,
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<BlockerInspectionResult> => {
+    const result = await inspectCommand(["change", "blocker", "list", id], ctx.cwd, signal);
+    if (!result.ok) {
+      return {
+        ok: false,
+        message:
+          result.stdout.trim() === ""
+            ? result.message
+            : `${result.message}: ${result.stdout.trim().slice(0, 500)}`,
+      };
+    }
+    try {
+      const value = JSON.parse(result.stdout) as unknown;
+      if (!isBlockerHistory(value)) {
+        return {
+          ok: false,
+          message: "But Why inspection returned an unsupported blocker history shape",
+        };
+      }
+      return { ok: true, blockerHistory: value };
+    } catch {
+      return { ok: false, message: "But Why inspection returned malformed blocker JSON" };
+    }
+  };
 
   const inspect = async (
     ctx: ExtensionContext,
@@ -1200,7 +1234,33 @@ export default function continueChange(pi: ExtensionAPI): void {
     activeInspectionAbortController = undefined;
   });
 
-  pi.on("agent_end", (event, ctx) => {
+  pi.on("turn_end", async (_event, ctx) => {
+    if (changeId === undefined || shutDown || persisted?.paused) return;
+    const observed = await inspectBlockerHistory(ctx, changeId, ctx.signal);
+    if (shutDown || persisted?.paused) return;
+    if (!observed.ok) {
+      blockerAbortRequested = true;
+      pause(ctx);
+      showWatcher(ctx, { kind: "inspection-failed" });
+      ctx.ui.notify(
+        `But Why trusted blocker inspection failed and automatic continuation is paused: ${observed.message}`,
+        "warning",
+      );
+      ctx.abort();
+      return;
+    }
+    if (observed.blockerHistory.active !== null) {
+      blockerAbortRequested = true;
+      showWatcher(ctx, { kind: "blocked" });
+      scheduleBlockedPolling(ctx);
+      ctx.abort();
+    }
+  });
+
+  pi.on("agent_end", async (event, ctx) => {
+    const blockerAbortWasRequested = blockerAbortRequested;
+    blockerAbortRequested = false;
+    if (blockerAbortWasRequested) return;
     if (
       event.messages.some(
         (message) => message.role === "assistant" && message.stopReason === "aborted",

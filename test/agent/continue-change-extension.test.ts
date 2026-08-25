@@ -64,10 +64,12 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   const widgets: Array<{ readonly name: string; readonly value: unknown }> = [];
   let currentSnapshot: unknown = snapshot();
   let currentBlockerHistory: TestBlockerHistory = { blockers: [], resolutions: [], active: null };
+  let blockerInspectionOutput: string | undefined;
   let inspectionFails = false;
   let inspectionGate: Promise<void> | undefined;
   let releaseInspection: (() => void) | undefined;
   let idle = true;
+  let abortCount = 0;
   const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   const execSignals: Array<AbortSignal | undefined> = [];
   const api = {
@@ -108,7 +110,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       }
       if (installedCli && inspectionFails) return { stdout: "", stderr: "", code: 1, killed: true };
       if (installedCli && args.includes("blocker"))
-        return result(JSON.stringify(currentBlockerHistory));
+        return result(blockerInspectionOutput ?? JSON.stringify(currentBlockerHistory));
       if (installedCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
@@ -121,6 +123,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     cwd,
     sessionManager: { getBranch: () => [...entries] },
     isIdle: () => idle,
+    abort: () => {
+      abortCount += 1;
+    },
     ui: {
       notify(message: string) {
         notifications.push(message);
@@ -150,6 +155,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     getAbortedExecCount() {
       return execSignals.filter((signal) => signal?.aborted).length;
     },
+    getAbortCount() {
+      return abortCount;
+    },
     setSnapshot(next: unknown) {
       currentSnapshot = next;
     },
@@ -167,6 +175,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     },
     setBlockerHistory(next: TestBlockerHistory) {
       currentBlockerHistory = next;
+    },
+    setBlockerInspectionOutput(next: string | undefined) {
+      blockerInspectionOutput = next;
     },
     setIdle(value: boolean) {
       idle = value;
@@ -506,6 +517,72 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toEqual([]);
     expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
+  });
+
+  it("aborts after a turn when trusted blocker state is active without pausing the session", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+      await harness.emit("turn_end");
+      await harness.emit("agent_end", {
+        messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+      });
+
+      expect(harness.getAbortCount()).toBe(1);
+      expect(harness.sent).toEqual([]);
+      expect(harness.entries.at(-1)).toMatchObject({ data: { paused: false } });
+      expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
+
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [{ blockerId: 1, content: "Continue safely." }],
+        active: null,
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.sent).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts and pauses for explicit recovery when trusted blocker inspection fails", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setInspectionFails(true);
+
+    await harness.emit("turn_end");
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+    });
+
+    expect(harness.getAbortCount()).toBe(1);
+    expect(harness.sent).toEqual([]);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { paused: true } });
+    expect(harness.latestWidgetText()).toEqual(["! Change inspection failed"]);
+  });
+
+  it("aborts and pauses when trusted blocker JSON cannot be decoded", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setBlockerInspectionOutput("not-json");
+
+    await harness.emit("turn_end");
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+    });
+
+    expect(harness.getAbortCount()).toBe(1);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { paused: true } });
+    expect(harness.latestWidgetText()).toEqual(["! Change inspection failed"]);
   });
 
   it("handles an existing Resolution when a new bound session starts unpaused", async () => {
