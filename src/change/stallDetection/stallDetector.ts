@@ -4,6 +4,9 @@ import { Data, Effect, Schema } from "effect";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type { ValidationRunFindingRecord } from "../validationRun/validationRun.js";
 
+export const stallDetectorResponseContract =
+  '{"decision":"continue"|"stop","reason":"brief reason"}';
+
 export const stallDetectorPrompt = `You are the Stall Detector for a linked Change.
 
 \`continue\` means the Findings remain concrete correction work and the history does not establish that the implementation approach is failing.
@@ -16,11 +19,8 @@ Base the relationship only on concrete details that identify the accepted constr
 Temporal or evaluative wording in a Finding, including \`still\`, \`remain\`, \`again\`, \`recurring\`, \`equivalent\`, or \`broader\`, is not evidence of repetition or non-convergence by itself.
 
 Return only:
-{"decision":"continue"|"stop","reason":"brief reason"}
+${stallDetectorResponseContract}
 Do not add fields.`;
-
-export const stallDetectorResponseContract =
-  '{"decision":"continue"|"stop","reason":"brief reason"}';
 
 export type StallDetectorPolicy = {
   readonly prompt: string;
