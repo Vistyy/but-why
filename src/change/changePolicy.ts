@@ -77,6 +77,11 @@ export const resolveChangePolicyDefinitions = (
     });
   }
 
+  const [firstCheck, ...remainingChecks] = checks;
+  if (firstCheck === undefined) {
+    return { ok: false, message: "Repo config must define at least one validation.checks entry." };
+  }
+
   const prepare = config.prepare;
   return {
     ok: true,
@@ -88,7 +93,7 @@ export const resolveChangePolicyDefinitions = (
               command: prepare.command,
               timeoutSeconds: prepare.timeoutSeconds ?? defaultCommandTimeoutSeconds,
             },
-      checks: checks as [ChangeCheck, ...ChangeCheck[]],
+      checks: [firstCheck, ...remainingChecks],
     },
   };
 };
