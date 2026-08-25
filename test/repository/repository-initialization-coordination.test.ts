@@ -343,11 +343,7 @@ describe("Shared Repository State initialization coordination", () => {
               ORDER BY migration_id
             `,
           );
-          expect(migrations).toEqual([
-            { migrationId: 1 },
-            { migrationId: 2 },
-            { migrationId: 3 },
-          ]);
+          expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
         }).pipe(
           Effect.provide(
             repositorySqlLayer({
