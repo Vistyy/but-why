@@ -412,24 +412,15 @@ const submitTaskReview = (
                 sessionStorageRoot: input.agentSessionStorageRoot,
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
                 afterInvocation: ({ result }) =>
-                  Effect.gen(function* () {
-                    const restored = yield* Effect.either(
-                      Effect.uninterruptible(
-                        input.restoreWorkspace({
-                          commandExecutor: active.commandExecutor,
-                          commandCwd: active.worktreePath,
-                          expectedCommitSha: base.base.commit,
-                          workspaceIdentity: {
-                            repositoryRoot: input.repositoryRoot,
-                            repositoryCommonDirectory: input.repositoryCommonDirectory,
-                            workspaceId: taskReviewWorkspaceId(reviewId),
-                          },
-                        }),
-                      ),
-                    );
-                    return restored._tag === "Right"
-                      ? result
-                      : taskReviewerIntegrityFailureResult(result, restored.left);
+                  restoreTaskReviewWorkspaceAfterInvocation({
+                    result,
+                    restoreWorkspace: input.restoreWorkspace,
+                    commandExecutor: active.commandExecutor,
+                    commandCwd: active.worktreePath,
+                    expectedCommitSha: base.base.commit,
+                    repositoryRoot: input.repositoryRoot,
+                    repositoryCommonDirectory: input.repositoryCommonDirectory,
+                    workspaceId: taskReviewWorkspaceId(reviewId),
                   }),
                 settleDomain: ({ result }) =>
                   Effect.gen(function* () {
@@ -606,47 +597,15 @@ const runTaskSimplificationAdvice = (input: {
       sessionStorageRoot: input.input.agentSessionStorageRoot,
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
       afterInvocation: ({ result }) =>
-        Effect.gen(function* () {
-          const restored = yield* Effect.either(
-            Effect.uninterruptible(
-              input.input.restoreWorkspace({
-                commandExecutor: input.active.commandExecutor,
-                commandCwd: input.active.worktreePath,
-                expectedCommitSha: input.base.commit,
-                workspaceIdentity: {
-                  repositoryRoot: input.input.repositoryRoot,
-                  repositoryCommonDirectory: input.input.repositoryCommonDirectory,
-                  workspaceId: taskReviewWorkspaceId(input.reviewId),
-                },
-              }),
-            ),
-          );
-          return restored._tag === "Right"
-            ? result
-            : ({
-                ok: false as const,
-                failure: {
-                  kind: "process_execution" as const,
-                  operationName: "verify_task_review_workspace",
-                  message: restored.left.message,
-                  sessionUsability: "unknown" as const,
-                  ...(result.sessionReference === undefined
-                    ? {}
-                    : { sessionReference: result.sessionReference }),
-                  ...(result.sessionFilePath === undefined
-                    ? {}
-                    : { sessionFilePath: result.sessionFilePath }),
-                },
-                sessionUsability: "unknown" as const,
-                attempts: result.attempts,
-                stdout: result.stdout,
-                ...(result.sessionReference === undefined
-                  ? {}
-                  : { sessionReference: result.sessionReference }),
-                ...(result.sessionFilePath === undefined
-                  ? {}
-                  : { sessionFilePath: result.sessionFilePath }),
-              } satisfies ReviewerAgentResult<TaskSimplificationAdviceOutput>);
+        restoreTaskReviewWorkspaceAfterInvocation({
+          result,
+          restoreWorkspace: input.input.restoreWorkspace,
+          commandExecutor: input.active.commandExecutor,
+          commandCwd: input.active.worktreePath,
+          expectedCommitSha: input.base.commit,
+          repositoryRoot: input.input.repositoryRoot,
+          repositoryCommonDirectory: input.input.repositoryCommonDirectory,
+          workspaceId: taskReviewWorkspaceId(input.reviewId),
         }),
       settleDomain: ({ result }) =>
         Effect.succeed(
@@ -686,26 +645,60 @@ const taskReviewIntegrityFailure = (
   message: failure.message,
 });
 
-const taskReviewerIntegrityFailureResult = (
-  result: ReviewerAgentResult<TaskReviewerOutput>,
-  failure: DisposableWorkspaceIntegrityFailed | { readonly message: string },
-): ReviewerAgentResult<TaskReviewerOutput> => ({
-  ok: false,
-  failure: {
-    kind: "process_execution",
-    operationName: "verify_task_review_workspace",
-    message: failure.message,
-    sessionUsability: "unknown",
-    ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
-    ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
-  },
-  sessionUsability: "unknown",
-  attempts: result.attempts,
-  stdout: result.stdout,
-  ...(result.invocationUsage === undefined ? {} : { invocationUsage: result.invocationUsage }),
-  ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
-  ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
-});
+const restoreTaskReviewWorkspaceAfterInvocation = <Output>(input: {
+  readonly result: ReviewerAgentResult<Output>;
+  readonly restoreWorkspace: RestoreDisposableWorkspace;
+  readonly commandExecutor: WorkspaceCommandExecutor;
+  readonly commandCwd: string;
+  readonly expectedCommitSha: string;
+  readonly repositoryRoot: string;
+  readonly repositoryCommonDirectory: string;
+  readonly workspaceId: string;
+}): Effect.Effect<ReviewerAgentResult<Output>> =>
+  Effect.gen(function* () {
+    const restored = yield* Effect.either(
+      Effect.uninterruptible(
+        input.restoreWorkspace({
+          commandExecutor: input.commandExecutor,
+          commandCwd: input.commandCwd,
+          expectedCommitSha: input.expectedCommitSha,
+          workspaceIdentity: {
+            repositoryRoot: input.repositoryRoot,
+            repositoryCommonDirectory: input.repositoryCommonDirectory,
+            workspaceId: input.workspaceId,
+          },
+        }),
+      ),
+    );
+    if (restored._tag === "Right") return input.result;
+    return {
+      ok: false as const,
+      failure: {
+        kind: "process_execution" as const,
+        operationName: "verify_task_review_workspace",
+        message: restored.left.message,
+        sessionUsability: "unknown" as const,
+        ...(input.result.sessionReference === undefined
+          ? {}
+          : { sessionReference: input.result.sessionReference }),
+        ...(input.result.sessionFilePath === undefined
+          ? {}
+          : { sessionFilePath: input.result.sessionFilePath }),
+      },
+      sessionUsability: "unknown" as const,
+      attempts: input.result.attempts,
+      stdout: input.result.stdout,
+      ...(input.result.invocationUsage === undefined
+        ? {}
+        : { invocationUsage: input.result.invocationUsage }),
+      ...(input.result.sessionReference === undefined
+        ? {}
+        : { sessionReference: input.result.sessionReference }),
+      ...(input.result.sessionFilePath === undefined
+        ? {}
+        : { sessionFilePath: input.result.sessionFilePath }),
+    } satisfies ReviewerAgentResult<Output>;
+  });
 
 const taskReviewPolicyFromSnapshot = (
   snapshot: TaskReviewPolicySnapshot,

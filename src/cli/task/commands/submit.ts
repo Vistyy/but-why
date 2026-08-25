@@ -2,11 +2,9 @@ import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
-import type { StructuredValue } from "../../../output/structured.js";
 import type { TaskReviewRepositorySubmitResult } from "../../../task/composition/loadTaskReviewUseCases.js";
-import { agentInvocationView } from "../../agentInvocationView.js";
 import { type TaskCommandEnvironment, withTaskReviewSubmission } from "../taskCliSupport.js";
-import { taskReviewProfileView } from "./taskReviewView.js";
+import { taskSimplificationAdviceAttemptView } from "./taskReviewView.js";
 export type TaskSubmitCommand = {
   readonly taskId: string;
 };
@@ -28,31 +26,12 @@ const simplificationAdviceView = (result: TaskReviewRepositorySubmitResult) => {
     return { simplificationAdvice: result.simplificationAdvice };
   }
   if (result.ok && result.simplificationAdviceAttempt != null) {
-    return { simplificationAdvice: adviceAttemptView(result.simplificationAdviceAttempt) };
+    return {
+      simplificationAdvice: taskSimplificationAdviceAttemptView(result.simplificationAdviceAttempt),
+    };
   }
   return {};
 };
-
-const adviceAttemptView = (
-  attempt: NonNullable<
-    Extract<TaskReviewRepositorySubmitResult, { readonly ok: true }>["simplificationAdviceAttempt"]
-  >,
-): StructuredValue => ({
-  state: attempt.state,
-  advice: attempt.advice,
-  unavailable: attempt.unavailable,
-  configuration:
-    attempt.configuration === null
-      ? null
-      : {
-          profile: taskReviewProfileView(attempt.configuration.profile),
-          builtInInstructions: attempt.configuration.builtInInstructions,
-        },
-  agentSession: {
-    id: attempt.agentSessionId ?? null,
-    invocations: (attempt.agentInvocations ?? []).map(agentInvocationView),
-  },
-});
 
 const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string): CliResult => {
   if (!result.ok && result.code === "remote_tasks_not_supported") {

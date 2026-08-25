@@ -4,6 +4,7 @@ import type {
   TaskReviewRecord,
 } from "../../../task/review/taskReview.js";
 import type { TaskReviewIdentityInspection } from "../../../task/review/taskReviewUseCases.js";
+import type { TaskSimplificationAdviceAttempt } from "../../../task/review/taskSimplificationAdvice.js";
 import { agentInvocationView } from "../../agentInvocationView.js";
 
 export const taskReviewHistoryView = (review: TaskReviewRecord) => ({
@@ -66,23 +67,7 @@ export const taskReviewView = (
         simplificationAdviceAttempt:
           review.simplificationAdviceAttempt === null
             ? null
-            : {
-                state: review.simplificationAdviceAttempt.state,
-                advice: review.simplificationAdviceAttempt.advice,
-                unavailable: review.simplificationAdviceAttempt.unavailable,
-                configuration:
-                  review.simplificationAdviceAttempt.configuration === null
-                    ? null
-                    : simplificationAdvicePolicyView(
-                        review.simplificationAdviceAttempt.configuration,
-                      ),
-                agentSession: {
-                  id: review.simplificationAdviceAttempt.agentSessionId ?? null,
-                  invocations: (review.simplificationAdviceAttempt.agentInvocations ?? []).map(
-                    agentInvocationView,
-                  ),
-                },
-              },
+            : taskSimplificationAdviceAttemptView(review.simplificationAdviceAttempt),
       }),
 });
 
@@ -100,12 +85,21 @@ const taskReviewRecoveryActions = (
   ];
 };
 
-const simplificationAdvicePolicyView = (policy: {
-  readonly profile: TaskReviewPolicySnapshot["profile"];
-  readonly builtInInstructions: string;
-}) => ({
-  profile: taskReviewProfileView(policy.profile),
-  builtInInstructions: policy.builtInInstructions,
+export const taskSimplificationAdviceAttemptView = (attempt: TaskSimplificationAdviceAttempt) => ({
+  state: attempt.state,
+  advice: attempt.advice,
+  unavailable: attempt.unavailable,
+  configuration:
+    attempt.configuration === null
+      ? null
+      : {
+          profile: taskReviewProfileView(attempt.configuration.profile),
+          builtInInstructions: attempt.configuration.builtInInstructions,
+        },
+  agentSession: {
+    id: attempt.agentSessionId ?? null,
+    invocations: (attempt.agentInvocations ?? []).map(agentInvocationView),
+  },
 });
 
 const taskReviewPolicyView = (policy: TaskReviewPolicySnapshot) => ({
