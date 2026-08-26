@@ -158,7 +158,7 @@ rule:
 id: process-test-helpers-belong-to-process-boundaries
 language: TypeScript
 severity: error
-message: Do not use built CLI or process test helpers outside approved process-boundary tests because process startup is expensive; use the in-process CLI seam unless process isolation is the behavior under test.
+message: Do not use CLI process test helpers outside approved process-boundary tests because process startup is expensive; use the in-process CLI seam unless process isolation is the behavior under test.
 files:
   - test/**/*.ts
 ignores:
