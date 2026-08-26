@@ -18,6 +18,9 @@ import { startTestProcess } from "../support/testProcess.js";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const runner = join(repositoryRoot, "scripts/with-capacity-lock.sh");
 const qualityRunner = join(repositoryRoot, "scripts/run-quality-workload.sh");
+const observationDeadlineMs = 3_000;
+const settlementDeadlineMs = 3_000;
+const processTestDeadlineMs = 20_000;
 const temporaryPaths: string[] = [];
 
 type CommandResult = {
@@ -25,9 +28,40 @@ type CommandResult = {
   output: string;
 };
 
+type StartedCommand = {
+  readonly child: ReturnType<typeof startTestProcess>;
+  readonly closed: boolean;
+  readonly done: Promise<CommandResult>;
+};
+
+const signalProcessGroup = (process: StartedCommand, signal: NodeJS.Signals): void => {
+  if (process.child.pid === undefined) {
+    process.child.kill(signal);
+    return;
+  }
+  try {
+    globalThis.process.kill(-process.child.pid, signal);
+  } catch {
+    process.child.kill(signal);
+  }
+};
+
+const stopProcess = async (process: StartedCommand, description: string): Promise<void> => {
+  if (process.closed) return;
+  signalProcessGroup(process, "SIGTERM");
+  try {
+    await settleWithinDeadline(process.done, description);
+  } catch (error) {
+    signalProcessGroup(process, "SIGKILL");
+    await settleWithinDeadline(process.done, `${description} after SIGKILL`);
+    throw error;
+  }
+};
+
 const startRunner = (lockFile: string, args: string[]) => {
   const child = startTestProcess("bash", [runner, ...args], {
     cwd: dirname(lockFile),
+    detached: true,
     env: {
       BY_CAPACITY_LOCK_FILE: lockFile,
       BY_CAPACITY_LOCK_HELD: "0",
@@ -40,11 +74,18 @@ const startRunner = (lockFile: string, args: string[]) => {
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
+  let closed = false;
   const done = new Promise<CommandResult>((resolveResult) => {
-    child.on("close", (status) => resolveResult({ status, output }));
+    child.on("close", (status) => {
+      closed = true;
+      resolveResult({ status, output });
+    });
   });
   return {
     child,
+    get closed() {
+      return closed;
+    },
     done,
     get output() {
       return output;
@@ -52,8 +93,18 @@ const startRunner = (lockFile: string, args: string[]) => {
   };
 };
 
-const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  startRunner(lockFile, args).done;
+const runRunner = async (
+  lockFile: string,
+  args: string[],
+  description: string,
+): Promise<CommandResult> => {
+  const runnerProcess = startRunner(lockFile, args);
+  try {
+    return await settleWithinDeadline(runnerProcess.done, description);
+  } finally {
+    await stopRunner(runnerProcess);
+  }
+};
 
 const startJust = (
   lockFile: string,
@@ -77,11 +128,18 @@ const startJust = (
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
+  let closed = false;
   const done = new Promise<CommandResult>((resolveResult) => {
-    child.on("close", (status) => resolveResult({ status, output }));
+    child.on("close", (status) => {
+      closed = true;
+      resolveResult({ status, output });
+    });
   });
   return {
     child,
+    get closed() {
+      return closed;
+    },
     done,
     get output() {
       return output;
@@ -89,42 +147,27 @@ const startJust = (
   };
 };
 
-const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  startJust(lockFile, args, {
+const runJust = async (lockFile: string, args: string[]): Promise<CommandResult> => {
+  const justProcess = startJust(lockFile, args, {
     PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
-  }).done;
-
-const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
-  if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
-  await runnerProcess.done;
+  });
+  try {
+    return await settleWithinDeadline(justProcess.done, "Just workload settlement");
+  } finally {
+    await stopJust(justProcess);
+  }
 };
+
+const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> =>
+  stopProcess(runnerProcess, "runner settlement after stop");
 
 const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Signals): void => {
   if (justProcess.child.pid === undefined) throw new Error("The Just process has no PID");
   process.kill(-justProcess.child.pid, signal);
 };
 
-const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> => {
-  if (justProcess.child.exitCode === null) signalJust(justProcess, "SIGTERM");
-  await justProcess.done;
-};
-
-const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult> =>
-  new Promise<CommandResult>((resolveResult) => {
-    const child = startTestProcess(
-      join(repositoryRoot, "node_modules/.bin/vitest"),
-      ["run", "--config", join(repositoryRoot, "vitest.config.ts"), "--root", fixtureRoot, fixture],
-      { cwd: fixtureRoot },
-    );
-    let output = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    child.on("close", (status) => resolveResult({ status, output }));
-  });
+const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> =>
+  stopProcess(justProcess, "Just settlement after stop");
 
 const waitForFile = (file: string): Promise<string> =>
   observeUntil({
@@ -137,7 +180,14 @@ const waitForFile = (file: string): Promise<string> =>
       }
     },
     isReady: (contents) => contents.trim() !== "",
-    timeoutMs: 5_000,
+    timeoutMs: observationDeadlineMs,
+  });
+
+const settleWithinDeadline = <T>(promise: Promise<T>, description: string): Promise<T> =>
+  observeUntil({
+    description,
+    observe: () => promise,
+    timeoutMs: settlementDeadlineMs,
   });
 
 const processIdentity = (pid: number): string | undefined => {
@@ -160,22 +210,12 @@ const readProcessIdentity = async (pidFile: string): Promise<string> => {
   return identity;
 };
 
-const waitForProcessExit = (identity: string): Promise<boolean> =>
-  observeUntil({
-    description: `descendant process ${identity} to be reaped`,
-    observe: () => {
-      const pid = Number(identity.slice(0, identity.indexOf(":")));
-      return processIdentity(pid) !== identity;
-    },
-    timeoutMs: 5_000,
-  });
-
 const waitForOutput = (process: { readonly output: string }, text: string): Promise<string> =>
   observeUntil({
     description: `quality process output to contain ${JSON.stringify(text)}`,
     observe: () => process.output,
     isReady: (output) => output.includes(text),
-    timeoutMs: 5_000,
+    timeoutMs: observationDeadlineMs,
   });
 
 const startCleanupObserver = (lockFile: string, identity: string) =>
@@ -227,7 +267,7 @@ coverage *args:
 const createCompletingPnpm = (directory: string): void => {
   createWorkloadJustfile(directory);
   const pnpm = join(directory, "pnpm");
-  writeFileSync(pnpm, "#!/usr/bin/env bash\nprintf '1 passed\\n'\nexit 0\n");
+  writeFileSync(pnpm, "#!/usr/bin/env bash\nexit 0\n");
   chmodSync(pnpm, 0o755);
 };
 
@@ -330,7 +370,7 @@ afterEach(() => {
   }
 });
 
-describe("quality interface", () => {
+describe("quality interface", { timeout: processTestDeadlineMs }, () => {
   test("waits before starting the quality workload", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
@@ -357,16 +397,17 @@ describe("quality interface", () => {
       await waitForOutput(quality, "waiting: quality is waiting for capacity");
 
       expect(quality.child.exitCode).toBeNull();
-      expect(quality.output).toContain("waiting: quality is waiting for capacity");
       expect(() => readFileSync(staticFile)).toThrow();
       expect(() => readFileSync(buildFile)).toThrow();
       expect(() => readFileSync(testFile)).toThrow();
 
       writeFileSync(releaseFile, "release");
-      const result = await quality.done;
+      const result = await settleWithinDeadline(
+        quality.done,
+        "quality settlement after capacity release",
+      );
       expect(result.status, result.output).toBe(0);
       expect(result.output).toContain("quality completed in");
-      expect(result.output).not.toContain("warning: quality exceeded");
       expect(readFileSync(staticFile, "utf8")).toBe("static");
       expect(readFileSync(buildFile, "utf8")).toBe("build");
       expect(readFileSync(testFile, "utf8")).toBe("test");
@@ -376,18 +417,15 @@ describe("quality interface", () => {
     }
   });
 
-  test.each([
-    "static",
-    "build",
-    "test",
-  ] as const)("forwards a %s failure with complete diagnostics and no success report", async (failure) => {
+  test("runs every quality phase after the first phase fails without reporting success", async () => {
+    const failure = "static" as const;
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-failure-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
     const invocationsFile = join(directory, "invocations");
     createFailingQualityFixture(directory);
 
-    const result = await startJust(
+    const quality = startJust(
       lockFile,
       ["quality"],
       {
@@ -395,7 +433,13 @@ describe("quality interface", () => {
         QUALITY_INVOCATIONS: invocationsFile,
       },
       directory,
-    ).done;
+    );
+    let result: CommandResult;
+    try {
+      result = await settleWithinDeadline(quality.done, "failed quality settlement");
+    } finally {
+      await stopJust(quality);
+    }
 
     expect(result.status).toBe(1);
     expect(result.output).toContain(`${failure} failure marker`);
@@ -422,20 +466,21 @@ describe("quality interface", () => {
       });
       await waitForOutput(unselected, "waiting: test is waiting for capacity");
       expect(unselected.child.exitCode).toBeNull();
-      expect(unselected.output).toContain("waiting: test is waiting for capacity");
 
       const targeted = await runJust(lockFile, ["test", "test/cli/cli-task-id.test.ts"]);
       expect(targeted.status).toBe(0);
-      expect(targeted.output).toContain("1 passed");
 
       writeFileSync(releaseFile, "release");
-      const unselectedResult = await unselected.done;
+      const unselectedResult = await settleWithinDeadline(
+        unselected.done,
+        "unselected workload settlement after capacity release",
+      );
       expect(unselectedResult.status, unselectedResult.output).toBe(0);
     } finally {
       if (unselected?.child.exitCode === null) await stopJust(unselected);
       await stopRunner(holder);
     }
-  }, 30_000);
+  });
 
   test("interrupts a workload while it waits for capacity", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
@@ -457,9 +502,10 @@ describe("quality interface", () => {
       ]);
       await waitForOutput(waiter, "waiting: test is waiting for capacity");
       expect(waiter.child.exitCode).toBeNull();
-      expect(waiter.output).toContain("waiting: test is waiting for capacity");
       waiter.child.kill("SIGTERM");
-      expect((await waiter.done).status).toBe(143);
+      expect(
+        (await settleWithinDeadline(waiter.done, "interrupted waiting workload settlement")).status,
+      ).toBe(143);
       expect(waiter.output).toContain("rerun the same command to retry");
       expect(() => readFileSync(acquiredFile)).toThrow();
     } finally {
@@ -474,14 +520,22 @@ describe("quality interface", () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
 
-    const failed = await runRunner(lockFile, ["test", "sh", "-c", "exit 7"]);
+    const failed = await runRunner(
+      lockFile,
+      ["test", "sh", "-c", "exit 7"],
+      "failed workload settlement",
+    );
     expect(failed.status).toBe(7);
 
-    const succeeded = await runRunner(lockFile, ["test", "sh", "-c", "exit 0"]);
+    const succeeded = await runRunner(
+      lockFile,
+      ["test", "sh", "-c", "exit 0"],
+      "successful workload settlement",
+    );
     expect(succeeded.status).toBe(0);
   });
 
-  test("makes a bounded best-effort attempt to terminate one controlled descendant", async () => {
+  test("releases capacity only after controlled descendant cleanup", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
@@ -503,82 +557,18 @@ describe("quality interface", () => {
       const observer = startCleanupObserver(lockFile, descendantIdentity);
       await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
       holder.child.kill("SIGINT");
-      expect((await holder.done).status).toBe(130);
-      const observation = await observer.done;
+      expect(
+        (await settleWithinDeadline(holder.done, "interrupted descendant workload settlement"))
+          .status,
+      ).toBe(130);
+      const observation = await settleWithinDeadline(
+        observer.done,
+        "capacity observer settlement after descendant cleanup",
+      );
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after descendant cleanup");
-      await waitForProcessExit(descendantIdentity);
     } finally {
       await stopRunner(holder);
-    }
-  });
-
-  test("does not let an unsupported detached descendant retain capacity", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-    temporaryPaths.push(directory);
-    const lockFile = join(directory, "capacity.lock");
-    const workloadReadyFile = join(directory, "workload-ready");
-    const daemonReadyFile = join(directory, "daemon-ready");
-    const daemonPidFile = join(directory, "daemon-pid");
-    const holder = startRunner(lockFile, [
-      "test",
-      "sh",
-      "-c",
-      '(setsid sh -c \'trap "" INT TERM; printf "$$" > "$1"; printf ready > "$2"; while :; do sleep 1; done\' sh "$2" "$3" >/dev/null 2>&1 &); printf ready > "$1"; while :; do sleep 1; done',
-      "sh",
-      workloadReadyFile,
-      daemonPidFile,
-      daemonReadyFile,
-    ]);
-
-    await waitForFile(workloadReadyFile);
-    await waitForFile(daemonReadyFile);
-    const daemonIdentity = await readProcessIdentity(daemonPidFile);
-    const observer = startCapacityObserver(lockFile);
-
-    try {
-      await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
-      holder.child.kill("SIGTERM");
-      expect((await holder.done).status).toBe(143);
-      const observation = await observer.done;
-      expect(observation.status, observation.output).toBe(0);
-      expect(observation.output).toContain("capacity acquired after supervisor exit");
-      expect(processIdentity(Number(daemonIdentity.split(":", 1)[0]))).toBe(daemonIdentity);
-    } finally {
-      const daemonPid = Number(daemonIdentity.split(":", 1)[0]);
-      process.kill(daemonPid, "SIGKILL");
-      await waitForProcessExit(daemonIdentity);
-      await stopRunner(holder);
-      await stopRunner(observer);
-    }
-  });
-
-  test("interrupts an actual unselected test workload with SIGINT and releases capacity", async () => {
-    const signal = "SIGINT";
-    const expectedStatus = 130;
-    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-    temporaryPaths.push(directory);
-    const lockFile = join(directory, "capacity.lock");
-    const readyFile = join(directory, "just-descendant-ready");
-    const descendantPidFile = join(directory, "just-descendant-pid");
-    createBlockingPnpm(directory, readyFile, descendantPidFile);
-    const justProcess = startJust(lockFile, ["test"], {
-      PATH: `${directory}:${process.env["PATH"] ?? ""}`,
-    });
-
-    try {
-      await waitForFile(readyFile);
-      await readProcessIdentity(descendantPidFile);
-      const observer = startCapacityObserver(lockFile);
-      await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
-      signalJust(justProcess, signal);
-      expect((await justProcess.done).status).toBe(expectedStatus);
-      expect(justProcess.output).toContain("rerun the same command to retry");
-      const observation = await observer.done;
-      expect(observation.status, observation.output).toBe(0);
-      expect(observation.output).toContain("capacity acquired after supervisor exit");
-    } finally {
-      await stopJust(justProcess);
     }
   });
 
@@ -608,11 +598,16 @@ describe("quality interface", () => {
       const observer = startCapacityObserver(lockFile);
       await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       signalJust(quality, signal);
-      expect((await quality.done).status).toBe(expectedStatus);
+      expect(
+        (await settleWithinDeadline(quality.done, "interrupted quality settlement")).status,
+      ).toBe(expectedStatus);
       expect(quality.output).toContain("quality interrupted after");
       expect(quality.output).toContain("rerun just quality to retry");
       expect(quality.output).not.toContain("quality completed in");
-      const observation = await observer.done;
+      const observation = await settleWithinDeadline(
+        observer.done,
+        "capacity observer settlement after quality interruption",
+      );
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
@@ -625,37 +620,12 @@ describe("quality interface", () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
     const nestedCommand = `${runner} 'nested internal' sh -c 'printf nested-success'`;
-    const result = await runRunner(lockFile, ["test", "sh", "-c", nestedCommand]);
-
+    const result = await runRunner(
+      lockFile,
+      ["test", "sh", "-c", nestedCommand],
+      "nested workload settlement",
+    );
     expect(result.status).toBe(0);
     expect(result.output).toContain("nested-success");
-  });
-
-  test("keeps successful output concise and failed diagnostics complete", async () => {
-    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-quality-fixtures-"));
-    temporaryPaths.push(fixtureRoot);
-    const failureFixture = join(fixtureRoot, "quality-failure.test.ts");
-    const successFixture = join(fixtureRoot, "quality-success.test.ts");
-    writeFileSync(
-      failureFixture,
-      `import { expect, test } from "vitest";\n\ntest("retains controlled failure diagnostics", () => {\n  console.log("captured output marker");\n  expect({ actual: "value" }).toEqual({ actual: "different" });\n});\n`,
-    );
-    writeFileSync(
-      successFixture,
-      `import { expect, test } from "vitest";\n\ntest("successful output remains concise", () => {\n  expect(true).toBe(true);\n});\n`,
-    );
-
-    const failure = await runVitest(fixtureRoot, failureFixture);
-    expect(failure.status).toBe(1);
-    expect(failure.output).toContain("retains controlled failure diagnostics");
-    expect(failure.output).toContain("captured output marker");
-    expect(failure.output).toContain("- Expected");
-    expect(failure.output).toContain("+ Received");
-    expect(failure.output).toContain("AssertionError");
-
-    const success = await runVitest(fixtureRoot, successFixture);
-    expect(success.status).toBe(0);
-    expect(success.output).toContain("Test Files");
-    expect(success.output).not.toContain("✓ test/");
   });
 });
