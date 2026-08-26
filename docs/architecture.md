@@ -17,24 +17,32 @@ Changes linked to a Task and Changes without a Task use the same Change-owned va
 
 ## Module boundaries
 
-Task and Change modules own their workflows, invariants, cohesive persistence ports, and composition.
-Task and Change coordination is an application boundary under `src/taskChange/` for operations that cross both domains.
-An operation that crosses Task and Change state uses the coordination boundary rather than a hidden owner mutation.
+Task and Change modules own their workflows, invariants, operation construction, and private persisted-state mechanics.
+A supported caller invokes one complete application operation.
+Task and Change coordination under `src/taskChange/` owns operations and transactions that cross both domains.
 
 CLI modules select operations and translate inputs and results.
-They do not construct persistence Adapters or coordinate storage.
+They do not construct persistence implementations, select concrete external mechanisms, or coordinate storage.
 The command tree owns syntax, routing, and generated help, while the output boundary owns serialization.
 
-Composition modules select concrete Adapters.
-Domain workflow modules depend on owner-defined ports instead of concrete Adapters or composition modules.
-Repository Runtime provides a scoped database capability rather than an Adapter registry or application container.
+Repository Runtime supplies scoped database resources and transactions rather than an Adapter registry or application container.
+Fixed SQLite mechanics remain private to their owner or coordination operation, which may use owner-local transaction functions directly.
+Introduce a private state kernel only when several paths share substantial durable meaning, atomic transitions, projection rules, or recovery interpretation.
+A second path that uses the same durable rule reuses its owner unless it has materially different semantics.
 
-SQLite Adapters implement owner-defined persistence ports and own SQL and transaction mechanics.
-Shared Agent Session execution owns Agent Session dispatch, Agent Continuation resume, Invocation settlement, Pi harness execution, transcript paths, and token evidence for Task Review and Change Validation.
-Repository Runtime supplies one Git Common Directory Agent Session transcript root to both workflows.
-Task Intent and Change Delivery retain separate reviewer policy, prompts, output decoding, Findings, errors, and lifecycle behavior.
-External execution, Git, GitHub, agent runtime, and disposable workspace behavior remain behind their applicable Adapter boundaries.
+Retain interfaces for real external variation, shared resource lifecycles, and cross-owner coordination.
+A possible future replacement does not justify an interface before a supported alternative establishes its shared contract.
+Effect services and Layers own real resources or independently consumed capabilities rather than construction-only dependency topology.
+External execution remains outside SQLite transactions, whose owning boundary enforces atomic persisted invariants.
 
+Read operations validate only their requested projection and batch related records rather than querying once per parent.
+Mutations validate the facts required for their preconditions, result, and atomic invariants.
+
+Shared Agent Session execution owns dispatch, continuation, Invocation settlement, Pi execution, transcripts, and token evidence for Task Review and Change Validation.
+Owner-specific semantic journals combine Agent Session transaction mechanics with Task Review or Change Validation writes without exposing SQL callbacks.
+Repository Runtime supplies their shared transcript root, while Task Intent and Change Delivery retain separate reviewer policy, prompts, output decoding, Findings, errors, and lifecycle behavior.
+
+The operation-first decision is recorded by [ADR 0013](adr/0013-use-operation-first-application-boundaries.md).
 The enforced dependency zones and contributor checks are documented in [Tooling](tooling.md).
 
 ## Workflow boundaries

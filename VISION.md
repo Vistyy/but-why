@@ -51,10 +51,14 @@ This orchestration should leave agents room to reason and adapt within their rol
 But Why should be useful in a Local Repository without requiring a remote service at any point.
 Remote backends and Candidate Publication remain opt-in and configurable for users who need remote collaboration or delivery.
 Delivery through another code-review host should preserve the same trust boundaries when users need it.
-Storage, coordination, and delivery hosts are replaceable means rather than the product's purpose.
+Storage, coordination, delivery hosts, and agent execution are replaceable means rather than the product's purpose.
+But Why does not commit in advance to one future mechanism or require interchangeable implementations of each current mechanism.
+Possible future substitutions include, for example, repository-hosted records instead of local state, another code-review host, remote coordination, or another local or cloud agent executor.
+The current mechanism should remain inside the boundary that owns its concern, and its incidental representation should not become part of the product contract.
+That containment must not become a speculative provider interface, runtime interchangeability requirement, or generalized abstraction before a concrete supported alternative establishes the shared contract.
+When a concrete need makes variation valuable, the applicable capability should become configurable or pluggable at the owner that can preserve its authority, lifecycle, failures, and evidence.
 When users choose remote delivery or cross-repository outcomes, But Why should preserve the outcome and each contributing Change's code identity, judgments, completion facts, and recovery boundaries.
 A change to those means is worthwhile only when it keeps the path from human intent to accepted code understandable and recoverable.
-At boundaries where variation is valuable, capabilities should be configurable or pluggable at the layer that owns the concern.
 When recurring misses appear, people should be able to improve the responsible review layer by extending or replacing reviewer instructions or Specialist Reviewer roles.
 Such improvement should preserve clear ownership, human authority, and legible evidence rather than add ceremony or silently broaden accepted intent.
 

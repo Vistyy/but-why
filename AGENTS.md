@@ -6,7 +6,7 @@ They do not describe how agents use But Why in a target repository.
 ## Development authorities
 
 - Read `CONTEXT-MAP.md` and the applicable context before naming or changing domain behavior.
-- Read `docs/architecture.md` before changing ownership, dependencies, or workflow boundaries.
+- Read `docs/architecture.md` before changing ownership, dependencies, workflow boundaries, application operations, persisted-state transitions, persistence abstractions, or transaction boundaries.
 - Read `VISION.md` before proposing or implementing a change to product direction, scope, or a lasting acceptance boundary.
 - Read the applicable accepted decisions in `docs/adr/` before changing their constraints.
 - Read `docs/cli-output.md` when changing structured CLI output.

@@ -2,8 +2,10 @@
 
 ## Status and purpose
 
+Status: Active investigation authorized by the Operator.
+
 This is a working planning artifact for the investigation into reducing But Why's existing implementation complexity before further feature work.
-It records established goals, evidence, provisional candidates, investigation coverage, and unresolved decisions so the discussion does not turn provisional mechanisms into accepted architecture.
+It records established goals, evidence, accepted architecture decisions, investigation coverage, and remaining Task-shaping work.
 It does not authorize implementation, change current architecture authority, or define supported product behavior.
 Replace its implementation-ready outcomes with approved Tasks, and remove obsolete planning material when the initiative is complete.
 
@@ -48,12 +50,17 @@ Add an area when investigation discovers a materially different pattern.
 | Area | Current status | Question |
 | --- | --- | --- |
 | Architecture, contexts, ADRs, and contributor guidance | Inspected initially | Which current rules are correct, insufficient, contradicted, or unenforced? |
+| Repository initialization, migration, identity, and scoped SQLite resource lifecycle | Representative paths inspected | Which Repository Runtime Layers and transaction capabilities own real resources and must remain? |
 | Ordinary Task creation, reads, edits, dependencies, and revision | Representative paths inspected | Do simple Task operations carry unnecessary workflow or persistence structure? |
+| Standalone and linked Task cancellation | Representative paths inspected | Which Task mutation is owner-local, and which preconditions and completion writes require Task/Change coordination? |
 | Task Review submission, inspection, and recovery | Representative paths inspected | Which orchestration, admission, settlement, projection, and persistence seams are necessary? |
 | Task/Change linked Start, cancellation, completion, and joined inspection | Representative paths inspected | Where does cross-owner atomicity justify coordination, and where is coordination only forwarding? |
 | Change Start, preparation, and Interactive Session launch | Representative paths inspected | Do these lifecycle operations share a justified interface or only a composition location? |
+| Change authority Decisions and Blockers | Representative paths inspected | Which locks and authority rules must remain, and which read or mutation ports only forward fixed SQLite mechanics? |
+| Change list, detail, Findings, and Validation history projections | Representative paths inspected | Which complete read operations need coordinated projections, requested-record validation, and bounded batching? |
 | Change Submit and Candidate capture | Representative paths inspected | Which ordering and provenance responsibilities are essential, duplicated, or split between callers? |
 | Candidate Validation and the fixed Validation Gate | Representative paths inspected | Which services, Layers, ports, and phase representations reduce knowledge, and which add wiring? |
+| Validation Run inspection, Artifact content, and abandonment | Representative paths inspected | Which reads and cleanup sequencing are complete operations, and which fixed-storage ports or loaders can disappear? |
 | Candidate Publication and reconciliation | Representative paths inspected | Where are external observation, uncertain mutation, and persisted evidence coordinated more than once? |
 | Terminal Cleanup and Artifact lifecycle | Representative paths inspected | Which cleanup abstractions preserve one lifecycle, and which repeat resource coordination? |
 | Agent Session execution and persistence | Representative paths inspected | Is its shared mechanism deep enough, and do owner callbacks expose the smallest truthful seam? |
@@ -75,6 +82,30 @@ Extract a cohesive private state kernel only when it owns substantial shared dur
 Do not create a kernel merely for uniformity, replacement, mocking, or reusable SQL syntax.
 A second path that interprets or changes the same durable rule must reuse its existing owner or establish materially different semantics.
 Retain interfaces for genuine external variation, shared resource lifecycle, and accepted cross-owner coordination.
+Replaceable storage, coordination, delivery, and agent execution are product-direction possibilities rather than requirements for interchangeable implementations today.
+Keep each current mechanism and incidental representation private to its owner, but introduce a provider interface or configurable capability only when a concrete supported alternative establishes a truthful shared contract.
+Candidate capture will consume the submission-selected Change identity, open state, canonical Git Common Directory, recorded Managed Worktree path, Repository Branch ref, Change Base ref, and freshly fetched Change Base commit.
+It will verify that the observed workspace has the recorded canonical path, Git Common Directory, and Repository Branch; that the workspace is clean with a committed head; that the refreshed base ref still equals the recorded Change Base; and that the exact refreshed commit is an ancestor of the head.
+Its atomic write will recheck the Change remains Open with the same durable repository, worktree, branch, and base identity before recording or reusing the Candidate identified by the exact base and head commits.
+It will not discover a Change by branch, inspect reflog renames, rebind a Change, or select or locally resolve a base.
+If branch repair becomes supported later, it must be an explicit recovery operation with its own authority and observable result.
+Each read operation will validate the persisted representation and relationships in its requested projection rather than reconstructing or auditing all related history.
+Mutations will validate the facts needed for their preconditions and atomic invariants, and terminal operations will validate the exact evidence needed for completion.
+An unrelated malformed historical record will not invalidate an operation that does not consume it.
+Candidate Validation will be constructed directly as one operation from its concrete dependencies.
+Remove its construction-only internal Effect service tags and Layer graph, and replace the identical `validateCandidate` and `validateAcceptanceContextCandidate` methods with one validation operation.
+Retain Effect for sequencing and typed errors, retain Snapshot Workspace and external execution boundaries, and retain Layers where they manage a real resource or independently consumed capability.
+Use `parse` for text syntax, `decode` for validating unknown representation into a typed value, `encode` for producing a stored or transmitted representation, `map` for a pure transformation between known shapes, `read`, `load`, or `project` for querying and assembling an operation result, `normalize` for canonicalization, and `validate` for domain rules or relationships.
+Do not establish `reconstitute` as standard vocabulary, and do not create generic codec objects merely to pair encoding and decoding.
+Ordinary Task operations will directly open Repository Runtime and call private owner-local SQL functions rather than loading `TaskUseCases` through a broad `TaskPersistence` interface.
+Remove `withTaskUseCases`, `openTaskUseCases`, the duplicate `getTaskForInspection` alias, broad CLI Task use-case injection objects, and direct revision or dependency mutation paths that bypass Task/Change coordination.
+Retain complete operations for Task Context Draft filesystem sequencing, retain owner-private Task transaction functions for coordination, and verify supported operations against real SQLite.
+Use this ordinary Task slice as the first implementation proof of the accepted architecture before migrating complex Change workflows.
+Do not create an owner-wide Task or Change state kernel.
+The Agent Session journals are the only state kernels currently established by direct evidence.
+Validation Run, Candidate Publication, and Terminal Cleanup state are candidates because normal execution and recovery paths may share durable meaning, but each migration must prove that shared rules justify a cohesive lifecycle-sized kernel before introducing one.
+Keep the applicable state mechanics direct when that proof is absent.
+Retain one real-SQLite test for each distinct persisted boundary contract, but consolidate repeated decoder cases and avoid sending every malformed fixture through every consumer without a separate supported requirement.
 
 The completed architecture will make this layering understandable and select the cheapest reliable safeguards against recreating unnecessary layers.
 
@@ -105,40 +136,58 @@ These alternate seams permit callers to omit a supported-path precondition even 
 Candidate Validation exposes separate linked and unlinked validation methods with identical implementations even though persisted authority selects the applicable phases.
 Its internal Layer topology exposes several construction-only services and requires tests to reproduce the same topology.
 Candidate capture supports branch selection, reflog rename discovery, rebinding, caller-selected bases, and remote-default discovery even though the only identified production caller supplies an exact Change, worktree, and fetched base.
-The supported status of that flexibility remains unresolved.
+That unsupported flexibility will be removed in favor of the accepted exact-capture contract.
 
 Mutation paths repeatedly reconstruct inspection-sized persisted graphs.
 The established persisted-state contract does not require complete aggregate reconstruction on every read or mutation.
 Direct modification of Shared Repository State is unsupported, owner writes validate local inputs inside transactions, lifecycle completion validates terminal coherence, and authority-selection reads revalidate the evidence they consume.
 Compact projections validate only their selected facts, while inspection does not currently promise a global integrity audit.
 Crashes can leave supported active or recovery states, so full terminal coherence after every mutation would conflict with intentional partial lifecycle state.
-Operation-specific malformed-state tests may still establish exact defensive behavior that must be evaluated before removing a read-time check.
+Distinct operation-specific malformed-state tests remain necessary for the persisted representation and relationships consumed at each boundary, but repeated corruption fixtures do not establish a requirement for every consumer to reconstruct all related history.
+
+Measured disposable-repository probes found both N+1 query growth and repeated reconstruction.
+Task List grew from 8 `SELECT` statements for one Task to 58 for six Tasks with five linked Changes.
+Validation Run history grew from 10 `SELECT` statements for one Candidate and Run to 27 for three Candidates and six Runs.
+Task Review List grew from 8 `SELECT` statements for one Review to 20 for five Reviews.
+Change Show with passing evidence performed 66 `SELECT` statements for one Change, and Validation Run Show performed 36 for one Run, primarily through repeated authority and coherence reconstruction rather than cardinality-driven N+1 behavior.
+Change List remained constant at 3 `SELECT` statements, and no cardinality-driven N+1 pattern was found in the bounded Change Submit probes.
+The accepted requested-projection rule does not by itself prevent N+1 behavior, so each retained projection must also batch related reads rather than query once per parent record.
 
 Composition boundaries generally own real concrete Adapter and lifecycle selection, but many callback shapes, projections, aliases, and test-only injection fields around them are forwarding conveniences.
 Deleting composition responsibility would distribute repository, database, Git, GitHub, Agent, and coordination knowledge into CLI commands.
 Deleting a callback loader or broad use-case object may still be valid when a direct operation can retain the same composition owner.
-Candidate Validation itself owns a substantial reusable lifecycle, while the necessity of its construction-only internal service tags and Layer topology remains disputed and must be resolved by design comparison.
+Candidate Validation itself owns a substantial reusable lifecycle, while its construction-only internal service tags and Layer topology add wiring and verification setup without an independent consumer or resource lifecycle.
 
-These observations establish candidate removals, not an accepted replacement architecture.
+The boundary-mechanics audit did not support a generic JSON, Schema, protocol, command-result, or text-input abstraction.
+Persisted-data failure wrapping, Agent Invocation row decoding, Pi JSONL record decoding, and CLI text input are already consolidated at truthful boundaries.
+Repo and Global Config retain distinct schemas and missing-file policy, but their source-text JSON parsing is duplicated and can share one small configuration-owned mechanic.
+The GitHub gateway duplicates the existing GitHub remote URL parser exactly, while push-destination parsing remains separate because it enforces different credential and destination rules.
+Validation Evidence and Candidate Validation duplicate stored Findings array decoding and Artifact-reference validation, which belongs in one Change Validation-private mechanic before operation-specific projection enrichment.
+Pi output traversals share records but intentionally apply different strict success, partial-failure, and recovery policies, so a shared scanner is not justified without measured material deletion.
+Herdr command and socket decoding, Task Review and Validation JSON primitives, and repository-file readers retain different inputs, failure semantics, or lifecycle obligations.
+
+These observations support the accepted operation-first architecture in ADR 0013.
+Exact removals still require authorized Tasks that preserve each complete supported operation.
 
 Existing Task `BY-54`, "Centralize SQLite Agent Invocation record decoding," appears superseded by completed Task `BY-63` and the current shared `sqliteAgentInvocation` implementation.
 No Task mutation is authorized by this plan.
 
-## Provisional candidates
+## Accepted design applications
 
-Treat every item in this section as unaccepted unless `Established decisions` now accepts its governing principle.
+The governing principles in this section are accepted.
+Task authoring must still name the exact supported operation, retained obligations, and complete replacement boundary for each implementation increment.
 
 ### Operation-shaped application boundaries
 
 Expose one application operation to a caller when the caller uses one operation and a loaded use-case object only forwards or aggregates unrelated capabilities.
-Task Review submission, inspection, listing, and abandonment are the first candidate application operations.
-Do not generalize this shape until ordinary Task, Change lifecycle, validation, publication, cleanup, and coordination paths have been compared.
+Task Review submission, inspection, listing, and abandonment are distinct complete application operations.
+The representative ordinary Task, Change lifecycle, validation, publication, cleanup, and coordination paths support this structure without requiring identical internal sequencing.
 
 ### One coordinated workflow for essential sequencing
 
 Keep externally meaningful sequencing in one owning workflow when splitting it would force callers to coordinate order, recovery, or authority.
 Task Review submission is the first candidate because reuse, admission, external execution, restoration, cleanup, and atomic settlement form one supported operation.
-The candidate does not imply that every stage belongs in one file or one dependency bag.
+This rule does not imply that every stage belongs in one file or one dependency bag.
 
 ### Owner-local persisted-state reconstitution
 
@@ -156,7 +205,7 @@ Remove fallback paths that bypass the required owner unless a current supported 
 
 Accept only inputs and variation that a current supported operation treats as authoritative or verifies against an authoritative source.
 Remove production flexibility used only by direct tests or historical implementation paths.
-Candidate capture is the first material test of this candidate because its production caller supplies exact Change, worktree, and fetched-base facts while the operation can also discover or rebind them.
+Candidate capture applies this rule because its production caller supplies exact Change, worktree, and fetched-base facts while the current operation can also discover or rebind them.
 
 ### Mutation projections and inspection reconstruction
 
@@ -169,7 +218,7 @@ Do not remove an operation-specific malformed-state rejection until its supporte
 ### Direct construction of private implementation dependencies
 
 Construct implementation-only dependencies directly when internal Effect service tags and Layer topology have no independent production consumer, lifecycle, or replacement need.
-Candidate Validation is the first candidate because its construction exposes several internal tags that only assemble one public service and tests reproduce the topology.
+Candidate Validation applies this rule because its construction exposes several internal tags that only assemble one public operation and tests reproduce the topology.
 Retain Effect services and Layers where they own resources, authority, reusable sequencing, or a supported replacement boundary.
 
 ## Design comparison requirement
@@ -195,8 +244,14 @@ This candidate is materially different from splitting use-case files into smalle
 It would delete broad use-case factories, callback loaders, fixed-storage ports and Adapters, duplicate operation aliases, construction-only service topology, broad CLI injection objects, and oversized test fixtures when no supported variation or lifecycle requires them.
 It would retain the distinct external-effect workflows and recovery state machines whose sequencing is accepted behavior.
 
-A bounded design prototype is still required to establish whether Agent Session can replace generic raw-SQL settlement callbacks with owner-semantic journals while preserving atomic invocation and domain settlement.
-The comparison also remains blocked on the supported status of Candidate discovery and rebinding, exact operation-specific malformed-state behavior, terminal inspection coherence, and any present requirement for replaceable persisted-state implementations.
+A bounded disposable prototype established that owner-specific semantic Agent Session journals can replace generic raw-SQL callbacks without coupling Agent Session to Task or Change.
+The prototype made each owner SQLite Adapter compose shared Agent Session transaction mechanics with its own linkage and settlement writes, while workflows supplied plain semantic journal entries rather than `SqlClient`, Effects, callbacks, or registered transaction participants.
+Nine real-SQLite integration cases established atomic Task Review dispatch and settlement, Simplification Advice settlement, Change reviewer dispatch and Specialist settlement, rollback for invalid owner entries and relationships, rejection of a second unsettled Invocation without duplicate owner rows, and interrupted execution settlement as `return_unknown` with the owner tooling failure in the same journal.
+Task Review, Simplification Advice, Acceptance Review, and Specialist Review compiled through the same `AgentSessionJournal<Entry>` contract, while Agent Session imported neither Task nor Change.
+The interruption case exercised `executeAgentSession` with a fake interrupted runtime rather than OS process termination or transcript discovery, and the concurrency case used sequential immediate transactions rather than simultaneous connections.
+Those are retained behavior-verification obligations, not evidence that a second journal contract is needed.
+The focused implementation changed 19 files with 457 insertions and 472 deletions, so its value is removal of a leaky public concept and clearer transaction ownership rather than demonstrated line-count reduction.
+The comparison no longer has an unresolved persisted-state reconstruction or Agent Session journal feasibility contract.
 
 ## Rejected conclusions
 
@@ -206,31 +261,51 @@ The investigation has not accepted a generic repository-wide decoder, codec, rep
 The investigation has not accepted moving external execution into persistence or moving atomic persisted invariants into callers.
 The investigation has not accepted Task Review as sufficient evidence for a repository-wide redesign.
 
-## Unresolved decisions
+## Recommended migration decomposition
 
-The investigation must determine the exact narrow state kernels justified by shared durable meaning and which existing broad persistence ports can be deleted in favor of direct owner-local transaction functions.
-The investigation must determine which persisted-state reconstruction is duplicated mechanics and which is distinct projection or lifecycle policy.
-The investigation must determine whether Effect services and Layers currently remove lifecycle knowledge or mainly add composition and verification setup.
-The investigation must determine which current layering guidance is wrong, merely incomplete, or already correct but insufficiently enforced.
-The investigation must determine whether exact Candidate capture should replace currently unsupported discovery and rebinding flexibility.
-The investigation must determine which operation-specific persisted-corruption tests establish supported defensive behavior beyond the narrower global contract.
-The investigation must determine whether terminal inspection should re-prove complete evidence coherence or continue to validate only its requested projections.
-The investigation must determine whether Agent Session atomic domain links can hide `SqlClient` without adding a generic transaction-participant abstraction.
-The investigation must determine the exact vocabulary for parsing, validation, reconstitution, mapping, normalization, and invariant checking only after their ownership is clear.
-The investigation must determine the minimal set of architecture guidance, skill guidance, reviewer checks, structural checks, and behavior tests that prevents recurrence without adding redundant governance.
+The implementation should be authorized as independently assessable vertical migrations rather than one repository-wide rewrite.
+Each migration removes its replaced supported path in the same Change and preserves real-SQLite evidence for its distinct transaction and persisted-state contracts.
+
+1. Replace Agent Session raw-SQL callback links with owner-specific semantic journals for Task Review, Simplification Advice, Acceptance Review, and Specialist Review.
+2. Replace ordinary and coordinated Task use-case loading with complete operations, including Task list and detail projections, Context Draft sequencing, dependencies, Revision, linked and standalone cancellation, and the supported coordination paths.
+3. Replace Task Review use-case loading with complete submission, inspection, listing, advice, abandonment, and interruption-recovery operations that require coordinated admission and use the semantic journal.
+4. Replace Candidate capture discovery and rebinding with the exact submission-selected capture contract.
+5. Construct Candidate Validation directly and migrate validation execution, inspection, Artifact content, abandonment, and interruption recovery to complete operations, including one Change Validation-private stored Findings decoder and the semantic journal.
+6. Replace Change read and authority port collections with complete list, detail, Finding, Validation history, Decision, and Blocker operations using requested projections and bounded related-record reads.
+7. Replace Change Start, Prepare, and Implement loaders and broad injection seams with their distinct complete operations while retaining their different Git and Interactive Session lifecycles.
+8. Replace Change Submit, Candidate Publication, and reconciliation composition seams with complete operations, reuse the exact Candidate capture operation, and reuse the existing GitHub remote parser instead of the duplicate gateway parser.
+9. Replace terminal cleanup and remaining recovery loaders with complete operations, introducing a private state kernel only where the migration proves shared durable lifecycle meaning.
+10. After the migrated paths exist, add only low-false-positive structural checks for the resulting dependency and visibility rules, and remove transitional architecture wording and obsolete test support seams.
+
+The shared Config source-text parser belongs in the first migration that replaces Task Review or Change policy composition and must preserve distinct Repo Config, Global Config, and missing-file policy.
+No migration is needed for Pi traversal, Herdr decoding, command results, or text readers unless new evidence establishes material deletion without merging their distinct policies.
+
+Task Review interruption work `BY-58` and Validation Run interruption work `BY-72` define behavior that the journal, Task Review, and Candidate Validation migrations must preserve.
+The recommended sequence completes those Tasks before migrations 1, 3, and 5 rather than implementing recovery twice across the old and replacement structures.
+Test process work `BY-68` may continue independently, but test-support consolidation that overlaps its process lifecycle should wait for its merged result.
+
+Migrations 3 and 5 depend on migration 1.
+Migration 8 depends on migrations 4 and 5.
+Migration 10 depends on the affected migration paths being complete.
+Other dependencies should be added only when Task authoring establishes a real delivery or verification constraint rather than a preferred execution order.
+
+## Remaining Task-shaping work
+
+Allocate every current production loader, use-case object, persistence port, Adapter opener, construction-only service or Layer, and CLI injection seam to one migration above or one retained responsibility while authoring the Tasks.
+Reconcile exact file overlap with the final merged results of `BY-58`, `BY-68`, and `BY-72`.
+Ensure each migration removes its replaced supported path without leaving an indefinite dual architecture.
+Do not change UTF-8, BOM, size, or missing-file behavior merely to consolidate readers.
 
 ## Prevention selection
 
 Use `docs/architecture.md` as the operative authority for the operation-first structure, selective kernel threshold, privacy boundaries, and second-path ratchet.
-Record the consequential replacement of mandatory port and Adapter layering in a new ADR that explains the alternatives, evidence, and trade-offs without becoming the ordinary contributor instruction.
-Expand the `AGENTS.md` loading condition so contributors read `docs/architecture.md` before adding or changing an application operation, persisted-state transition, persistence abstraction, or transaction boundary.
+ADR 0013 records the consequential replacement of mandatory port and Adapter layering, its alternatives, evidence, and trade-offs without becoming the ordinary contributor instruction.
+`AGENTS.md` requires contributors to read `docs/architecture.md` before adding or changing an application operation, persisted-state transition, persistence abstraction, or transaction boundary.
 Do not repeat the complete architecture rule in `AGENTS.md`.
 
-Give each existing Specialist only its concern-specific enforcement responsibility.
-Removal challenges whether a new or retained kernel has a present responsibility.
-Consolidation challenges repeated durable meaning across direct operations and recovery paths.
-Standards challenges whether a retained kernel is cohesive, private, semantic, and narrower than owner-wide persistence.
-All three use `docs/architecture.md` as authority rather than defining separate versions of the rule.
+Do not add state-kernel-specific instructions to the Specialist Reviewers.
+Their existing deletion, single-source-of-truth, cohesion, information-hiding, and authority rules already expose violations, and each Reviewer already treats `docs/architecture.md` as authority.
+Repeating this architecture decision in several prompts would overemphasize one mechanism and create competing versions of the rule.
 Do not require the Task Reviewer to choose an implementation mechanism unless the proposal itself makes an architecture decision necessary for readiness.
 Do not create a project-specific skill for this rule.
 Consider a skill only if later evidence establishes a substantial repeatable investigation procedure beyond loading the architecture authority.
