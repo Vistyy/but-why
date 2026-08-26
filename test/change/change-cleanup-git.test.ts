@@ -188,7 +188,10 @@ describe("Change cleanup Git adapter", () => {
 import { rmSync, symlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const args = process.argv.slice(2);
-const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: "inherit" });
+const result = spawnSync(${JSON.stringify(realGit)}, args, {
+  stdio: "inherit",
+  timeout: 4_000,
+});
 if (result.status === 0 && args.includes("worktree") && args.includes("remove")) {
   rmSync(${JSON.stringify(siblingRoot)}, { recursive: true, force: true });
   symlinkSync(${JSON.stringify(externalTarget)}, ${JSON.stringify(siblingRoot)}, "dir");
@@ -433,9 +436,17 @@ const deletesBranch =
   (args.includes("branch") && args.includes("-D")) ||
   (args.includes("update-ref") && args.includes("-d") && args.includes("refs/heads/feature"));
 if (deletesBranch) {
-  spawnSync(${JSON.stringify(realGit)}, [${JSON.stringify(`--git-dir=${commonDirectory}`)}, "update-ref", "refs/heads/feature", ${JSON.stringify(movedHead)}]);
+  const moved = spawnSync(
+    ${JSON.stringify(realGit)},
+    [${JSON.stringify(`--git-dir=${commonDirectory}`)}, "update-ref", "refs/heads/feature", ${JSON.stringify(movedHead)}],
+    { stdio: "ignore", timeout: 4_000 },
+  );
+  if (moved.status !== 0) process.exit(moved.status ?? 1);
 }
-const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: "inherit" });
+const result = spawnSync(${JSON.stringify(realGit)}, args, {
+  stdio: "inherit",
+  timeout: 4_000,
+});
 process.exit(result.status ?? 1);
 `,
     );
@@ -1072,5 +1083,11 @@ console.log(JSON.stringify(cleanupChangeResources(input)));
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });
 
-const gitConfig = (cwd: string, key: string): string =>
-  runTestProcess("git", ["config", "--get-all", key], { cwd }).stdout.trim();
+const gitConfig = (cwd: string, key: string): string => {
+  const result = runTestProcess("git", ["config", "--get-all", key], { cwd });
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0 && result.status !== 1) {
+    throw new Error(result.stderr || result.stdout);
+  }
+  return result.stdout.trim();
+};
