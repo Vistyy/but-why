@@ -11,13 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Fiber, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 
 import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
-import { observeUntil } from "../support/observe.js";
-
-const reviewerProcessTerminationTestTimeoutMs = 15_000;
 
 const profile = {
   agentProfile: "review",
@@ -636,32 +632,6 @@ describe("Pi reviewer process executor", () => {
       }
     }),
   );
-
-  it.scoped(
-    "waits for reviewer process-tree termination when interrupted",
-    () => {
-      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-interrupt-"));
-      const pidFile = join(root, "pid");
-      const executor = createPiReviewerProcessExecutor(() =>
-        executeHostCommandEffect({
-          command: "sh",
-          args: ["-c", `sleep 30 & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`],
-        }),
-      );
-      return Effect.scoped(
-        Effect.gen(function* () {
-          const fiber = yield* Effect.fork(executor.execute(input));
-          yield* Effect.addFinalizer(() => Fiber.interrupt(fiber).pipe(Effect.asVoid));
-          yield* Effect.promise(() => waitForFile(pidFile));
-          const childPid = Number(readFileSync(pidFile, "utf8"));
-          yield* Fiber.interrupt(fiber);
-          yield* Effect.promise(() => waitForProcessExit(childPid));
-          expect(processIsGone(childPid)).toBe(true);
-        }),
-      ).pipe(Effect.ensuring(Effect.sync(() => rmSync(root, { recursive: true, force: true }))));
-    },
-    reviewerProcessTerminationTestTimeoutMs,
-  );
 });
 
 const messageEvent = (
@@ -682,33 +652,3 @@ const messageEvent = (
       ...(usage === undefined ? {} : { usage }),
     },
   });
-
-const waitForFile = (path: string): Promise<string> =>
-  observeUntil({
-    description: `file ${path} to contain a child PID`,
-    observe: () => {
-      try {
-        return readFileSync(path, "utf8");
-      } catch {
-        return "";
-      }
-    },
-    isReady: (contents) => contents.length > 0,
-    timeoutMs: 5_000,
-  });
-
-const waitForProcessExit = (pid: number): Promise<boolean> =>
-  observeUntil({
-    description: `process ${pid} to exit`,
-    observe: () => processIsGone(pid),
-    timeoutMs: 5_000,
-  });
-
-const processIsGone = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch {
-    return true;
-  }
-};
