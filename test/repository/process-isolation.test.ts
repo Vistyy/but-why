@@ -81,7 +81,14 @@ describe("test subprocess isolation", () => {
       );
       const childProcessId = Number(readFileSync(processIdPath, "utf8"));
       yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 100)));
-      yield* Fiber.interrupt(fiber);
+      const result = yield* Effect.either(Fiber.join(fiber));
+      expect(result).toMatchObject({
+        _tag: "Left",
+        left: {
+          _tag: "WorkspaceCommandExecutionFailed",
+          message: "Test workspace command timed out after 50 ms.",
+        },
+      });
       expect(() => process.kill(childProcessId, 0)).toThrow();
     }),
   );
