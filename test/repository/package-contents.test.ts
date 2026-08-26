@@ -216,7 +216,7 @@ describe("release package boundary", () => {
   });
 
   it("contains the supported package surface and required metadata", () => {
-    const { manifest, metadata: packedPackage, root } = prepared;
+    const { manifest, metadata: packedPackage } = prepared;
     const files = packedPackage.files.map((file) => file.path).sort();
 
     expect(manifest).toMatchObject({
