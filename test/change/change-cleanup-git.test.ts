@@ -197,20 +197,12 @@ process.exit(result.status ?? 1);
 `,
     );
     chmodSync(gitWrapper, 0o755);
-    const { PATH: previousPath } = process.env;
-
-    let result: ReturnType<typeof cleanupChangeResources>;
-    try {
-      Object.assign(process.env, { PATH: `${commandDirectory}:${previousPath ?? ""}` });
-      result = cleanupChangeResources({
-        repositoryCommonDirectory: commonDirectory,
-        worktreePath,
-        branchRef: "refs/heads/feature",
-        remoteChangeBranch: null,
-      });
-    } finally {
-      Object.assign(process.env, { PATH: previousPath });
-    }
+    const result = runCleanupInChild(repository, commandDirectory, {
+      repositoryCommonDirectory: commonDirectory,
+      worktreePath,
+      branchRef: "refs/heads/feature",
+      remoteChangeBranch: null,
+    });
 
     expect(result).toEqual({ state: "pending", blockingReason: "worktree_path_unsafe" });
     expect(existsSync(externalContainer)).toBe(true);
@@ -448,20 +440,12 @@ process.exit(result.status ?? 1);
 `,
     );
     chmodSync(gitWrapper, 0o755);
-    const { PATH: previousPath } = process.env;
-
-    let result: ReturnType<typeof cleanupChangeResources>;
-    try {
-      Object.assign(process.env, { PATH: `${commandDirectory}:${previousPath ?? ""}` });
-      result = cleanupChangeResources({
-        repositoryCommonDirectory: commonDirectory,
-        worktreePath,
-        branchRef: "refs/heads/feature",
-        remoteChangeBranch: null,
-      });
-    } finally {
-      Object.assign(process.env, { PATH: previousPath });
-    }
+    const result = runCleanupInChild(repository, commandDirectory, {
+      repositoryCommonDirectory: commonDirectory,
+      worktreePath,
+      branchRef: "refs/heads/feature",
+      remoteChangeBranch: null,
+    });
 
     expect(result).toEqual({ state: "pending", blockingReason: "branch_deletion_failed" });
     expect(git(repository, "rev-parse", "refs/heads/feature")).toBe(movedHead);
@@ -1050,6 +1034,39 @@ const initializedRepository = (): string => {
   git(repository, "commit", "-m", "Initialize repository");
   git(repository, "branch", "-M", "main");
   return repository;
+};
+
+const runCleanupInChild = (
+  cwd: string,
+  commandDirectory: string,
+  input: Parameters<typeof cleanupChangeResources>[0],
+): ReturnType<typeof cleanupChangeResources> => {
+  const cleanupScript = join(commandDirectory, "cleanup.mjs");
+  const { PATH: inheritedPath } = process.env;
+  writeFileSync(
+    cleanupScript,
+    `const { cleanupChangeResources } = await import(${JSON.stringify(
+      pathToFileURL(join(import.meta.dirname, "../../src/change/adapters/localChangeCleanupGit.ts"))
+        .href,
+    )});
+const input = ${JSON.stringify(input)};
+console.log(JSON.stringify(cleanupChangeResources(input)));
+`,
+  );
+  return JSON.parse(
+    runTestProcessOrThrow(
+      process.execPath,
+      [
+        "--import",
+        join(import.meta.dirname, "../../node_modules/tsx/dist/loader.mjs"),
+        cleanupScript,
+      ],
+      {
+        cwd,
+        env: { PATH: `${commandDirectory}:${inheritedPath ?? ""}` },
+      },
+    ),
+  ) as ReturnType<typeof cleanupChangeResources>;
 };
 
 const git = (cwd: string, ...args: readonly string[]): string =>
