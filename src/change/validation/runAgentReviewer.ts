@@ -25,10 +25,7 @@ import {
   reviewerEvidenceFromAgentSession,
   writeReviewerArtifacts,
 } from "../validationRun/reviewerArtifacts.js";
-import type {
-  ValidationPhase,
-  ValidationRunFindingRecord,
-} from "../validationRun/validationRun.js";
+import type { ValidationRunFindingRecord } from "../validationRun/validationRun.js";
 import type {
   ChangeValidationAgentInvocationSettlement,
   ChangeValidationAgentSessionEntry,
@@ -47,9 +44,6 @@ export type TranslatedReviewerResult<Output> =
     });
 
 export type RunAgentReviewerInput = {
-  readonly validationRunId: number;
-  readonly phase: ValidationPhase;
-  readonly producer: string;
   readonly reviewer: string;
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
@@ -94,6 +88,7 @@ export const runAgentReviewer = (
   ValidationToolingFailure | RepositoryStorageError,
   FileSystem.FileSystem
 > => {
+  const { validationRunId, phase, producer } = input.dispatchEntry;
   let phaseOutcome: CandidateValidationOutcome | undefined;
   let integrityFailure: ValidationToolingFailure | undefined;
   return Effect.gen(function* () {
@@ -133,7 +128,7 @@ export const runAgentReviewer = (
           );
           if (restored._tag === "Right") return result;
           const failure = new InfrastructureToolingFailed({
-            operationName: `verify_${input.phase}_candidate`,
+            operationName: `verify_${phase}_candidate`,
             message: restored.left.message,
           });
           integrityFailure = failure;
@@ -147,29 +142,29 @@ export const runAgentReviewer = (
             !result.ok &&
             result.failure._tag === "ReviewerProcessToolingFailed" &&
             (result.failure.operationName === "verify_candidate_head" ||
-              result.failure.operationName === `verify_${input.phase}_candidate`)
+              result.failure.operationName === `verify_${phase}_candidate`)
           ) {
             phaseOutcome = "tooling_failed";
             const failure = integrityFailure ?? result.failure;
             return changeReviewerSettlement({
-              validationRunId: input.validationRunId,
-              phase: input.phase,
-              producer: input.producer,
+              validationRunId,
+              phase,
+              producer,
               outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(failure),
-                validationRunId: input.validationRunId,
+                validationRunId,
               },
             });
           }
 
           const findings = input.makeFindings(result);
           const artifacts = yield* writeReviewerArtifacts({
-            validationRunId: input.validationRunId,
-            phase: input.phase,
-            producer: input.producer,
+            validationRunId,
+            phase,
+            producer,
             result,
             artifactsRoot: input.artifactsRoot,
             ...(input.artifactMaxBytes === undefined
@@ -183,15 +178,15 @@ export const runAgentReviewer = (
           if (!artifacts.ok) {
             phaseOutcome = "tooling_failed";
             return changeReviewerSettlement({
-              validationRunId: input.validationRunId,
-              phase: input.phase,
-              producer: input.producer,
+              validationRunId,
+              phase,
+              producer,
               outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(artifacts.failure),
-                validationRunId: input.validationRunId,
+                validationRunId,
               },
             });
           }
@@ -204,9 +199,9 @@ export const runAgentReviewer = (
                 ? "blocked"
                 : "passed";
           return changeReviewerSettlement({
-            validationRunId: input.validationRunId,
-            phase: input.phase,
-            producer: input.producer,
+            validationRunId,
+            phase,
+            producer,
             outcome: result.ok && findings.length === 0 ? "passed" : "failed",
             findings,
             artifactRecords: artifacts.artifactRecords,
@@ -215,7 +210,7 @@ export const runAgentReviewer = (
               : {
                   toolingFailure: {
                     ...validationToolingFailureRecord(toolingFailure),
-                    validationRunId: input.validationRunId,
+                    validationRunId,
                   },
                 }),
           });

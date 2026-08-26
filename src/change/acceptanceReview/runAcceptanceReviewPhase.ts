@@ -163,9 +163,6 @@ export const runAcceptanceReviewPhase = (
       const agentSessionId = yield* input.getAgentSession(input.changeId, "acceptance");
       const execution = yield* runAgentReviewer({
         ...(agentSessionId === undefined ? {} : { agentSessionId }),
-        validationRunId: input.validationRunId,
-        phase: validationPhase.acceptanceReview,
-        producer: "acceptance",
         reviewer: "acceptance",
         configuration: agentConfiguration(input.policy.profile),
         journal: input.journal,

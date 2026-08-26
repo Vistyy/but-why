@@ -203,9 +203,6 @@ const runSpecialist = (
     const agentSessionId = yield* input.getAgentSession(input.changeId, policy.id);
     const execution = yield* runAgentReviewer({
       ...(agentSessionId === undefined ? {} : { agentSessionId }),
-      validationRunId: input.validationRunId,
-      phase: validationPhase.specialistReview,
-      producer: policy.id,
       reviewer: policy.id,
       configuration: agentConfiguration(policy.profile),
       journal: input.journal,
