@@ -20,14 +20,6 @@ const initializeState = async (statePath: string, commonDirectory: string): Prom
 
   const program = Effect.gen(function* () {
     const repository = yield* RepositorySql;
-    const migrations = yield* repository.operation(
-      "read initialized migration ledger",
-      (sql) => sql<{ readonly migrationId: number }>`
-        SELECT migration_id AS migrationId
-        FROM effect_sql_migrations
-        ORDER BY migration_id
-      `,
-    );
     const identities = yield* repository.operation(
       "read initialized repository identity",
       (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
@@ -38,7 +30,6 @@ const initializeState = async (statePath: string, commonDirectory: string): Prom
     );
     return {
       ok: true as const,
-      migrations: migrations.map(({ migrationId }) => migrationId),
       identity: identities[0],
     };
   });

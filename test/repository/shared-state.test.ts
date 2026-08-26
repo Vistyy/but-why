@@ -137,12 +137,14 @@ describe("shared repository state", () => {
       `);
       database.close();
 
-      const migrations = yield* Effect.scoped(
+      const identities = yield* Effect.scoped(
         Effect.flatMap(RepositorySql, (repository) =>
           repository.operation(
-            "read initialized migration ledger",
-            (sql) => sql<{ readonly migrationId: number }>`
-              SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id
+            "read initialized repository identity",
+            (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
+              SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
+              FROM shared_state_identity
+              WHERE id = 1
             `,
           ),
         ).pipe(
@@ -157,7 +159,7 @@ describe("shared repository state", () => {
         ),
       );
 
-      expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
+      expect(identities).toEqual([{ commonDirectory: directory, idPrefix: "BY" }]);
     }),
   );
 
