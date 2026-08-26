@@ -26,6 +26,7 @@ describe("host interruption process boundary", { timeout: processTestDeadlineMs 
     const sessionPath = join(sessionsRoot, "pi-session.jsonl");
     const executable = startTestProcess(process.execPath, ["--import", tsxLoader, helper], {
       cwd: root,
+      detached: true,
       env: {
         BUT_WHY_TEST_EVENTS_PATH: eventsPath,
         BUT_WHY_TEST_CHILD_PID_PATH: childPidPath,
@@ -48,8 +49,15 @@ describe("host interruption process boundary", { timeout: processTestDeadlineMs 
         `complete:${signal}`,
       ]);
     } finally {
-      if (executable.exitCode === null && executable.signalCode === null)
+      if (executable.pid === undefined) {
         executable.kill("SIGKILL");
+      } else {
+        try {
+          process.kill(-executable.pid, "SIGKILL");
+        } catch {
+          executable.kill("SIGKILL");
+        }
+      }
       await settleWithinDeadline(completion, "host interruption process cleanup");
       rmSync(root, { recursive: true, force: true });
     }
