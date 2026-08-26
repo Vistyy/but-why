@@ -1,4 +1,4 @@
-import { symlinkSync } from "node:fs";
+import { existsSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -22,6 +22,33 @@ describe("test subprocess isolation", () => {
     expect(home).not.toBe(process.env["HOME"]);
     expect(temporaryDirectory).toMatch(/but-why-process-/u);
     expect(stateDirectory).toMatch(/but-why-process-/u);
+  });
+
+  test("cleans isolated state after synchronous timeout and rejects incomplete output", () => {
+    const fixture = createTestWorkspace();
+    const timedOut = runTestProcess(
+      process.execPath,
+      ["-e", "process.stdout.write(process.env.HOME); setTimeout(() => {}, 30_000);"],
+      { cwd: fixture, timeout: 50 },
+    );
+
+    expect(timedOut.status).toBeNull();
+    expect(timedOut.error).toMatchObject({ code: "ETIMEDOUT" });
+    expect(existsSync(timedOut.stdout)).toBe(false);
+
+    const overflowing = runTestProcess(
+      process.execPath,
+      ["-e", 'process.stdout.write("x".repeat(2048));'],
+      { cwd: fixture, maxBuffer: 1024 },
+    );
+    expect(overflowing.status).toBeNull();
+    expect(overflowing.error).toMatchObject({ code: "ENOBUFS" });
+
+    const missing = runTestProcess(join(fixture, "missing-command"), [], { cwd: fixture });
+    expect(missing.status).toBeNull();
+    expect(missing.error).toMatchObject({ code: "ENOENT" });
+    expect(missing.stdout).toBe("");
+    expect(missing.stderr).toBe("");
   });
 
   test("rejects shared checkout paths and HOME overrides", () => {

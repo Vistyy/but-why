@@ -40,4 +40,4 @@ The release baseline stores only current links and does not convert prerelease r
 
 Repository Runtime continues to provide transaction capability without knowing Task or Change behavior.
 
-Owner persistence remains staged in the existing SQLite area until its later module-placement changes are complete.
+Task and Change owner persistence resides under the applicable owner Adapter boundaries, while Task/Change coordination retains the `task_change_links` relationship and cross-domain transaction ordering.

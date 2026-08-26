@@ -1,11 +1,12 @@
 import { Effect } from "effect";
+import { openSqliteActiveValidationRunPort } from "../../change/adapters/sqlite/sqliteActiveValidationRunPersistence.js";
+import { taskChangeCancellationChangeOperations } from "../../change/composition/loadChangePersistence.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import {
   openRepositoryRuntime,
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { openSqliteTaskPersistence } from "../../task/adapters/sqlite/sqliteTaskPersistence.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
@@ -31,6 +32,7 @@ export const withCancellationUseCases = <A, E, R>(
   return loaded.runtime.provide(
     Effect.all({
       changes: openSqliteTaskChangeCancellationPort(
+        taskChangeCancellationChangeOperations,
         taskChangeCancellationOperations,
         taskChangeCompletionOperations,
       ),

@@ -2,6 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import {
+  createChange,
+  readChangeStartById,
+} from "../../src/change/adapters/sqlite/sqliteChangeStartPersistence.js";
 import type { ChangeReviewerConfiguration } from "../../src/change/changePolicy.js";
 import {
   decodeSqliteChangeReviewerConfiguration,
@@ -10,10 +14,6 @@ import {
 import { resolveChangePolicyAtCommit } from "../../src/change/composition/resolveChangePolicy.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import {
-  createChange,
-  readChangeStartById,
-} from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";

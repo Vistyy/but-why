@@ -2,19 +2,19 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
-import { deriveAcceptanceContext } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
-import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "../../src/change/adapters/sqlite/sqliteAcceptanceContextSnapshot.js";
 import {
   decodeImplementationBlockerHistory,
   implementationBlockerReadColumns,
   type StoredImplementationBlockerRow,
-} from "../../src/sqlite/sqliteChangeAuthorityHistory.js";
-import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
+} from "../../src/change/adapters/sqlite/sqliteChangeAuthorityHistory.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/change/adapters/sqlite/sqliteValidationInputSnapshot.js";
+import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
+import { deriveAcceptanceContext } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
+import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { internalTaskId } from "../../src/task/taskId.js";
-import { runByInProcessEffect } from "./by-cli.js";
+import { runByWithEnv } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 
@@ -59,22 +59,17 @@ esac
 export const runInspectionCommand = (
   root: string,
   args: readonly string[],
-  now = "2026-06-30T12:00:00.000Z",
+  _now = "2026-06-30T12:00:00.000Z",
 ) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const { PATH: inheritedPath } = process.env;
-      Object.assign(process.env, {
-        PATH: `${join(root, ".inspection-bin")}:${inheritedPath ?? ""}`,
-      });
-      return inheritedPath;
-    }),
-    () => runByInProcessEffect(root, args, now),
-    (inheritedPath) =>
-      Effect.sync(() => {
-        if (inheritedPath === undefined) Reflect.deleteProperty(process.env, "PATH");
-        else Object.assign(process.env, { PATH: inheritedPath });
-      }),
+  Effect.sync(() =>
+    runByWithEnv(
+      root,
+      {
+        PATH: `${join(root, ".inspection-bin")}:${process.env["PATH"] ?? ""}`,
+        BUT_WHY_NOW: _now,
+      },
+      ...args,
+    ),
   );
 
 export type CreateChangeInspectionFixtureOptions = {

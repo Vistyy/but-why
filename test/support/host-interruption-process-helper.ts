@@ -29,8 +29,11 @@ writeFileSync(sessionPath, originalSession);
 
 const processIsGone = (pid: number): boolean => {
   try {
-    process.kill(pid, 0);
-    return false;
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const commandEnd = stat.lastIndexOf(")");
+    if (commandEnd < 0) return false;
+    const state = stat.slice(commandEnd + 2).split(" ")[0];
+    return state === "Z";
   } catch {
     return true;
   }

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
+import { openSqliteCandidateCapturePersistence } from "../../src/change/adapters/sqlite/sqliteCandidateCapturePersistence.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import { internalChangeId } from "../../src/change/changeId.js";
 import type {
@@ -12,7 +13,6 @@ import { localCandidatePublicationGit } from "../../src/change/publication/adapt
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo } from "../support/candidateReadyRepo.js";
 import {

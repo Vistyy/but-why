@@ -166,6 +166,7 @@ ignores:
   - test/support/initializedRepo.ts
   - test/repository/quality-interface.test.ts
   - test/change/change-implement-process.test.ts
+  - test/support/changeInspectionFixture.ts
 rule:
   any:
     - pattern: runBuiltByWithEnv($$$ARGS)
@@ -261,6 +262,28 @@ rule:
   all:
     - kind: import_statement
     - regex: '[\\s\\S]*from\\s+["`][^"`]*task/adapters/sqlite/[^"`]*["`][\\s\\S]*'
+---
+# Change and Task/Change persistence no longer has an implementation path in the retired staged directory.
+id: retired-staged-sqlite-persistence-path
+language: TypeScript
+severity: error
+message: Do not add Task-owned or Change-owned persistence under the retired src/sqlite path; place persistence under the applicable owner Adapter boundary.
+files:
+  - src/sqlite/**/*.ts
+rule:
+  kind: program
+---
+# Task/Change coordination receives Change SQLite operations from composition instead of importing Change Adapters.
+id: task-change-coordination-uses-composed-change-operations
+language: TypeScript
+severity: error
+message: Do not import Change SQLite Adapters from Task/Change coordination Adapters because Change composition owns concrete Change Adapter selection; receive operation-specific Change functions through the coordination Adapter interface.
+files:
+  - src/taskChange/adapters/**/*.ts
+rule:
+  all:
+    - kind: import_statement
+    - regex: '[\\s\\S]*from\\s+["`][^"`]*change/adapters/sqlite/[^"`]*["`][\\s\\S]*'
 ---
 # Repository Runtime is the only production owner of the Shared Repository State database lifecycle.
 id: repository-sql-layer-belongs-to-repository-runtime

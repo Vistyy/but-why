@@ -1,11 +1,10 @@
 import { Effect } from "effect";
-
+import { openSqliteActiveValidationRunPort } from "../../change/adapters/sqlite/sqliteActiveValidationRunPersistence.js";
+import { openSqliteChangeAuthorityPort } from "../../change/adapters/sqlite/sqliteChangeAuthorityPersistence.js";
+import { openSqliteChangeReadPort } from "../../change/adapters/sqlite/sqliteChangeInspectionPersistence.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
-import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
 import { openSqliteTaskChangeLinkPort } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
 import { queryTaskChangeProjection, type TaskChangeProjection } from "../inspectTaskChange.js";
 

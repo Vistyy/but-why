@@ -1,6 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { isAbsolute, relative } from "node:path";
 
+const analyzerTimeoutMs = 120_000;
+const analyzerMaxBufferBytes = 50 * 1024 * 1024;
+
 /**
  * @param {string} label
  * @param {readonly string[]} args
@@ -9,7 +12,8 @@ const runAnalyzer = (label, args) => {
   const result = spawnSync("pnpm", args, {
     cwd: process.cwd(),
     encoding: "utf8",
-    maxBuffer: 50 * 1024 * 1024,
+    maxBuffer: analyzerMaxBufferBytes,
+    timeout: analyzerTimeoutMs,
   });
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) {

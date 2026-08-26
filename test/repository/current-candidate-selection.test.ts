@@ -1,13 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
+import { openSqliteCandidateCapturePersistence } from "../../src/change/adapters/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../../src/change/adapters/sqlite/sqliteCandidateValidationExecutionPersistence.js";
+import { openSqliteChangeAuthorityPort } from "../../src/change/adapters/sqlite/sqliteChangeAuthorityPersistence.js";
+import { openSqliteChangeValidationReadPort } from "../../src/change/adapters/sqlite/sqliteChangeValidationReadPersistence.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteCandidateValidationExecutionPort } from "../../src/sqlite/sqliteCandidateValidationExecutionPersistence.js";
-import { openSqliteChangeAuthorityPort } from "../../src/sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeValidationReadPort } from "../../src/sqlite/sqliteChangeValidationReadPersistence.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 describe("Current Candidate selection", () => {

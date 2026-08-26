@@ -12,6 +12,22 @@ import { Effect } from "effect";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
+const synchronousTestProcessTimeoutMs = 4_000;
+const testProcessMaxBufferBytes = 50 * 1024 * 1024;
+
+const positiveFinite = (value: number, label: string): number => {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be finite and positive.`);
+  }
+  return value;
+};
+
+const positiveInteger = (value: number, label: string): number => {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a finite positive integer.`);
+  }
+  return value;
+};
 
 const isInDirectory = (directory: string, path: string): boolean => {
   const relativePath = relative(directory, path);
@@ -33,6 +49,7 @@ type TestProcessOptions = {
   readonly env?: NodeJS.ProcessEnv;
   readonly isolatedHome?: string;
   readonly input?: string | Buffer;
+  readonly maxBuffer?: number;
   readonly timeout?: number;
   readonly detached?: boolean;
 };
@@ -102,6 +119,10 @@ const checkedOutsideSharedCheckout = (
 };
 
 const processOptions = (options: TestProcessOptions) => {
+  const checkedTimeout =
+    options.timeout === undefined
+      ? undefined
+      : positiveInteger(options.timeout, "Test process timeout");
   const cwd = checkedOutsideSharedCheckout(realpathSync(options.cwd), "Test subprocess cwd");
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
   const inheritedHome = options.env?.["HOME"];
@@ -126,7 +147,7 @@ const processOptions = (options: TestProcessOptions) => {
     options: {
       cwd,
       env: environment,
-      ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+      ...(checkedTimeout === undefined ? {} : { timeout: checkedTimeout }),
       ...(options.detached === undefined ? {} : { detached: options.detached }),
     },
     cleanup: processEnvironment.cleanup,
@@ -140,11 +161,21 @@ export const runTestProcess = (
 ): SpawnSyncReturns<string> => {
   const prepared = processOptions(options);
   try {
-    return spawnSync(command, args, {
+    const result = spawnSync(command, args, {
       ...prepared.options,
       ...(options.input === undefined ? {} : { input: options.input }),
       encoding: "utf8",
+      maxBuffer:
+        options.maxBuffer === undefined
+          ? testProcessMaxBufferBytes
+          : positiveFinite(options.maxBuffer, "Test process maxBuffer"),
+      timeout: options.timeout ?? synchronousTestProcessTimeoutMs,
     });
+    return {
+      ...result,
+      stderr: result.stderr ?? "",
+      stdout: result.stdout ?? "",
+    };
   } finally {
     prepared.cleanup();
   }
