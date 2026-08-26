@@ -1,9 +1,11 @@
-import { existsSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
+import { Effect, Fiber } from "effect";
 import { describe, expect, test } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
-import { runTestProcess } from "../support/testProcess.js";
+import { observeUntil } from "../support/observe.js";
+import { runTestProcess, runTestWorkspaceCommand } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("test subprocess isolation", () => {
@@ -49,6 +51,34 @@ describe("test subprocess isolation", () => {
     expect(missing.error).toMatchObject({ code: "ENOENT" });
     expect(missing.stdout).toBe("");
     expect(missing.stderr).toBe("");
+  });
+
+  test("terminates workspace command process groups on timeout", async () => {
+    const fixture = createTestWorkspace();
+    const processIdPath = join(fixture, "child-pid");
+    const fiber = Effect.runFork(
+      runTestWorkspaceCommand(
+        `sleep 30 & child=$!; printf '%s' "$child" > '${processIdPath}'; wait "$child"`,
+        fixture,
+        50,
+      ),
+    );
+    await observeUntil({
+      description: `file ${processIdPath} to contain a child PID`,
+      observe: () => {
+        try {
+          return readFileSync(processIdPath, "utf8");
+        } catch {
+          return "";
+        }
+      },
+      isReady: (contents) => contents !== "",
+      timeoutMs: 5_000,
+    });
+    const childProcessId = Number(readFileSync(processIdPath, "utf8"));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    expect(() => process.kill(childProcessId, 0)).toThrow();
   });
 
   test("rejects shared checkout paths and HOME overrides", () => {

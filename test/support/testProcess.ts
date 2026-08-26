@@ -36,6 +36,21 @@ const isInDirectory = (directory: string, path: string): boolean => {
 
 const isInSharedCheckout = (path: string): boolean => isInDirectory(repositoryRoot, path);
 
+const signalTestProcessGroup = (
+  child: ChildProcessByStdio<null, Readable, Readable>,
+  signal: NodeJS.Signals,
+): void => {
+  if (child.pid === undefined) {
+    child.kill(signal);
+    return;
+  }
+  try {
+    globalThis.process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+};
+
 const safeTemporaryDirectory = (): string => {
   const temporaryDirectory = realpathSync(resolve(tmpdir()));
   if (isInSharedCheckout(temporaryDirectory)) {
@@ -209,28 +224,100 @@ export const runTestProcessOrThrow = (
 export const runTestWorkspaceCommand = (
   command: string,
   cwd: string,
+  timeoutMs = testWorkspaceCommandTimeoutMs,
 ): Effect.Effect<
   { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
   WorkspaceCommandExecutionFailed
 > =>
-  Effect.gen(function* () {
-    const result = runTestProcess("bash", ["-lc", command], {
+  Effect.async((resume, signal) => {
+    const checkedTimeout = positiveInteger(timeoutMs, "Test workspace command timeout");
+    const child = startTestProcess("bash", ["-lc", command], {
       cwd,
-      timeout: testWorkspaceCommandTimeoutMs,
+      detached: true,
     });
-    if (result.error !== undefined) {
-      return yield* new WorkspaceCommandExecutionFailed({ message: result.error.message });
-    }
-    if (result.status === null) {
-      return yield* new WorkspaceCommandExecutionFailed({
-        message: "Test command exited without a status.",
-      });
-    }
-    return {
-      exitCode: result.status,
-      stdout: result.stdout,
-      stderr: result.stderr,
+    let stdout = "";
+    let stderr = "";
+    let finished = false;
+    let cancelled = false;
+    let timedOut = false;
+    let resolveSettled: () => void = () => undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const settled = new Promise<void>((resolve) => {
+      resolveSettled = resolve;
+    });
+    const finish = (
+      effect: Effect.Effect<
+        { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
+        WorkspaceCommandExecutionFailed
+      >,
+    ): void => {
+      if (finished) return;
+      finished = true;
+      if (timeout !== undefined) clearTimeout(timeout);
+      resolveSettled();
+      if (!cancelled) resume(effect);
     };
+    const terminate = async (wasCancelled: boolean): Promise<void> => {
+      if (finished) return;
+      if (wasCancelled) cancelled = true;
+      signalTestProcessGroup(child, "SIGTERM");
+      const forceKill = setTimeout(() => {
+        if (!finished) signalTestProcessGroup(child, "SIGKILL");
+      }, 1_000);
+      await settled;
+      clearTimeout(forceKill);
+    };
+    const onAbort = (): void => {
+      cancelled = true;
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    timeout = setTimeout(() => {
+      if (finished) return;
+      timedOut = true;
+      void terminate(false);
+    }, checkedTimeout);
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", (error) => {
+      finish(
+        Effect.fail(
+          new WorkspaceCommandExecutionFailed({
+            message: error.message,
+          }),
+        ),
+      );
+    });
+    child.once("close", (status) => {
+      if (timedOut) {
+        finish(
+          Effect.fail(
+            new WorkspaceCommandExecutionFailed({
+              message: `Test workspace command timed out after ${String(checkedTimeout)} ms.`,
+            }),
+          ),
+        );
+        return;
+      }
+      if (status === null) {
+        finish(
+          Effect.fail(
+            new WorkspaceCommandExecutionFailed({
+              message: "Test command exited without a status.",
+            }),
+          ),
+        );
+        return;
+      }
+      finish(Effect.succeed({ exitCode: status, stdout, stderr }));
+    });
+    return Effect.promise(async () => {
+      signal.removeEventListener("abort", onAbort);
+      await terminate(true);
+    });
   });
 
 export const runTestProcessExpectExit = (
