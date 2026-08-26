@@ -34,24 +34,6 @@ type StartedCommand = {
   readonly done: Promise<CommandResult>;
 };
 
-const awaitProcessDone = (process: StartedCommand, description: string): Promise<CommandResult> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    process.done,
-    new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(`Timed out after ${settlementDeadlineMs}ms waiting for ${description}.`),
-          ),
-        settlementDeadlineMs,
-      );
-    }),
-  ]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  });
-};
-
 const signalProcessGroup = (process: StartedCommand, signal: NodeJS.Signals): void => {
   if (process.child.pid === undefined) {
     process.child.kill(signal);
@@ -68,10 +50,10 @@ const stopProcess = async (process: StartedCommand, description: string): Promis
   if (process.closed) return;
   signalProcessGroup(process, "SIGTERM");
   try {
-    await awaitProcessDone(process, description);
+    await settleWithinDeadline(process.done, description);
   } catch (error) {
     signalProcessGroup(process, "SIGKILL");
-    await awaitProcessDone(process, `${description} after SIGKILL`);
+    await settleWithinDeadline(process.done, `${description} after SIGKILL`);
     throw error;
   }
 };
@@ -118,7 +100,7 @@ const runRunner = async (
 ): Promise<CommandResult> => {
   const runnerProcess = startRunner(lockFile, args);
   try {
-    return await awaitProcessDone(runnerProcess, description);
+    return await settleWithinDeadline(runnerProcess.done, description);
   } finally {
     await stopRunner(runnerProcess);
   }
@@ -170,7 +152,7 @@ const runJust = async (lockFile: string, args: string[]): Promise<CommandResult>
     PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
   });
   try {
-    return await awaitProcessDone(justProcess, "Just workload settlement");
+    return await settleWithinDeadline(justProcess.done, "Just workload settlement");
   } finally {
     await stopJust(justProcess);
   }
