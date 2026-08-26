@@ -1,6 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import {
+  beginAgentInvocation,
+  settleAgentInvocation,
+} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentSessionConfiguration } from "../../src/agent/agentSession/agentSession.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/change/adapters/sqlite/sqliteCandidateCapturePersistence.js";
 import { internalChangeId } from "../../src/change/changeId.js";
@@ -850,17 +854,20 @@ describe("SQLite Validation ownership", () => {
           }).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
-        const unowned = yield* first.validation.agentPersistence.beginInvocation({
-          configuration,
-          createdAt: "2026-10-02T10:01:00.000Z",
-        });
-        if (!unowned.ok) throw new Error(unowned.code);
-        yield* first.validation.agentSessions.agentSessionJournal.settleInvocation({
-          invocationId: unowned.dispatch.invocation.id,
-          continuationId: unowned.dispatch.continuation.id,
-          settlement: { settledAt: "2026-10-02T10:01:01.000Z", kind: "returned" },
-        });
         const repository = yield* RepositorySql;
+        const unowned = yield* repository.transactionImmediate(
+          "dispatch unowned Agent Invocation",
+          (sql) =>
+            beginAgentInvocation(sql, { configuration, createdAt: "2026-10-02T10:01:00.000Z" }),
+        );
+        if (!unowned.ok) throw new Error(unowned.code);
+        yield* repository.transactionImmediate("settle unowned Agent Invocation", (sql) =>
+          settleAgentInvocation(sql, {
+            invocationId: unowned.dispatch.invocation.id,
+            continuationId: unowned.dispatch.continuation.id,
+            settlement: { settledAt: "2026-10-02T10:01:01.000Z", kind: "returned" },
+          }),
+        );
         yield* repository.operation(
           "assign Agent Session to Task",
           (sql) => sql`
@@ -881,16 +888,19 @@ describe("SQLite Validation ownership", () => {
           }).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
-        const changeOwned = yield* first.validation.agentPersistence.beginInvocation({
-          configuration,
-          createdAt: "2026-10-02T10:01:02.000Z",
-        });
+        const changeOwned = yield* repository.transactionImmediate(
+          "dispatch Change-owned Agent Invocation",
+          (sql) =>
+            beginAgentInvocation(sql, { configuration, createdAt: "2026-10-02T10:01:02.000Z" }),
+        );
         if (!changeOwned.ok) throw new Error(changeOwned.code);
-        yield* first.validation.agentSessions.agentSessionJournal.settleInvocation({
-          invocationId: changeOwned.dispatch.invocation.id,
-          continuationId: changeOwned.dispatch.continuation.id,
-          settlement: { settledAt: "2026-10-02T10:01:03.000Z", kind: "returned" },
-        });
+        yield* repository.transactionImmediate("settle Change-owned Agent Invocation", (sql) =>
+          settleAgentInvocation(sql, {
+            invocationId: changeOwned.dispatch.invocation.id,
+            continuationId: changeOwned.dispatch.continuation.id,
+            settlement: { settledAt: "2026-10-02T10:01:03.000Z", kind: "returned" },
+          }),
+        );
         yield* repository.operation(
           "assign Agent Session to another Change",
           (sql) => sql`
@@ -919,20 +929,27 @@ describe("SQLite Validation ownership", () => {
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
           const fixture = yield* createRun(input.commonDirectory, "invalid-correction");
-          const initial = yield* fixture.validation.agentPersistence.beginInvocation({
-            configuration,
-            createdAt: "2026-10-02T10:01:10.000Z",
-          });
+          const repository = yield* RepositorySql;
+          const initial = yield* repository.transactionImmediate(
+            "dispatch unowned Agent Invocation",
+            (sql) =>
+              beginAgentInvocation(sql, {
+                configuration,
+                createdAt: "2026-10-02T10:01:10.000Z",
+              }),
+          );
           if (!initial.ok) throw new Error(initial.code);
-          yield* fixture.validation.agentSessions.agentSessionJournal.settleInvocation({
-            invocationId: initial.dispatch.invocation.id,
-            continuationId: initial.dispatch.continuation.id,
-            settlement: {
-              settledAt: "2026-10-02T10:01:11.000Z",
-              kind: "launch_failed",
-              unusableReason: "Correct the Specialist configuration.",
-            },
-          });
+          yield* repository.transactionImmediate("settle unowned Agent Invocation", (sql) =>
+            settleAgentInvocation(sql, {
+              invocationId: initial.dispatch.invocation.id,
+              continuationId: initial.dispatch.continuation.id,
+              settlement: {
+                settledAt: "2026-10-02T10:01:11.000Z",
+                kind: "launch_failed",
+                unusableReason: "Correct the Specialist configuration.",
+              },
+            }),
+          );
 
           expect(
             yield* fixture.validation.agentSessions.agentSessionJournal

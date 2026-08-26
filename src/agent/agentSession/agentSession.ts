@@ -79,17 +79,5 @@ export type AgentSessionJournal<Entry> = {
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
-export type AgentSessionPersistence = {
-  readonly beginInvocation: (
-    input: AgentSessionDispatchInput,
-  ) => Effect.Effect<AgentDispatchResult, RepositoryStorageError>;
-  readonly settleInvocation: (
-    input: AgentSessionSettlementInput,
-  ) => Effect.Effect<void, RepositoryStorageError>;
-  readonly readInvocationHistory: (
-    agentSessionId: number,
-  ) => Effect.Effect<readonly AgentInvocationRecord[], RepositoryStorageError>;
-};
-
 export const piSessionIdForContinuation = (continuationId: number): string =>
   `by-agent-${continuationId}`;

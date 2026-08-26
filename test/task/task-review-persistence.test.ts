@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { beginAgentInvocation } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import {
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
@@ -487,7 +487,6 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
@@ -544,7 +543,7 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
       expect(existsSync(workspacePath)).toBe(false);
       expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
 
-      const history = yield* agents.readInvocationHistory(started.dispatch.agentSessionId);
+      const history = (yield* reviews.getById(admitted.review.id))?.agentInvocations ?? [];
       expect(history).toMatchObject([
         {
           settlementKind: "return_unknown",
@@ -553,11 +552,16 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
           continuation: { unusableReason: expect.stringContaining("Reviewer process stopped") },
         },
       ]);
-      const replacement = yield* agents.beginInvocation({
-        agentSessionId: started.dispatch.agentSessionId,
-        configuration,
-        createdAt: later,
-      });
+      const repository = yield* RepositorySql;
+      const replacement = yield* repository.transactionImmediate(
+        "dispatch replacement Agent Invocation",
+        (sql) =>
+          beginAgentInvocation(sql, {
+            agentSessionId: started.dispatch.agentSessionId,
+            configuration,
+            createdAt: later,
+          }),
+      );
       expect(replacement).toMatchObject({ ok: true, dispatch: { resumed: false } });
     }),
   );
@@ -568,7 +572,6 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
@@ -618,7 +621,6 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
         },
       });
       if (!invocation.ok) throw new Error(invocation.code);
-      const agentSessionId = invocation.dispatch.agentSessionId;
       expect(
         yield* reviews.agentSessionJournal
           .settleInvocation({
@@ -642,7 +644,7 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
           })
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-      expect(yield* agents.readInvocationHistory(agentSessionId)).toMatchObject([
+      expect((yield* reviews.getById(admitted.review.id))?.agentInvocations ?? []).toMatchObject([
         { settledAt: null, settlementKind: null },
       ]);
       expect(

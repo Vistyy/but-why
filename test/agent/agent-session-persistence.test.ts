@@ -3,19 +3,29 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import {
-  openSqliteAgentSessionPersistence,
+  decodeSqliteAgentInvocation,
+  type SqliteAgentInvocationRow,
+} from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentInvocation.js";
+import {
+  beginAgentInvocation,
+  settleAgentInvocation,
   settleUnsettledAgentInvocations,
 } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type {
   AgentSessionConfiguration,
-  AgentSessionPersistence,
+  AgentSessionDispatchInput,
+  AgentSessionJournal,
+  AgentSessionSettlementInput,
 } from "../../src/agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  type RepositorySqlService,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 
@@ -26,25 +36,69 @@ const configuration: AgentSessionConfiguration = {
   thinking: "medium",
 };
 
-const noOpJournal = (persistence: AgentSessionPersistence) => ({
-  beginInvocation: (
-    input: Parameters<AgentSessionPersistence["beginInvocation"]>[0] & { entry?: undefined },
-  ) => persistence.beginInvocation(input),
-  settleInvocation: ({
-    entry: _entry,
-    ...input
-  }: Parameters<AgentSessionPersistence["settleInvocation"]>[0] & { entry?: undefined }) =>
-    persistence.settleInvocation(input),
+const sharedAgentSessionOperations = (repository: RepositorySqlService) => ({
+  beginInvocation: (input: AgentSessionDispatchInput) =>
+    repository.transactionImmediate("dispatch Agent Invocation", (sql) =>
+      beginAgentInvocation(sql, input),
+    ),
+  settleInvocation: (input: AgentSessionSettlementInput) =>
+    repository.transactionImmediate("settle Agent Invocation", (sql) =>
+      settleAgentInvocation(sql, input),
+    ),
+  readInvocationHistory: (agentSessionId: number) =>
+    repository.transaction("read Agent Invocation history", (sql) =>
+      Effect.gen(function* () {
+        const rows = yield* sql<SqliteAgentInvocationRow>`
+            SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
+              invocation.continuation_id AS continuationId,
+              invocation.created_at AS createdAt, invocation.settled_at AS settledAt,
+              invocation.settlement_kind AS settlementKind,
+              invocation.input_tokens AS inputTokens,
+              invocation.cached_input_tokens AS cachedInputTokens,
+              invocation.cache_write_tokens AS cacheWriteTokens,
+              invocation.output_tokens AS outputTokens,
+              invocation.total_tokens AS totalTokens,
+              continuation.harness,
+              continuation.provider,
+              continuation.model,
+              continuation.thinking,
+              continuation.transcript_path AS transcriptPath,
+              continuation.unusable_reason AS unusableReason
+            FROM agent_invocations AS invocation
+            JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+            WHERE continuation.agent_session_id = ${agentSessionId}
+            ORDER BY invocation.id
+          `;
+        return yield* Effect.try({
+          try: () => rows.map(decodeSqliteAgentInvocation),
+          catch: (cause) =>
+            new RepositoryPersistedDataInvalid({
+              operationName: "read Agent Invocation history",
+              cause,
+            }),
+        });
+      }),
+    ),
+});
+
+type SharedAgentSessionOperations = ReturnType<typeof sharedAgentSessionOperations>;
+
+const noOpJournal = (operations: SharedAgentSessionOperations): AgentSessionJournal<undefined> => ({
+  beginInvocation: ({ entry: _entry, ...input }) => operations.beginInvocation(input),
+  settleInvocation: ({ entry: _entry, ...input }) => operations.settleInvocation(input),
 });
 
 const withPersistence = <A, E>(
   root: string,
-  use: (persistence: AgentSessionPersistence) => Effect.Effect<A, E, RepositorySql>,
+  use: (operations: SharedAgentSessionOperations) => Effect.Effect<A, E, RepositorySql>,
 ): Effect.Effect<A, E | RepositoryStorageError, never> => {
   const loaded = openRepositoryRuntime(root);
   if (!loaded.ok) throw new Error(loaded.error.code);
   return loaded.runtime.provide(
-    openSqliteAgentSessionPersistence().pipe(Effect.flatMap((persistence) => use(persistence))),
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      return yield* use(sharedAgentSessionOperations(repository));
+    }),
   );
 };
 

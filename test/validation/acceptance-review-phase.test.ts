@@ -5,10 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
 import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import type {
-  AgentSessionJournal,
-  AgentSessionPersistence,
-} from "../../src/agent/agentSession/agentSession.js";
+import type { AgentSessionJournal } from "../../src/agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentResult,
@@ -168,8 +165,8 @@ describe("Acceptance Review phase", () => {
   it.scoped("runs an oversized Acceptance Context through the normal Pi reviewer process", () =>
     Effect.gen(function* () {
       const workspace = createTestWorkspace();
-      const agentPersistence: AgentSessionPersistence = {
-        beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+      const journal: AgentSessionJournal<ChangeValidationAgentSessionEntry> = {
+        beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
           const sessionId = agentSessionId ?? 1;
           const continuation = {
             id: 1,
@@ -200,8 +197,7 @@ describe("Acceptance Review phase", () => {
             },
           });
         },
-        settleInvocation: () => Effect.void,
-        readInvocationHistory: () => Effect.succeed([]),
+        settleInvocation: ({ entry: _entry }) => Effect.void,
       };
       const actualPolicy = {
         ...policy,
@@ -224,7 +220,7 @@ describe("Acceptance Review phase", () => {
         },
         policy: actualPolicy,
         agentEnvironment: ["env"],
-        agentPersistence,
+        journal,
         commandCwd: workspace,
         resourceRoot: workspace,
         reviewerExecutor: createPiReviewerProcessExecutor(),
@@ -244,8 +240,8 @@ describe("Acceptance Review phase", () => {
       const settledInvocationIds: number[] = [];
       const settlementKinds: string[] = [];
       const results: ObservedAcceptanceResult[] = [];
-      const agentPersistence: AgentSessionPersistence = {
-        beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+      const journal: AgentSessionJournal<ChangeValidationAgentSessionEntry> = {
+        beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
           const sessionId = agentSessionId ?? 1;
           const continuation = {
             id: 1,
@@ -276,17 +272,16 @@ describe("Acceptance Review phase", () => {
             },
           });
         },
-        settleInvocation: ({ invocationId, settlement }) =>
+        settleInvocation: ({ entry: _entry, invocationId, settlement }) =>
           Effect.sync(() => {
             settledInvocationIds.push(invocationId);
             settlementKinds.push(settlement.kind);
           }),
-        readInvocationHistory: () => Effect.succeed([]),
       };
       const fixture = acceptancePhaseFixture(
         { review: () => Effect.succeed(cleanReport) },
         {
-          agentPersistence,
+          journal,
           settlementObserver: (result) => results.push(result),
           artifactsRoot,
         },
@@ -524,7 +519,7 @@ type FixtureOptions = {
   readonly policy?: RunAcceptanceReviewPhaseInput["policy"];
   readonly agentEnvironment?: RunAcceptanceReviewPhaseInput["agentEnvironment"];
   readonly reviewerExecutor?: RunAcceptanceReviewPhaseInput["reviewerExecutor"];
-  readonly agentPersistence?: AgentSessionPersistence;
+  readonly journal?: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
   readonly getAgentSession?: RunAcceptanceReviewPhaseInput["getAgentSession"];
   readonly settlementObserver?: (result: ObservedAcceptanceResult) => void;
   readonly recordAcceptanceResult?: RunAcceptanceReviewPhaseInput["recordAcceptanceResult"];
@@ -581,17 +576,20 @@ const acceptancePhaseFixture = (
   };
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
   const phasePolicy = options.policy ?? policy;
-  const agentPersistence = options.agentPersistence ?? defaultAgentPersistence();
+  const agentJournal = options.journal ?? defaultAgentJournal();
   const getAgentSession = options.getAgentSession ?? (() => Effect.succeed(undefined));
   const journal: AgentSessionJournal<ChangeValidationAgentSessionEntry> = {
-    beginInvocation: ({ entry: _entry, ...input }) => agentPersistence.beginInvocation(input),
+    beginInvocation: (input) => agentJournal.beginInvocation(input),
     settleInvocation: ({ entry, ...input }) =>
       Effect.gen(function* () {
         if (entry?.kind === "change_reviewer_settlement") {
           if (options.settlementObserver === undefined) results.push(entry);
           else options.settlementObserver(entry);
         }
-        yield* agentPersistence.settleInvocation(input);
+        yield* agentJournal.settleInvocation({
+          ...input,
+          ...(entry === undefined ? {} : { entry }),
+        });
       }),
   };
   const recordAcceptanceResult =
@@ -652,8 +650,8 @@ const acceptancePhaseFixture = (
   };
 };
 
-const defaultAgentPersistence = (): AgentSessionPersistence => ({
-  beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+const defaultAgentJournal = (): AgentSessionJournal<ChangeValidationAgentSessionEntry> => ({
+  beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
     const sessionId = agentSessionId ?? 1;
     const continuation = {
       id: 1,
@@ -684,6 +682,5 @@ const defaultAgentPersistence = (): AgentSessionPersistence => ({
       },
     });
   },
-  settleInvocation: () => Effect.void,
-  readInvocationHistory: () => Effect.succeed([]),
+  settleInvocation: ({ entry: _entry }) => Effect.void,
 });

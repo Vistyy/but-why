@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
-import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { settleAgentInvocation } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/change/adapters/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../src/change/adapters/sqlite/sqliteChangeAgentSessionPersistence.js";
 import { openSqliteValidationRunAbandonmentPort } from "../../src/change/adapters/sqlite/sqliteValidationRunAbandonmentPersistence.js";
@@ -116,8 +116,8 @@ describe("Candidate-owned Validation Run inspection", () => {
       const result = yield* withTestRepository(
         fixture.root,
         Effect.gen(function* () {
-          const agents = yield* openSqliteAgentSessionPersistence();
           const agentSessions = yield* openSqliteChangeAgentSessionPort();
+          const reads = yield* openSqliteChangeValidationTestDependencies();
           const abandonment = yield* openSqliteValidationRunAbandonmentPort();
           const started = yield* agentSessions.agentSessionJournal.beginInvocation({
             configuration: { harness: "pi", model: "test-model", thinking: null },
@@ -153,9 +153,9 @@ describe("Candidate-owned Validation Run inspection", () => {
               })
               .pipe(Effect.flip),
           ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-          expect(
-            yield* agents.readInvocationHistory(started.dispatch.agentSessionId),
-          ).toMatchObject([{ settledAt: null, settlementKind: null }]);
+          expect(yield* reads.reads.listAgentInvocations(fixture.validationRunId)).toMatchObject([
+            { settledAt: null, settlementKind: null },
+          ]);
           expect(yield* abandonment.getRunById(fixture.validationRunId)).toMatchObject({
             state: "running",
             outcome: null,
@@ -168,7 +168,7 @@ describe("Candidate-owned Validation Run inspection", () => {
             errorMessage: "Reviewer process stopped",
             now: later,
           });
-          const history = yield* agents.readInvocationHistory(started.dispatch.agentSessionId);
+          const history = yield* reads.reads.listAgentInvocations(fixture.validationRunId);
           return history;
         }),
       );
@@ -192,7 +192,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       const dispatch = yield* withTestRepository(
         fixture.root,
         Effect.gen(function* () {
-          const agents = yield* openSqliteAgentSessionPersistence();
+          const repository = yield* RepositorySql;
           const agentSessions = yield* openSqliteChangeAgentSessionPort();
           const abandonment = yield* openSqliteValidationRunAbandonmentPort();
           const started = yield* agentSessions.agentSessionJournal.beginInvocation({
@@ -208,21 +208,23 @@ describe("Candidate-owned Validation Run inspection", () => {
             },
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
-          yield* agents.settleInvocation({
-            invocationId: started.dispatch.invocation.id,
-            continuationId: started.dispatch.continuation.id,
-            settlement: {
-              settledAt: later,
-              kind: "returned",
-              usage: {
-                inputTokens: 10,
-                cachedInputTokens: 2,
-                cacheWriteTokens: 3,
-                outputTokens: 4,
-                totalTokens: 19,
+          yield* repository.transactionImmediate("settle Agent Invocation fixture", (sql) =>
+            settleAgentInvocation(sql, {
+              invocationId: started.dispatch.invocation.id,
+              continuationId: started.dispatch.continuation.id,
+              settlement: {
+                settledAt: later,
+                kind: "returned",
+                usage: {
+                  inputTokens: 10,
+                  cachedInputTokens: 2,
+                  cacheWriteTokens: 3,
+                  outputTokens: 4,
+                  totalTokens: 19,
+                },
               },
-            },
-          });
+            }),
+          );
           yield* abandonment.abandon({
             validationRunId: fixture.validationRunId,
             errorKind: "infrastructure_tooling_failed",

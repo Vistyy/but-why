@@ -3,10 +3,7 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { onTestFinished } from "vitest";
-import type {
-  AgentSessionJournal,
-  AgentSessionPersistence,
-} from "../../src/agent/agentSession/agentSession.js";
+import type { AgentSessionJournal } from "../../src/agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { DisposableWorkspaceRestorationFailed } from "../../src/disposableWorkspace/disposableWorkspace.js";
@@ -37,8 +34,8 @@ import {
 import { runTestProcessOrThrow, runTestWorkspaceCommand } from "../support/testProcess.js";
 import { acquireTestWorkspace, createTestWorkspace } from "../support/testWorkspace.js";
 
-const defaultAgentPersistence = (): AgentSessionPersistence => ({
-  beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+const defaultAgentJournal = (): AgentSessionJournal<TaskReviewAgentSessionEntry> => ({
+  beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
     const sessionId = agentSessionId ?? 1;
     const continuation = {
       id: 1,
@@ -69,15 +66,7 @@ const defaultAgentPersistence = (): AgentSessionPersistence => ({
       },
     });
   },
-  settleInvocation: () => Effect.void,
-  readInvocationHistory: () => Effect.succeed([]),
-});
-
-const defaultAgentJournal = (): AgentSessionJournal<TaskReviewAgentSessionEntry> => ({
-  beginInvocation: ({ entry: _entry, ...input }) =>
-    defaultAgentPersistence().beginInvocation(input),
-  settleInvocation: ({ entry: _entry, ...input }) =>
-    defaultAgentPersistence().settleInvocation(input),
+  settleInvocation: ({ entry: _entry }) => Effect.void,
 });
 
 it.effect("records Task Review preparation integrity failures and skips the reviewer", () =>

@@ -6,10 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, onTestFinished, vi } from "vitest";
 import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import type {
-  AgentSessionJournal,
-  AgentSessionPersistence,
-} from "../../src/agent/agentSession/agentSession.js";
+import type { AgentSessionJournal } from "../../src/agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentResult,
@@ -112,8 +109,8 @@ type ObservedSpecialistResult = {
   readonly phase?: string;
 };
 
-const defaultAgentPersistence = (): AgentSessionPersistence => ({
-  beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+const defaultAgentJournal = (): AgentSessionJournal<ChangeValidationAgentSessionEntry> => ({
+  beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
     const sessionId = agentSessionId ?? 1;
     const continuation = {
       id: 1,
@@ -144,12 +141,11 @@ const defaultAgentPersistence = (): AgentSessionPersistence => ({
       },
     });
   },
-  settleInvocation: () => Effect.void,
-  readInvocationHistory: () => Effect.succeed([]),
+  settleInvocation: ({ entry: _entry }) => Effect.void,
 });
 
 const journalFor = (
-  persistence: AgentSessionPersistence,
+  journal: AgentSessionJournal<ChangeValidationAgentSessionEntry>,
   observe: (
     entry: Extract<
       ChangeValidationAgentSessionEntry,
@@ -157,11 +153,11 @@ const journalFor = (
     >,
   ) => void = () => {},
 ): AgentSessionJournal<ChangeValidationAgentSessionEntry> => ({
-  beginInvocation: ({ entry: _entry, ...input }) => persistence.beginInvocation(input),
+  beginInvocation: (input) => journal.beginInvocation(input),
   settleInvocation: ({ entry, ...input }) =>
     Effect.gen(function* () {
       if (entry?.kind === "change_reviewer_settlement") observe(entry);
-      yield* persistence.settleInvocation(input);
+      yield* journal.settleInvocation({ ...input, ...(entry === undefined ? {} : { entry }) });
     }),
 });
 
@@ -228,7 +224,7 @@ const phaseHarness = (): PhaseHarness => {
         },
         sessionStorageRoot: join(artifactsRoot, "sessions"),
         restoreWorkspace: () => Effect.void,
-        journal: journalFor(defaultAgentPersistence(), (entry) => results.push(entry)),
+        journal: journalFor(defaultAgentJournal(), (entry) => results.push(entry)),
         getAgentSession: () => Effect.succeed(undefined),
         recordSpecialistResult: (result) =>
           Effect.sync(() => {
@@ -807,7 +803,7 @@ describe("Candidate Specialist Review phase", () => {
                 },
                 sessionStorageRoot: createTestWorkspace(),
                 restoreWorkspace: restoreDisposableWorkspace,
-                journal: journalFor(defaultAgentPersistence(), (entry) => results.push(entry)),
+                journal: journalFor(defaultAgentJournal(), (entry) => results.push(entry)),
                 getAgentSession: () => Effect.succeed(undefined),
                 recordSpecialistResult: (specialistResult) =>
                   Effect.sync(() => {
@@ -923,7 +919,7 @@ describe("Candidate Specialist Review phase", () => {
                   },
                   sessionStorageRoot: createTestWorkspace(),
                   restoreWorkspace: restoreDisposableWorkspace,
-                  journal: journalFor(defaultAgentPersistence(), (entry) => results.push(entry)),
+                  journal: journalFor(defaultAgentJournal(), (entry) => results.push(entry)),
                   getAgentSession: () => Effect.succeed(undefined),
                   recordSpecialistResult: (specialistResult) =>
                     Effect.sync(() => {
