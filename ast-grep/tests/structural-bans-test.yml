@@ -111,12 +111,8 @@ id: process-test-helpers-belong-to-process-boundaries
 valid:
   - runByInProcessEffect(root, ["task", "list"])
 invalid:
-  - runBuiltByWithEnv(root, {}, "task", "list")
-  - runBuiltByWithInput(root, "input", {}, "task", "list")
   - runByWithEnv(root, {}, "task", "list")
   - runBy(root, "init", "--id-prefix", "BY")
-  - runJustBy("task", "list")
-  - builtByExecutable()
 ---
 id: test-child-processes-use-test-process-adapter
 valid:

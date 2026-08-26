@@ -158,23 +158,18 @@ rule:
 id: process-test-helpers-belong-to-process-boundaries
 language: TypeScript
 severity: error
-message: Do not use built CLI or process test helpers outside approved process-boundary tests because process startup is expensive; use the in-process CLI seam unless process isolation is the behavior under test.
+message: Do not use CLI process test helpers outside approved process-boundary tests because process startup is expensive; use the in-process CLI seam unless process isolation is the behavior under test.
 files:
   - test/**/*.ts
 ignores:
   - test/support/by-cli.ts
   - test/support/initializedRepo.ts
   - test/repository/quality-interface.test.ts
-  - test/change/change-implement-process.test.ts
   - test/support/changeInspectionFixture.ts
 rule:
   any:
-    - pattern: runBuiltByWithEnv($$$ARGS)
-    - pattern: runBuiltByWithInput($$$ARGS)
     - pattern: runByWithEnv($$$ARGS)
     - pattern: runBy($$$ARGS)
-    - pattern: runJustBy($$$ARGS)
-    - pattern: builtByExecutable()
 ---
 # Test process creation owns the one isolated subprocess Adapter.
 id: test-child-processes-use-test-process-adapter

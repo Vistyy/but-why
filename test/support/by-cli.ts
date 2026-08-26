@@ -1,8 +1,7 @@
-import { cpSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
-import { onTestFinished } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
@@ -26,7 +25,6 @@ const inProcessExecutablePath = join(repoRoot, "dist/main.js");
 
 // Keep CLI process sentinels bounded without changing Vitest's global timeout.
 const cliProcessTimeoutMs = 4_000;
-const buildProcessTimeoutMs = 20_000;
 
 export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
   const { HOME: isolatedHome, ...controlledEnvironment } = environment;
@@ -34,60 +32,6 @@ export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
     ? { env: controlledEnvironment }
     : { env: controlledEnvironment, isolatedHome };
 };
-
-let builtExecutable: string | undefined;
-
-export const builtByExecutable = (): string => {
-  if (builtExecutable !== undefined) return builtExecutable;
-
-  const fixture = createTestWorkspace();
-  cpSync(join(repoRoot, "src"), join(fixture, "src"), { recursive: true });
-  cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
-  cpSync(join(repoRoot, "docs/public"), join(fixture, "docs/public"), { recursive: true });
-  cpSync(join(repoRoot, "extensions"), join(fixture, "extensions"), { recursive: true });
-  cpSync(join(repoRoot, "tsconfig.json"), join(fixture, "tsconfig.json"));
-  cpSync(join(repoRoot, "tsconfig.build.json"), join(fixture, "tsconfig.build.json"));
-  symlinkSync(join(repoRoot, "node_modules"), join(fixture, "node_modules"), "dir");
-  const built = runTestProcess(
-    join(repoRoot, "node_modules/.bin/tsc"),
-    ["-p", "tsconfig.build.json"],
-    {
-      cwd: fixture,
-      timeout: buildProcessTimeoutMs,
-    },
-  );
-  if (built.status !== 0) throw new Error(built.stderr || built.stdout);
-
-  builtExecutable = join(fixture, "dist/main.js");
-  onTestFinished(() => {
-    builtExecutable = undefined;
-  });
-  return builtExecutable;
-};
-
-export const runBuiltByWithEnv = (
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  ...args: readonly string[]
-) =>
-  runTestProcess(process.execPath, [builtByExecutable(), ...args], {
-    cwd,
-    timeout: cliProcessTimeoutMs,
-    ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
-  });
-
-export const runBuiltByWithInput = (
-  cwd: string,
-  input: string | Buffer,
-  env: NodeJS.ProcessEnv = {},
-  ...args: readonly string[]
-) =>
-  runTestProcess(process.execPath, [builtByExecutable(), ...args], {
-    cwd,
-    input,
-    timeout: cliProcessTimeoutMs,
-    ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
-  });
 
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
@@ -106,18 +50,6 @@ export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: reado
       ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
     },
   );
-
-export const runJustBy = (...args: readonly string[]) => {
-  const root = createGitRepo();
-  const candidateExecutable = builtByExecutable();
-
-  writeFileSync(
-    join(root, "justfile"),
-    `set positional-arguments\n\n[no-exit-message]\nby *args:\n    @${process.execPath} ${candidateExecutable} "$@"\n`,
-  );
-
-  return runTestProcess("just", ["by", ...args], { cwd: root });
-};
 
 type InProcessCliResult = {
   readonly status: 0 | 1 | 2;
