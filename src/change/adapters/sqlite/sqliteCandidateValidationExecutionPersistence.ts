@@ -17,14 +17,13 @@ import type {
 } from "../../candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../../changeId.js";
 import { latestResolvedBlockerId } from "../../implementationBlocker.js";
-import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
-import type { ValidationToolingFailureRecordInput } from "../../validation/validationToolingFailures.js";
+import type {
+  CandidateValidationExecutionPort,
+  ChangeValidationAgentInvocationSettlement,
+} from "../../validation/changeValidationPorts.js";
 import { deriveAcceptanceContext } from "../../validationRun/acceptanceContextSnapshot.js";
 import {
   isValidationRunEligibleForCurrentChangeAuthority,
-  type ValidationPhase,
-  type ValidationRunArtifactRecord,
-  type ValidationRunFindingRecord,
   validationPhase,
 } from "../../validationRun/validationRun.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -57,22 +56,10 @@ import {
   validationRunReadColumns,
 } from "./sqliteValidationRunStorage.js";
 
-export type CandidateValidationAgentInvocationSettlement = {
-  readonly validationRunId: number;
-  readonly phase: ValidationPhase;
-  readonly producer: string;
-  readonly outcome: "passed" | "failed";
-  readonly findings: readonly ValidationRunFindingRecord[];
-  readonly artifactRecords: readonly ValidationRunArtifactRecord[];
-  readonly toolingFailure?: ValidationToolingFailureRecordInput & {
-    readonly validationRunId: number;
-  };
-};
-
 export const settleCandidateValidationAgentInvocation = (
   sql: SqlClient.SqlClient,
   invocationId: number,
-  input: CandidateValidationAgentInvocationSettlement,
+  input: ChangeValidationAgentInvocationSettlement,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {

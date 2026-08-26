@@ -74,6 +74,18 @@ export type CandidateValidationExecutionPort = {
   ) => StorageEffect<readonly CandidateValidationArtifact[]>;
 };
 
+export type ChangeValidationAgentInvocationSettlement = {
+  readonly validationRunId: number;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly outcome: "passed" | "failed";
+  readonly findings: readonly ValidationRunFindingRecord[];
+  readonly artifactRecords: readonly ValidationRunArtifactRecord[];
+  readonly toolingFailure?: ValidationToolingFailureRecordInput & {
+    readonly validationRunId: number;
+  };
+};
+
 export type ChangeValidationAgentSessionEntry =
   | {
       readonly kind: "change_reviewer_dispatch";
@@ -83,18 +95,7 @@ export type ChangeValidationAgentSessionEntry =
       readonly phase: ValidationPhase;
       readonly configurationSnapshot: ChangeReviewerPolicy;
     }
-  | {
-      readonly kind: "change_reviewer_settlement";
-      readonly validationRunId: number;
-      readonly phase: ValidationPhase;
-      readonly producer: string;
-      readonly outcome: "passed" | "failed";
-      readonly findings: readonly ValidationRunFindingRecord[];
-      readonly artifactRecords: readonly ValidationRunArtifactRecord[];
-      readonly toolingFailure?: ValidationToolingFailureRecordInput & {
-        readonly validationRunId: number;
-      };
-    };
+  | ({ readonly kind: "change_reviewer_settlement" } & ChangeValidationAgentInvocationSettlement);
 
 export type ChangeValidationReadPort = {
   readonly getCandidateById: (candidateId: number) => StorageEffect<CandidateRecord | undefined>;

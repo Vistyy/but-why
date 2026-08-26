@@ -29,7 +29,10 @@ import type {
   ValidationPhase,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
-import type { ChangeValidationAgentSessionEntry } from "./changeValidationPorts.js";
+import type {
+  ChangeValidationAgentInvocationSettlement,
+  ChangeValidationAgentSessionEntry,
+} from "./changeValidationPorts.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import {
   InfrastructureToolingFailed,
@@ -148,19 +151,18 @@ export const runAgentReviewer = (
           ) {
             phaseOutcome = "tooling_failed";
             const failure = integrityFailure ?? result.failure;
-            return {
-              kind: "change_reviewer_settlement" as const,
+            return changeReviewerSettlement({
               validationRunId: input.validationRunId,
               phase: input.phase,
               producer: input.producer,
-              outcome: "failed" as const,
+              outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(failure),
                 validationRunId: input.validationRunId,
               },
-            };
+            });
           }
 
           const findings = input.makeFindings(result);
@@ -180,19 +182,18 @@ export const runAgentReviewer = (
           );
           if (!artifacts.ok) {
             phaseOutcome = "tooling_failed";
-            return {
-              kind: "change_reviewer_settlement" as const,
+            return changeReviewerSettlement({
               validationRunId: input.validationRunId,
               phase: input.phase,
               producer: input.producer,
-              outcome: "failed" as const,
+              outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(artifacts.failure),
                 validationRunId: input.validationRunId,
               },
-            };
+            });
           }
 
           const toolingFailure = result.ok ? undefined : result.failure;
@@ -202,12 +203,11 @@ export const runAgentReviewer = (
               : findings.length > 0
                 ? "blocked"
                 : "passed";
-          return {
-            kind: "change_reviewer_settlement" as const,
+          return changeReviewerSettlement({
             validationRunId: input.validationRunId,
             phase: input.phase,
             producer: input.producer,
-            outcome: result.ok && findings.length === 0 ? ("passed" as const) : ("failed" as const),
+            outcome: result.ok && findings.length === 0 ? "passed" : "failed",
             findings,
             artifactRecords: artifacts.artifactRecords,
             ...(toolingFailure === undefined
@@ -218,7 +218,7 @@ export const runAgentReviewer = (
                     validationRunId: input.validationRunId,
                   },
                 }),
-          };
+          });
         }),
     });
     if (phaseOutcome === undefined) {
@@ -227,6 +227,13 @@ export const runAgentReviewer = (
     return { outcome: phaseOutcome };
   });
 };
+
+const changeReviewerSettlement = (
+  input: ChangeValidationAgentInvocationSettlement,
+): Extract<ChangeValidationAgentSessionEntry, { readonly kind: "change_reviewer_settlement" }> => ({
+  kind: "change_reviewer_settlement",
+  ...input,
+});
 
 const integrityFailureResult = <Output>(
   result: ReviewerAgentResult<Output>,
