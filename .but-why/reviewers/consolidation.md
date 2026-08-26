@@ -21,6 +21,9 @@ Apply every other consolidation path exposed by the actual Candidate across prod
 Similarity and call-site count are investigation triggers, not proof of one responsibility.
 Judge parallel constructs together and require each retained representation, execution, and edit site to contribute a distinct present obligation after the others are retained.
 
+Apply test subsumption across all maintained verification, including other test frameworks, native tool tests, scripts, operation tests, and package sentinels.
+Minimize by behavioral equivalence class and material fault-detection contribution: different inputs, files, fixtures, names, or runners do not justify separate checks when their observable contract and detectable fault class are the same.
+
 Removal owns whether a responsibility should exist.
 Consolidation owns whether necessary responsibilities repeat shared knowledge, mechanics, execution, representation, or edit obligations.
 Standards owns whether retained structure truthfully models its responsibility.

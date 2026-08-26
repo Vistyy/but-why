@@ -10,7 +10,7 @@ Agents must use a plan only when the operator or an active Task explicitly ident
 `post-baseline-hardening.md` is the active investigation plan for concerns discovered during the first-release baseline cutover.
 `system-simplification-plan.md` records the completed simplification investigation and its New, unapproved migration Tasks.
 `test-suite-consolidation.md` is the active investigation plan for reducing maintained verification cost without weakening distinct protection.
-`task-navigation-experience.md` is an active exploration of Task navigation and inspection.
+`agent-cli-read-experience.md` is an active exploration of bounded agent-facing Task and Change read interfaces.
 `release-readiness.md` records the current first-release and package planning direction.
 `candidate-publication-presentation.md` is deferred until after the first-release baseline.
 All other plans are paused unless the Operator explicitly reactivates one after reviewing it against the boundary.

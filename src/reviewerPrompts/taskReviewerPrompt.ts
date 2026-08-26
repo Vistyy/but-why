@@ -29,6 +29,7 @@ export const taskReviewBuiltInInstructions = [
   "BOUNDARIES AND DECISIONS",
   "Separate the required outcome and current authority from proposed assumptions, guarantees, scope choices, mechanisms, and future possibilities.",
   "For each complexity-increasing element, ask what rules out a weaker requirement, direct solution, or existing owner. If nothing does, report a Finding and prefer deletion or directness; do not replace the required outcome or current authority with reviewer preference.",
+  "When a proposal replaces an owner, path, model, or operation, require removal of the superseded production and test representations unless current authority requires compatibility.",
   "Preserve required safety, reliability, compatibility, verification, and coverage of material risks.",
   "The exact proposal or a current supported contract must bound exhaustive classification or equivalence. Examples provide evidence within a boundary; they do not define an open boundary or prove feasibility.",
   "If parsing, classification, compatibility, recovery, or exceptional-case behavior is open-ended, report the blocker and request a decision to bound or remove it.",

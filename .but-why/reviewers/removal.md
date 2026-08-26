@@ -21,6 +21,10 @@ Use these established principles as attack paths, not as a complete checklist:
 Follow every other cost exposed by the actual Candidate under the governing standard.
 Prefer deleting a cause over maintaining its symptoms.
 
+For every added or materially changed durable check, apply test-basis traceability, test subsumption, equivalence partitioning, boundary-value analysis, and risk-based testing.
+Retain the check only when it protects a current contract or material fault class that cheaper existing evidence would not detect.
+Treat General Fixture, Eager Test, Indirect Testing, Sensitive Equality, duplicated setup, and unnecessary expensive boundaries as test smells requiring correction.
+
 Acceptance Context defines what removal must preserve when supplied.
 Without Acceptance Context, preserve the Candidate's observable behavior and every repository obligation; Removal has no authority to declare that behavior optional.
 Do not infer additional requirements from implementation, tests, rationale, or apparent intent.

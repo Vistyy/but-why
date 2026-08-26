@@ -1,4 +1,4 @@
-# Task navigation and inspection experience plan
+# Agent CLI read experience plan
 
 **Status:** Active exploration in the current Operator-directed session.
 This file records evidence, settled direction, current recommendations, and unresolved decisions.
@@ -9,7 +9,9 @@ It remains subordinate to the product boundaries documented in [Architecture](..
 
 ## Purpose
 
-Design an agent-first read experience for navigating large Task collections without requiring agents to retrieve the complete Task inventory and reconstruct operational state through repeated Task and Change inspection.
+Design an agent-first CLI read experience that returns the smallest complete representation for each supported inspection job.
+The existing evidence focuses on navigating large Task collections without retrieving the complete inventory or reconstructing operational state through repeated Task and Change inspection.
+The expanded scope also covers compact Change status and the responsibility of detailed Change inspection.
 
 The design covers:
 
@@ -18,8 +20,10 @@ The design covers:
 - Task Dependency navigation.
 - Text discovery of existing Tasks.
 - Bounded Task inventory and history browsing.
+- Compact Change status and detailed Change inspection.
 - No-argument CLI behavior.
 
+The design does not cover mutation commands, workflow behavior, or the current architecture simplification initiative.
 The design does not authorize implementation.
 
 ## Settled direction
@@ -45,6 +49,13 @@ A text match does not establish a Task Dependency or another domain relationship
 
 Keep complete Task Context in a focused detail operation rather than returning it by default in collections.
 
+Add a bounded `by change status <change-id>` operation for repeated operational inspection.
+Change Status must expose canonical Change-owned state without returning growing histories or freeform authority content.
+The continuation extension may consume Change Status, but its needs do not define a continuation-specific CLI operation.
+
+Do not decide whether to split `by change show <change-id>` until usage evidence establishes the distinct jobs and fields agents actually require.
+The continuation simplification does not depend on that later decision.
+
 ## Current system
 
 `by task list` currently combines lifecycle scope and output bounds through `--all`, `--state`, and `--limit`.
@@ -59,6 +70,10 @@ Satisfied Task Dependency edges are omitted from Task List because `blockedBy` c
 
 `by task show <task-id>` returns one Task's lifecycle facts, direct prerequisites, direct dependents, linked Change projection, latest Task Review summary, and contextual next commands.
 `by task context <task-id>` returns the complete current Task title and description.
+
+`by change show <change-id>` returns detailed Change inspection, including Acceptance Context, Implementation Decisions when present, current Candidate and Validation facts, Finding and Tooling Failure counts, Publication facts, pull-request identity, and cleanup state.
+Acceptance Context and Implementation Decisions contain freeform content, so the response can be much larger than the operational fact a caller needs.
+The continuation extension currently calls Change Show and Blocker List, runs several Git inspections, validates their raw representations, and reconstructs Change activity and continuation decisions.
 
 The current bare `by` dashboard reads all New and Todo Tasks through an internally named actionable collection.
 It does not distinguish reviewable, startable, waiting, or Change-linked work.
@@ -128,6 +143,13 @@ Task Show should remain concise enough for repeated inspection.
 Task Context should remain the complete intent read.
 The design must determine whether any facts now split between these commands cause avoidable calls without making complete Context part of normal summary output.
 
+### Inspect one known Change
+
+The agent knows a Change ID and may need either a compact current status or complete detailed inspection.
+Repeated monitoring needs canonical activity, blocking, validation, publication, terminal cleanup, and Managed Worktree revision facts without Acceptance Context or historical content.
+Implementation and investigation may require the complete Acceptance Context, Implementation Decisions, or exact supporting history.
+The design must preserve these as distinct jobs rather than make every status read return the detailed representation.
+
 ### Select or resume work
 
 The agent needs to understand unfinished work across the repository.
@@ -175,9 +197,27 @@ Done and Cancelled Tasks should not dominate normal work selection.
 
 ## Current interface recommendation
 
-This section is a recommendation for further decision, not settled behavior.
+This section contains settled direction and recommendations that still require further decisions.
 
-### Exact inspection
+### Change Status and detailed Change inspection
+
+Add `by change status <change-id>` as a compact general read operation for Operators, agents, watchers, and other interfaces.
+Its result must have a fixed structural bound and must not contain Acceptance Context, Findings, Implementation Decisions, Blocker or Resolution history, Validation Run history, or another collection that grows with Change history.
+
+The smallest current field direction is Change identity and terminal state, canonical Change Activity, Finding and Tooling Failure counts with the actionable Validation Run identity, active Blocker and latest Resolution identities, Publication readiness and pull-request URL, cleanup state, the initial-Submission reassessment condition, and a compact Managed Worktree revision.
+This list is a candidate schema rather than an accepted exhaustive contract.
+The exact schema must retain only facts that a demonstrated compact-status consumer requires.
+
+The continuation extension should poll Change Status instead of Change Show, Blocker List, and direct Git inspection.
+When Change Status reports a previously undelivered Resolution identity, the extension may retrieve that exact Resolution content once through the existing Change-owned inspection operation.
+The extension should retain Pi event handling, pause and explicit continuation, polling, restart limits, delivered-Resolution tracking, widgets, messages, abort, and shutdown behavior.
+It should not decode raw Change history or derive Change, Candidate, Validation, Publication, Blocker, or Managed Worktree meaning.
+
+Keep Change Show as the current detailed inspection command until evidence establishes a better responsibility split.
+Study actual agent calls and field consumption before deciding whether to remove fields, divide detailed inspection into focused operations, or retain the current command.
+Do not block Change Status or continuation simplification on that study.
+
+### Exact Task inspection
 
 Keep Task Show and Task Context as separate focused operations.
 
@@ -271,9 +311,9 @@ It may return focused Task command guidance or invoke the operational projection
 ## Ownership and structure
 
 Task Intent owns Task Lifecycle, Task Review facts, Task Dependencies, readiness derived from Task facts, and Task-owned read models.
-Change Delivery owns Change Activity and Change inspection facts.
+Change Delivery owns Change Activity, Change Status, detailed Change inspection, and Managed Worktree revision meaning.
 
-A combined Task operational projection crosses those facts.
+A combined Task operational projection crosses Task and Change facts.
 Under the current Task and Change coordination boundary, Task and Change coordination should join supported Task and Change projections for CLI output.
 It should not store Change Activity on Tasks, reproduce Change derivation rules, or let Task persistence query Change-owned tables through an undocumented seam.
 
@@ -289,6 +329,10 @@ Observable CLI behavior must be verified through supported commands rather than 
 
 The eventual verification should establish at least these material claims:
 
+- Change Status remains structurally bounded regardless of Acceptance Context, decision, Finding, Resolution, and Validation history size.
+- Change Status reports canonical Change-owned operational facts without extension-side reconstruction.
+- Detailed Change authority and history remain available through focused inspection.
+- The continuation extension no longer polls detailed Change inspection or runs direct Git inspection to derive domain state.
 - Exact Task lookup remains efficient and complete for its defined summary contract.
 - Complete Task Context remains available without collection expansion.
 - The operational projection distinguishes New, startable, prerequisite-waiting, and Change-linked Tasks from authoritative facts.
@@ -304,20 +348,26 @@ Do not preserve tests or package files whose only purpose is the retired dashboa
 
 ## Planning sequence
 
-1. Confirm or reject the repository-wide operational projection as a distinct read job.
-2. Define its exact categories from Task Lifecycle, Task Review, Task Dependencies, and Change Activity without introducing new lifecycle state.
-3. Select its command location and smallest output schema.
-4. Define exact Task Show responsibility relative to complete Task Context.
-5. Define direct and transitive Task Dependency navigation, ordering, bounds, and output representation.
-6. Decide whether current evidence requires text search in the first redesign.
-7. Define bounded Task List lifecycle selection, ordering, default limit, and continuation.
-8. Define bare `by` and bare `by task` behavior after removing the dashboard.
-9. Reconcile every combined read operation with the accepted Task and Change boundary.
-10. Record accepted outcomes as Tasks only after Task Recording Authorization.
-11. Implement only after explicit Implementation Authorization through the selected work route.
+1. Define the smallest bounded Change Status schema from demonstrated operational consumers.
+2. Trace Change Status derivation through Change Delivery, Repository Runtime, CLI, and output ownership without extension-side domain reconstruction.
+3. Inspect actual agent use of Change Show before deciding whether detailed Change inspection should be divided.
+4. Confirm or reject the repository-wide Task operational projection as a distinct read job.
+5. Define its exact categories from Task Lifecycle, Task Review, Task Dependencies, and Change Activity without introducing new lifecycle state.
+6. Select its command location and smallest output schema.
+7. Define exact Task Show responsibility relative to complete Task Context.
+8. Define direct and transitive Task Dependency navigation, ordering, bounds, and output representation.
+9. Decide whether current evidence requires text search in the first redesign.
+10. Define bounded Task List lifecycle selection, ordering, default limit, and continuation.
+11. Define bare `by` and bare `by task` behavior after removing the dashboard.
+12. Reconcile every combined read operation with the accepted Task and Change boundary.
+13. Record accepted outcomes as Tasks only after Task Recording Authorization.
+14. Implement only after explicit Implementation Authorization through the selected work route.
 
 ## Unresolved decisions
 
+- The exact bounded Change Status schema and which demonstrated consumers require each field.
+- Whether Managed Worktree revision should expose bounded component facts or only an opaque stable fingerprint.
+- Which Change Show fields agents actually consume and whether that evidence justifies focused detailed-inspection operations.
 - Whether one repository-wide operational projection is the correct replacement for repeated New, Todo, Change, and exact inspection calls.
 - The public name and command location of that projection if accepted.
 - Whether New Tasks with an Active Task Review belong in the same projection and which facts distinguish their next actions.
