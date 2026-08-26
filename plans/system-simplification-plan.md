@@ -269,7 +269,7 @@ Each Task is recorded as New and unapproved, removes its replaced supported path
 Task Submission and implementation remain separately authorized actions.
 
 1. `BY-73` replaces Agent Session raw-SQL callback links with owner-specific semantic journals for Task Review, Simplification Advice, Acceptance Review, and Specialist Review.
-2. `BY-74` replaces ordinary and coordinated Task use-case loading with complete operations, including Task list and detail projections, Context Draft sequencing, dependencies, Revision, linked and standalone cancellation, and the supported coordination paths.
+2. `BY-74` replaces ordinary and coordinated Task use-case loading with complete operations for Task creation, list and detail projections, edits, Context Draft sequencing, dependencies, and Revision.
 3. `BY-75` replaces Task Review use-case loading with complete submission, inspection, listing, advice, and abandonment operations that require coordinated admission and use the semantic journal.
 4. `BY-76` replaces Candidate capture discovery and rebinding with the exact submission-selected capture contract.
 5. `BY-77` constructs Candidate Validation directly and migrates validation execution, inspection, Artifact content, and abandonment to complete operations, including one Change Validation-private stored Findings decoder and the semantic journal.
@@ -278,7 +278,8 @@ Task Submission and implementation remain separately authorized actions.
 8. `BY-80` replaces Change Submit composition with one complete operation that reuses exact Candidate capture, Candidate Validation, and Candidate Publication.
 9. `BY-81` replaces Candidate Publication and reconciliation composition while preserving uncertain-mutation recovery and reusing the existing GitHub remote parser.
 10. `BY-82` replaces terminal cleanup and remaining recovery loaders with complete operations, introducing a private state kernel only where the migration proves shared durable lifecycle meaning.
-11. `BY-83` removes obsolete migration seams and adds only low-false-positive safeguards after the preceding operation migrations are complete.
+11. `BY-83` removes obsolete migration seams and adds only low-false-positive safeguards after all operation migrations are complete.
+12. `BY-84` replaces standalone Task, linked Task, and direct Change cancellation loaders with complete operations while preserving locking, active Validation Run rejection, GitHub close recovery, and atomic Task/Change transitions.
 
 The shared Config source-text parser belongs in the first migration that replaces Task Review or Change policy composition and must preserve distinct Repo Config, Global Config, and missing-file policy.
 No migration is needed for Pi traversal, Herdr decoding, command results, or text readers unless new evidence establishes material deletion without merging their distinct policies.
@@ -289,7 +290,7 @@ Task `BY-68` was also cancelled, so no active interruption or process-lifecycle 
 
 `BY-75` and `BY-77` depend on `BY-73`.
 `BY-80` depends on `BY-76`, `BY-77`, and `BY-81`.
-`BY-83` depends on `BY-74`, `BY-75`, `BY-78`, `BY-79`, `BY-80`, and `BY-82`; the remaining migrations are transitive prerequisites.
+`BY-83` depends on `BY-74`, `BY-75`, `BY-78`, `BY-79`, `BY-80`, `BY-82`, and `BY-84`; the remaining migrations are transitive prerequisites.
 Add another dependency only when delivery or verification cannot proceed until its prerequisite is Done, not for preferred order or likely file overlap.
 
 ## Prevention selection
