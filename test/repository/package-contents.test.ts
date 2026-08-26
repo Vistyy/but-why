@@ -298,6 +298,54 @@ describe("release package boundary", () => {
     ).toBe(true);
   });
 
+  it("resolves Pi OAuth through the installed runtime dependency", () => {
+    const bundledSources = prepared.metadata.files.flatMap(({ path }) =>
+      path.startsWith("dist/") && path.endsWith(".js")
+        ? [readFileSync(join(prepared.installedPackage, path), "utf8")]
+        : [],
+    );
+    expect(
+      bundledSources.some((source) => source.includes('from"@earendil-works/pi-coding-agent"')),
+    ).toBe(true);
+
+    const authFixture = createTestWorkspace();
+    const authPath = join(authFixture, "auth.json");
+    writeFileSync(
+      authPath,
+      `${JSON.stringify({
+        "openai-codex": {
+          type: "oauth",
+          access: "installed-package-access-token",
+          refresh: "unused-refresh-token",
+          expires: Date.now() + 60 * 60 * 1_000,
+        },
+      })}\n`,
+    );
+    const sentinel = join(prepared.installedRoot, "pi-oauth-sentinel.mjs");
+    writeFileSync(
+      sentinel,
+      `import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+const runtime = await ModelRuntime.create({
+  authPath: process.argv[2],
+  modelsPath: null,
+  refreshOnCreate: false,
+});
+console.log(JSON.stringify(await runtime.getAuth("openai-codex")));
+`,
+    );
+
+    const resolved = runTestProcess(process.execPath, [sentinel, authPath], {
+      cwd: prepared.installedRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+    expect(resolved.error).toBeUndefined();
+    expect(resolved.status, resolved.stderr || resolved.stdout).toBe(0);
+    expect(JSON.parse(resolved.stdout)).toEqual({
+      auth: { apiKey: "installed-package-access-token" },
+      source: "OAuth",
+    });
+  });
+
   it(
     "preserves representative dependency-option guidance through the installed executable",
     () => {
