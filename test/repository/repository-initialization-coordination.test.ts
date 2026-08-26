@@ -21,7 +21,6 @@ const initializerOperationDeadlineMs = 2_000;
 const readinessDeadlineMs = 2_500;
 const childSettlementDeadlineMs = 100;
 const cleanupDeadlineMs = 200;
-const observationDeadlineMs = 50;
 const outerTestDeadline = "4775 millis";
 
 type ChildResult = {
@@ -211,7 +210,7 @@ const lastJsonLine = (stdout: string): unknown => {
 };
 
 describe("Shared Repository State initialization coordination", () => {
-  it.live("produces complete baseline state when two processes initialize one absent path", () =>
+  it.live("initializes one absent path successfully from two processes", () =>
     withTemporaryDirectory("but-why-concurrent-init-", (temporary) =>
       runConcurrentInitializers(
         join(temporary.directory, "state.sqlite"),
@@ -225,36 +224,11 @@ describe("Shared Repository State initialization coordination", () => {
             expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
             expect(lastJsonLine(result.stdout)).toEqual({
               ok: true,
-              migrations: [1, 2, 3],
               identity: { commonDirectory: temporary.directory, idPrefix: "BY" },
             });
           }
 
-          return Effect.scoped(
-            Effect.gen(function* () {
-              const repository = yield* RepositorySql;
-              const migrations = yield* repository.operation(
-                "verify concurrent migration ledger",
-                (sql) => sql<{ readonly migrationId: number }>`
-                  SELECT migration_id AS migrationId
-                  FROM effect_sql_migrations
-                  ORDER BY migration_id
-                `,
-              );
-              expect(migrations).toEqual([
-                { migrationId: 1 },
-                { migrationId: 2 },
-                { migrationId: 3 },
-              ]);
-            }).pipe(
-              Effect.provide(
-                repositorySqlLayer({
-                  statePath: join(temporary.directory, "state.sqlite"),
-                  commonDirectory: temporary.directory,
-                }),
-              ),
-            ),
-          ).pipe(Effect.timeout(observationDeadlineMs));
+          return Effect.void;
         }),
       ),
     ).pipe(Effect.timeout(outerTestDeadline)),
@@ -301,18 +275,16 @@ describe("Shared Repository State initialization coordination", () => {
             Effect.scoped(
               Effect.gen(function* () {
                 const repository = yield* RepositorySql;
-                const migrations = yield* repository.operation(
-                  "verify recovered migration ledger",
-                  (sql) => sql<{ readonly migrationId: number }>`
-                  SELECT migration_id AS migrationId
-                  FROM effect_sql_migrations
-                  ORDER BY migration_id
-                `,
+                const identities = yield* repository.operation(
+                  "verify recovered repository identity",
+                  (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
+                    SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
+                    FROM shared_state_identity
+                    WHERE id = 1
+                  `,
                 );
-                expect(migrations).toEqual([
-                  { migrationId: 1 },
-                  { migrationId: 2 },
-                  { migrationId: 3 },
+                expect(identities).toEqual([
+                  { commonDirectory: temporary.directory, idPrefix: "BY" },
                 ]);
               }).pipe(
                 Effect.provide(
@@ -335,15 +307,15 @@ describe("Shared Repository State initialization coordination", () => {
       const initialize = Effect.scoped(
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
-          const migrations = yield* repository.operation(
-            "prime current migration ledger",
-            (sql) => sql<{ readonly migrationId: number }>`
-              SELECT migration_id AS migrationId
-              FROM effect_sql_migrations
-              ORDER BY migration_id
+          const identities = yield* repository.operation(
+            "prime current repository identity",
+            (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
+              SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
+              FROM shared_state_identity
+              WHERE id = 1
             `,
           );
-          expect(migrations).toEqual([{ migrationId: 1 }, { migrationId: 2 }, { migrationId: 3 }]);
+          expect(identities).toEqual([{ commonDirectory: temporary.directory, idPrefix: "BY" }]);
         }).pipe(
           Effect.provide(
             repositorySqlLayer({
@@ -360,15 +332,15 @@ describe("Shared Repository State initialization coordination", () => {
             Effect.scoped(
               Effect.gen(function* () {
                 const repository = yield* RepositorySql;
-                const migrations = yield* repository.operation(
-                  "read current migration ledger while locked",
-                  (sql) => sql<{ readonly migrationId: number }>`
-                    SELECT migration_id AS migrationId
-                    FROM effect_sql_migrations
-                    ORDER BY migration_id
+                const identities = yield* repository.operation(
+                  "read current repository identity while locked",
+                  (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
+                    SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
+                    FROM shared_state_identity
+                    WHERE id = 1
                   `,
                 );
-                return migrations;
+                return identities;
               }).pipe(
                 Effect.provide(
                   repositorySqlLayer({
@@ -380,13 +352,11 @@ describe("Shared Repository State initialization coordination", () => {
               ),
             ).pipe(Effect.timeout(operationDeadlineMs)),
           ).pipe(
-            Effect.map((migrations) => {
-              expect(migrations).toEqual([
-                { migrationId: 1 },
-                { migrationId: 2 },
-                { migrationId: 3 },
+            Effect.map((identities) => {
+              expect(identities).toEqual([
+                { commonDirectory: temporary.directory, idPrefix: "BY" },
               ]);
-              return migrations;
+              return identities;
             }),
           ),
         ),

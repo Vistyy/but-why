@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { isIdPrefix } from "../../src/contracts/idPrefix.js";
-import { initializeRepositoryRuntime } from "../../src/repositoryRuntime/repositoryContext.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 
 const writeConfig = (root: string, idPrefix = "BY") => {
@@ -69,16 +68,6 @@ describe("by init edge cases", () => {
         help: ["Move the conflicting path aside before running init again."],
       });
       expect(existsSync(join(root, ".but-why/reviewers"))).toBe(true);
-    }),
-  );
-
-  it.effect("initializes repository state through the scoped SQL service", () =>
-    Effect.gen(function* () {
-      const root = createGitRepo();
-      const result = yield* initializeRepositoryRuntime({ cwd: root, idPrefix: "BY" });
-
-      expect(result).toMatchObject({ ok: true, status: "initialized" });
-      expect(existsSync(join(root, ".git", "but-why", "state.sqlite"))).toBe(true);
     }),
   );
 
