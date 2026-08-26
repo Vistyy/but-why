@@ -5,14 +5,13 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
-
+import { openSqliteCandidateCapturePersistence } from "../../src/change/adapters/sqlite/sqliteCandidateCapturePersistence.js";
 import { openArtifactLifecycle } from "../../src/change/validationRun/artifactLifecycle.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import {
   RepositorySql,
   repositorySqlLayer,
 } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import {
   type ChangeTestDependencies,
   openSqliteChangeTestDependencies,

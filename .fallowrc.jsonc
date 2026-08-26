@@ -63,8 +63,12 @@
         "patterns": ["src/taskChange/adapters/**"]
       },
       {
+        "name": "change-adapters",
+        "patterns": ["src/change/adapters/**"]
+      },
+      {
         "name": "adapters",
-        "patterns": ["src/**/adapters/**", "src/sqlite/**"]
+        "patterns": ["src/**/adapters/**"]
       },
       {
         "name": "agent",
@@ -134,8 +138,20 @@
         "allow": ["adapters", "change", "repository-runtime", "shared", "task", "task-change"]
       },
       {
+        "from": "change-adapters",
+        "allow": ["adapters", "agent", "change", "repository-runtime", "shared"]
+      },
+      {
         "from": "adapters",
-        "allow": ["agent", "change", "repository-runtime", "shared", "task", "task-change"]
+        "allow": [
+          "agent",
+          "change",
+          "change-adapters",
+          "repository-runtime",
+          "shared",
+          "task",
+          "task-change"
+        ]
       },
       {
         "from": "agent",
@@ -163,6 +179,7 @@
         "allow": [
           "adapters",
           "change",
+          "change-adapters",
           "change-composition",
           "repository-runtime",
           "shared",
@@ -182,6 +199,7 @@
           "adapters",
           "agent",
           "change",
+          "change-adapters",
           "repository-runtime",
           "shared",
           "task-change-adapters",
@@ -224,6 +242,7 @@
           "adapters",
           "agent",
           "change",
+          "change-adapters",
           "change-composition",
           "cli",
           "repository-runtime",

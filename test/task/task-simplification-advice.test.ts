@@ -13,7 +13,7 @@ import {
   createGitRepo,
   runByInProcessEffect,
 } from "../support/by-cli.js";
-import { runTestProcess } from "../support/testProcess.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 
 const advice: TaskSimplificationAdviceOutput =
   "Keep the core result and remove the optional integration because repository evidence shows it is not part of the supported path. The retained result remains sufficient; users of that integration would need another route.";
@@ -95,7 +95,7 @@ it.effect("corrects malformed advice output in the same workspace and Agent Sess
           readFileSync(join(input.commandCwd ?? root, ".but-why", "config.json"), "utf8"),
         ).toBe(readFileSync(join(root, ".but-why", "config.json"), "utf8"));
         const cwd = input.commandCwd ?? root;
-        expect(runTestProcess("git", ["status", "--porcelain=v1"], { cwd }).stdout).toBe("");
+        expect(runTestProcessOrThrow("git", ["status", "--porcelain=v1"], { cwd })).toBe("");
         expect(existsSync(join(input.commandCwd ?? root, "underengineer-untracked"))).toBe(false);
         return Effect.succeed({
           ok: true as const,

@@ -6,9 +6,9 @@ import {
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
-import { openSqliteChangeValidationReadPort } from "../../sqlite/sqliteChangeValidationReadPersistence.js";
+import { openSqliteChangeAuthorityPort } from "../adapters/sqlite/sqliteChangeAuthorityPersistence.js";
+import { openSqliteChangeReadPort } from "../adapters/sqlite/sqliteChangeInspectionPersistence.js";
+import { openSqliteChangeValidationReadPort } from "../adapters/sqlite/sqliteChangeValidationReadPersistence.js";
 import type {
   ChangeAuthorityPort,
   ChangeReadPort,

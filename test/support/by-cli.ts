@@ -25,7 +25,8 @@ export const byExecutable = "by";
 const inProcessExecutablePath = join(repoRoot, "dist/main.js");
 
 // Keep CLI process sentinels bounded without changing Vitest's global timeout.
-const cliProcessTimeoutMs = 30_000;
+const cliProcessTimeoutMs = 4_000;
+const buildProcessTimeoutMs = 20_000;
 
 export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
   const { HOME: isolatedHome, ...controlledEnvironment } = environment;
@@ -52,6 +53,7 @@ export const builtByExecutable = (): string => {
     ["-p", "tsconfig.build.json"],
     {
       cwd: fixture,
+      timeout: buildProcessTimeoutMs,
     },
   );
   if (built.status !== 0) throw new Error(built.stderr || built.stdout);

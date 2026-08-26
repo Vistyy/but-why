@@ -1,10 +1,10 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect } from "effect";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
-import { openSqliteTerminalChangeCleanupPort } from "../../sqlite/sqliteTerminalChangeCleanupPersistence.js";
-import { openSqliteValidationArtifactLifecyclePort } from "../../sqlite/sqliteValidationArtifactLifecyclePersistence.js";
 import { localGitHubChangeCleanupRemote } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { cleanupChangeResourcesWithRemote } from "../adapters/localChangeCleanupGit.js";
+import { openSqliteTerminalChangeCleanupPort } from "../adapters/sqlite/sqliteTerminalChangeCleanupPersistence.js";
+import { openSqliteValidationArtifactLifecyclePort } from "../adapters/sqlite/sqliteValidationArtifactLifecyclePersistence.js";
 import { openTerminalCleanup } from "../cleanupTerminalChange.js";
 import { openArtifactLifecycle } from "../validationRun/artifactLifecycle.js";
 
