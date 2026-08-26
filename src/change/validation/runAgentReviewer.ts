@@ -4,8 +4,7 @@ import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type {
   AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+  AgentSessionJournal,
 } from "../../agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import type {
@@ -30,7 +29,7 @@ import type {
   ValidationPhase,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
-import type { CandidateValidationExecutionPort } from "./changeValidationPorts.js";
+import type { ChangeValidationAgentSessionEntry } from "./changeValidationPorts.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import {
   InfrastructureToolingFailed,
@@ -51,8 +50,11 @@ export type RunAgentReviewerInput = {
   readonly reviewer: string;
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
-  readonly agentPersistence: AgentSessionPersistence;
-  readonly linkInvocation: AgentSessionSqlLink;
+  readonly journal: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
+  readonly dispatchEntry: Extract<
+    ChangeValidationAgentSessionEntry,
+    { readonly kind: "change_reviewer_dispatch" }
+  >;
   readonly reviewerRuntime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly decodeOutput: (
@@ -76,9 +78,6 @@ export type RunAgentReviewerInput = {
   readonly makeFindings: (
     result: TranslatedReviewerResult<ReviewerOutput>,
   ) => readonly ValidationRunFindingRecord[];
-  readonly settleAgentInvocationResult: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationResult"]
-  >;
 };
 
 export type RunAgentReviewerResult = {
@@ -95,11 +94,16 @@ export const runAgentReviewer = (
   let phaseOutcome: CandidateValidationOutcome | undefined;
   let integrityFailure: ValidationToolingFailure | undefined;
   return Effect.gen(function* () {
-    yield* executeAgentSession<ReviewerOutput, never, FileSystem.FileSystem>({
+    yield* executeAgentSession<
+      ReviewerOutput,
+      ChangeValidationAgentSessionEntry,
+      never,
+      FileSystem.FileSystem
+    >({
       ...(input.agentSessionId === undefined ? {} : { agentSessionId: input.agentSessionId }),
       configuration: input.configuration,
-      agentPersistence: input.agentPersistence,
-      linkInvocation: input.linkInvocation,
+      journal: input.journal,
+      dispatchEntry: input.dispatchEntry,
       reviewerRuntime: input.reviewerRuntime,
       reviewerExecutor: input.reviewerExecutor,
       decodeOutput: input.decodeOutput,
@@ -132,7 +136,7 @@ export const runAgentReviewer = (
           integrityFailure = failure;
           return integrityFailureResult(result, failure);
         }),
-      settleDomain: ({ result: runtimeResult, evidence }) =>
+      settlementEntry: ({ result: runtimeResult, evidence }) =>
         Effect.gen(function* () {
           const result = translateRuntimeResult(runtimeResult, input.reviewer);
           const reviewerEvidence = reviewerEvidenceFromAgentSession(evidence);
@@ -144,18 +148,19 @@ export const runAgentReviewer = (
           ) {
             phaseOutcome = "tooling_failed";
             const failure = integrityFailure ?? result.failure;
-            return input.settleAgentInvocationResult({
+            return {
+              kind: "change_reviewer_settlement" as const,
               validationRunId: input.validationRunId,
               phase: input.phase,
               producer: input.producer,
-              outcome: "failed",
+              outcome: "failed" as const,
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(failure),
                 validationRunId: input.validationRunId,
               },
-            });
+            };
           }
 
           const findings = input.makeFindings(result);
@@ -175,18 +180,19 @@ export const runAgentReviewer = (
           );
           if (!artifacts.ok) {
             phaseOutcome = "tooling_failed";
-            return input.settleAgentInvocationResult({
+            return {
+              kind: "change_reviewer_settlement" as const,
               validationRunId: input.validationRunId,
               phase: input.phase,
               producer: input.producer,
-              outcome: "failed",
+              outcome: "failed" as const,
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(artifacts.failure),
                 validationRunId: input.validationRunId,
               },
-            });
+            };
           }
 
           const toolingFailure = result.ok ? undefined : result.failure;
@@ -196,11 +202,12 @@ export const runAgentReviewer = (
               : findings.length > 0
                 ? "blocked"
                 : "passed";
-          return input.settleAgentInvocationResult({
+          return {
+            kind: "change_reviewer_settlement" as const,
             validationRunId: input.validationRunId,
             phase: input.phase,
             producer: input.producer,
-            outcome: result.ok && findings.length === 0 ? "passed" : "failed",
+            outcome: result.ok && findings.length === 0 ? ("passed" as const) : ("failed" as const),
             findings,
             artifactRecords: artifacts.artifactRecords,
             ...(toolingFailure === undefined
@@ -211,7 +218,7 @@ export const runAgentReviewer = (
                     validationRunId: input.validationRunId,
                   },
                 }),
-          });
+          };
         }),
     });
     if (phaseOutcome === undefined) {

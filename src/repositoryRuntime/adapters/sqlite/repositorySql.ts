@@ -15,7 +15,7 @@ import { nodeSqliteLayer } from "./nodeSqliteClient.js";
 import { migrateRepositoryState, repositoryMigrationIds } from "./repositoryMigrations.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 
-type RepositorySqlService = {
+export type RepositorySqlService = {
   readonly statePath: string;
   readonly commonDirectory: string;
   readonly idPrefix: string;

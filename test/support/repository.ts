@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Effect } from "effect";
-import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import {
   RepositorySql,
@@ -28,7 +27,6 @@ const taskReviewPolicyFixture = {
 
 export const passTaskReviewFixture = (_repositoryRoot: string, taskId: PublicTaskId, now: string) =>
   Effect.gen(function* () {
-    const agents = yield* openSqliteAgentSessionPersistence();
     const reviews = yield* openSqliteTaskReviewPersistence();
     const admitted = yield* reviews.admit({
       taskId,
@@ -42,27 +40,29 @@ export const passTaskReviewFixture = (_repositoryRoot: string, taskId: PublicTas
     const reviewId = admitted.review.id;
     yield* reviews.recordCleanup(reviewId, "removed", now);
     const configuration = { harness: "pi" as const, model: "test-model" };
-    const invocation = yield* agents.beginInvocation({
+    const invocation = yield* reviews.agentSessionJournal.beginInvocation({
       configuration,
       createdAt: now,
-      linkInvocation: reviews.linkAgentInvocation({
+      entry: {
+        kind: "task_review_dispatch",
         taskId,
         reviewId,
         admittedPolicy: admitted.policy,
-      }),
+      },
     });
     if (!invocation.ok)
       throw new Error(`Could not dispatch Task Review fixture: ${invocation.code}`);
-    yield* agents.settleInvocation({
+    yield* reviews.agentSessionJournal.settleInvocation({
       invocationId: invocation.dispatch.invocation.id,
       continuationId: invocation.dispatch.continuation.id,
       settlement: { settledAt: now, kind: "returned" },
-      settleDomain: reviews.settleAgentReview({
+      entry: {
+        kind: "task_review_settlement",
         reviewId,
         findings: [],
         now,
         complete: true,
-      }),
+      },
     });
     const completed = yield* reviews.complete({
       reviewId,

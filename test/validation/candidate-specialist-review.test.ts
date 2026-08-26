@@ -6,6 +6,10 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, onTestFinished, vi } from "vitest";
 import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
+import type {
+  AgentSessionJournal,
+  AgentSessionPersistence,
+} from "../../src/agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentResult,
@@ -19,6 +23,7 @@ import {
   runSpecialistReviewPhase as runSpecialistReviewPhaseWithFileSystem,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
+import type { ChangeValidationAgentSessionEntry } from "../../src/change/validation/changeValidationPorts.js";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
@@ -96,9 +101,18 @@ const outputFailure = (_reviewer: string, message: string) =>
     message,
   });
 
-const defaultAgentPersistence = (): NonNullable<
-  RunSpecialistReviewPhaseInput["agentPersistence"]
-> => ({
+type ObservedSpecialistResult = {
+  readonly producer: string;
+  readonly outcome: string;
+  readonly findings: readonly { readonly title: string }[];
+  readonly artifactRecords?: readonly {
+    readonly phase?: string;
+    readonly producer?: string;
+  }[];
+  readonly phase?: string;
+};
+
+const defaultAgentPersistence = (): AgentSessionPersistence => ({
   beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
     const sessionId = agentSessionId ?? 1;
     const continuation = {
@@ -134,13 +148,28 @@ const defaultAgentPersistence = (): NonNullable<
   readInvocationHistory: () => Effect.succeed([]),
 });
 
+const journalFor = (
+  persistence: AgentSessionPersistence,
+  observe: (
+    entry: Extract<
+      ChangeValidationAgentSessionEntry,
+      { readonly kind: "change_reviewer_settlement" }
+    >,
+  ) => void = () => {},
+): AgentSessionJournal<ChangeValidationAgentSessionEntry> => ({
+  beginInvocation: ({ entry: _entry, ...input }) => persistence.beginInvocation(input),
+  settleInvocation: ({ entry, ...input }) =>
+    Effect.gen(function* () {
+      if (entry?.kind === "change_reviewer_settlement") observe(entry);
+      yield* persistence.settleInvocation(input);
+    }),
+});
+
 const runSpecialistReviewPhase = (input: RunSpecialistReviewPhaseInput) =>
   runSpecialistReviewPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
 type PhaseHarness = {
-  readonly results: Parameters<
-    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
-  >[0][];
+  readonly results: ObservedSpecialistResult[];
   readonly run: (
     runtime: ReviewerAgentRuntime<ReviewerOutput>,
     overrides?: Partial<RunSpecialistReviewPhaseInput>,
@@ -150,9 +179,7 @@ type PhaseHarness = {
 
 const phaseHarness = (): PhaseHarness => {
   const artifactsRoot = createTestWorkspace();
-  const results: Parameters<
-    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
-  >[0][] = [];
+  const results: ObservedSpecialistResult[] = [];
   const commandExecutor = (command: string, options?: { readonly cwd?: string }) => {
     const cwd = options?.cwd ?? artifactsRoot;
     if (command === "git worktree list --porcelain") {
@@ -201,13 +228,8 @@ const phaseHarness = (): PhaseHarness => {
         },
         sessionStorageRoot: join(artifactsRoot, "sessions"),
         restoreWorkspace: () => Effect.void,
-        agentPersistence: defaultAgentPersistence(),
+        journal: journalFor(defaultAgentPersistence(), (entry) => results.push(entry)),
         getAgentSession: () => Effect.succeed(undefined),
-        linkAgentInvocation: () => () => Effect.void,
-        settleAgentInvocationResult: (result) => {
-          results.push(result);
-          return () => Effect.void;
-        },
         recordSpecialistResult: (result) =>
           Effect.sync(() => {
             results.push({ ...result, phase: "specialist_review" });
@@ -500,10 +522,8 @@ describe("Candidate Specialist Review phase", () => {
                     },
                     sessionStorageRoot: artifactsRoot,
                     restoreWorkspace: () => Effect.void,
-                    agentPersistence: persistence.agentPersistence,
+                    journal: persistence.agentSessions.agentSessionJournal,
                     getAgentSession: persistence.agentSessions.getAgentSession,
-                    linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
-                    settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
                     recordSpecialistResult: persistence.execution.recordSpecialistResult,
                     allowedUntrackedFiles: [],
                     listArtifacts: persistence.reads.listArtifacts,
@@ -752,9 +772,7 @@ describe("Candidate Specialist Review phase", () => {
       const worktreePath = expectedSnapshotWorkspacePath(repositoryCommonDirectory, 426614174002);
       mkdirSync(dirname(worktreePath), { recursive: true });
       addRegisteredTestGitWorktree(repo, worktreePath, captured.headSha);
-      const results: Parameters<
-        NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
-      >[0][] = [];
+      const results: Array<Record<string, unknown>> = [];
       const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
         runTestWorkspaceCommand(command, options?.cwd ?? worktreePath);
       const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
@@ -789,13 +807,8 @@ describe("Candidate Specialist Review phase", () => {
                 },
                 sessionStorageRoot: createTestWorkspace(),
                 restoreWorkspace: restoreDisposableWorkspace,
-                agentPersistence: defaultAgentPersistence(),
+                journal: journalFor(defaultAgentPersistence(), (entry) => results.push(entry)),
                 getAgentSession: () => Effect.succeed(undefined),
-                linkAgentInvocation: () => () => Effect.void,
-                settleAgentInvocationResult: (settled) => {
-                  results.push(settled);
-                  return () => Effect.void;
-                },
                 recordSpecialistResult: (specialistResult) =>
                   Effect.sync(() => {
                     results.push({ ...specialistResult, phase: "specialist_review" });
@@ -843,9 +856,7 @@ describe("Candidate Specialist Review phase", () => {
         mkdirSync(dirname(worktreePath), { recursive: true });
         addRegisteredTestGitWorktree(repo, worktreePath, captured.headSha);
         const statuses: string[] = [];
-        const results: Parameters<
-          NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
-        >[0][] = [];
+        const results: Array<Record<string, unknown>> = [];
         const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
           runTestWorkspaceCommand(command, options?.cwd ?? worktreePath);
         let invocations = 0;
@@ -912,13 +923,8 @@ describe("Candidate Specialist Review phase", () => {
                   },
                   sessionStorageRoot: createTestWorkspace(),
                   restoreWorkspace: restoreDisposableWorkspace,
-                  agentPersistence: defaultAgentPersistence(),
+                  journal: journalFor(defaultAgentPersistence(), (entry) => results.push(entry)),
                   getAgentSession: () => Effect.succeed(undefined),
-                  linkAgentInvocation: () => () => Effect.void,
-                  settleAgentInvocationResult: (settled) => {
-                    results.push(settled);
-                    return () => Effect.void;
-                  },
                   recordSpecialistResult: (specialistResult) =>
                     Effect.sync(() => {
                       results.push({ ...specialistResult, phase: "specialist_review" });

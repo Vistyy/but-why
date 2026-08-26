@@ -119,19 +119,17 @@ describe("Candidate-owned Validation Run inspection", () => {
           const agents = yield* openSqliteAgentSessionPersistence();
           const agentSessions = yield* openSqliteChangeAgentSessionPort();
           const abandonment = yield* openSqliteValidationRunAbandonmentPort();
-          const linkAgentInvocation = agentSessions.linkAgentInvocation;
-          if (linkAgentInvocation === undefined)
-            throw new Error("Change Agent linking is unavailable");
-          const started = yield* agents.beginInvocation({
+          const started = yield* agentSessions.agentSessionJournal.beginInvocation({
             configuration: { harness: "pi", model: "test-model", thinking: null },
             createdAt: now,
-            linkInvocation: linkAgentInvocation({
+            entry: {
+              kind: "change_reviewer_dispatch",
               changeId: fixture.changeId,
               producer: "acceptance",
               validationRunId: fixture.validationRunId,
               phase: "acceptance_review",
               configurationSnapshot: reviewerConfiguration.acceptanceReview,
-            }),
+            },
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
           expect(
@@ -197,19 +195,17 @@ describe("Candidate-owned Validation Run inspection", () => {
           const agents = yield* openSqliteAgentSessionPersistence();
           const agentSessions = yield* openSqliteChangeAgentSessionPort();
           const abandonment = yield* openSqliteValidationRunAbandonmentPort();
-          const linkAgentInvocation = agentSessions.linkAgentInvocation;
-          if (linkAgentInvocation === undefined)
-            throw new Error("Change Agent linking is unavailable");
-          const started = yield* agents.beginInvocation({
+          const started = yield* agentSessions.agentSessionJournal.beginInvocation({
             configuration: { harness: "pi", model: "test-model", thinking: null },
             createdAt: now,
-            linkInvocation: linkAgentInvocation({
+            entry: {
+              kind: "change_reviewer_dispatch",
               changeId: fixture.changeId,
               producer: "acceptance",
               validationRunId: fixture.validationRunId,
               phase: "acceptance_review",
               configurationSnapshot: reviewerConfiguration.acceptanceReview,
-            }),
+            },
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
           yield* agents.settleInvocation({
@@ -1114,7 +1110,7 @@ const candidateValidationFixture = (options: { readonly linked?: boolean } = {})
     ) =>
       withPersistence((persistence) =>
         Effect.gen(function* () {
-          const started = yield* persistence.agentPersistence.beginInvocation({
+          const started = yield* persistence.agentSessions.agentSessionJournal.beginInvocation({
             configuration: {
               harness: "pi",
               provider: null,
@@ -1122,27 +1118,29 @@ const candidateValidationFixture = (options: { readonly linked?: boolean } = {})
               thinking: reviewer.profile.profile.runtimeConfig.thinking ?? null,
             },
             createdAt: now,
-            linkInvocation: persistence.agentSessions.linkAgentInvocation({
+            entry: {
+              kind: "change_reviewer_dispatch",
               changeId: candidateResult.changeId,
               producer,
               validationRunId,
               phase,
               configurationSnapshot: reviewer,
-            }),
+            },
           });
           if (!started.ok) throw new Error(started.code);
-          yield* persistence.agentPersistence.settleInvocation({
+          yield* persistence.agentSessions.agentSessionJournal.settleInvocation({
             invocationId: started.dispatch.invocation.id,
             continuationId: started.dispatch.continuation.id,
             settlement: { settledAt: later, kind: "returned" },
-            settleDomain: persistence.execution.settleAgentInvocationResult({
+            entry: {
+              kind: "change_reviewer_settlement",
               validationRunId,
               phase,
               producer,
               outcome: "passed",
               findings: [],
               artifactRecords: [],
-            }),
+            },
           });
         }),
       );

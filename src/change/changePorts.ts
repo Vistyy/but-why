@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
+import type { AgentSessionJournal } from "../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type {
   ChangeCleanup,
@@ -10,11 +10,11 @@ import type {
   ChangeState,
   TerminalCleanupChange,
 } from "./change.js";
+import type { ChangeValidationAgentSessionEntry } from "./validation/changeValidationPorts.js";
 
 export type { TerminalCleanupChange } from "./change.js";
 
 import type { ChangePolicy } from "./changePolicy.js";
-import type { ChangeReviewerPolicy } from "./changeReviewerConfiguration.js";
 import type {
   BeginChangePublicationInput,
   CompleteMergedChangeInput,
@@ -128,13 +128,7 @@ export type ChangeAgentSessionPort = {
     changeId: string,
     producer: string,
   ) => StorageEffect<number | undefined>;
-  readonly linkAgentInvocation: (input: {
-    readonly changeId: string;
-    readonly producer: string;
-    readonly validationRunId: number;
-    readonly phase: string;
-    readonly configurationSnapshot: ChangeReviewerPolicy;
-  }) => AgentSessionSqlLink;
+  readonly agentSessionJournal: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
 };
 
 export type SubmissionChange = {

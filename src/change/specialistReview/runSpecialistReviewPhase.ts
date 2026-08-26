@@ -3,8 +3,7 @@ import { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type {
   AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+  AgentSessionJournal,
 } from "../../agent/agentSession/agentSession.js";
 import {
   type ReviewerAgentRuntime,
@@ -37,7 +36,10 @@ import {
   type SubmitProgressProfile,
 } from "../../submission/submissionProgress.js";
 import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
-import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
+import type {
+  CandidateValidationExecutionPort,
+  ChangeValidationAgentSessionEntry,
+} from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
 import {
   type ValidationToolingFailure,
@@ -69,21 +71,11 @@ export type RunSpecialistReviewPhaseInput = {
   readonly workspaceIdentity: DisposableWorkspaceIdentity;
   readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly sessionStorageRoot: string;
-  readonly agentPersistence: AgentSessionPersistence;
+  readonly journal: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
   readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: (input: {
-    readonly changeId: string;
-    readonly producer: string;
-    readonly validationRunId: number;
-    readonly phase: string;
-    readonly configurationSnapshot: SpecialistReviewPolicy;
-  }) => AgentSessionSqlLink;
-  readonly settleAgentInvocationResult: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationResult"]
-  >;
   readonly recordSpecialistResult: CandidateValidationExecutionPort["recordSpecialistResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
@@ -216,14 +208,15 @@ const runSpecialist = (
       producer: policy.id,
       reviewer: policy.id,
       configuration: agentConfiguration(policy.profile),
-      agentPersistence: input.agentPersistence,
-      linkInvocation: input.linkAgentInvocation({
+      journal: input.journal,
+      dispatchEntry: {
+        kind: "change_reviewer_dispatch" as const,
         changeId: input.changeId,
         producer: policy.id,
         validationRunId: input.validationRunId,
         phase: validationPhase.specialistReview,
         configurationSnapshot: policy,
-      }),
+      },
       reviewerRuntime: input.runtime,
       reviewerExecutor: input.reviewerExecutor,
       decodeOutput: (output, reviewCall) =>
@@ -276,7 +269,6 @@ const runSpecialist = (
               ...finding,
             }))
           : [],
-      settleAgentInvocationResult: input.settleAgentInvocationResult,
     });
     return execution;
   });

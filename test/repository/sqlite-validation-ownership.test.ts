@@ -115,7 +115,7 @@ const beginInvocation = (
     readonly agentSessionId?: number;
   },
 ) =>
-  validation.agentPersistence.beginInvocation({
+  validation.agentSessions.agentSessionJournal.beginInvocation({
     ...(input.agentSessionId === undefined ? {} : { agentSessionId: input.agentSessionId }),
     configuration: {
       harness: "pi",
@@ -124,13 +124,14 @@ const beginInvocation = (
       thinking: null,
     },
     createdAt: "2026-10-02T10:00:00.000Z",
-    linkInvocation: validation.agentSessions.linkAgentInvocation({
-      validationRunId: input.validationRunId,
+    entry: {
+      kind: "change_reviewer_dispatch",
       changeId: input.changeId,
-      phase: "specialist_review",
       producer: input.producer,
+      validationRunId: input.validationRunId,
+      phase: "specialist_review",
       configurationSnapshot: specialist(input.producer),
-    }),
+    },
   });
 
 describe("SQLite Validation ownership", () => {
@@ -179,31 +180,33 @@ describe("SQLite Validation ownership", () => {
           },
         };
         expect(
-          yield* validation.agentPersistence
+          yield* validation.agentSessions.agentSessionJournal
             .settleInvocation({
               ...settlement,
-              settleDomain: validation.execution.settleAgentInvocationResult({
+              entry: {
+                kind: "change_reviewer_settlement",
                 validationRunId: started.validationRunId,
                 phase: "specialist_review",
                 producer: "second",
                 outcome: "passed",
                 findings: [],
                 artifactRecords: [],
-              }),
+              },
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
-        yield* validation.agentPersistence.settleInvocation({
+        yield* validation.agentSessions.agentSessionJournal.settleInvocation({
           ...settlement,
-          settleDomain: validation.execution.settleAgentInvocationResult({
+          entry: {
+            kind: "change_reviewer_settlement",
             validationRunId: started.validationRunId,
             phase: "specialist_review",
             producer: "first",
             outcome: "passed",
             findings: [],
             artifactRecords: [],
-          }),
+          },
         });
         expect(
           yield* beginInvocation(validation, {
@@ -225,21 +228,22 @@ describe("SQLite Validation ownership", () => {
           producer: "second",
         });
         if (!secondInvocation.ok) throw new Error(secondInvocation.code);
-        yield* validation.agentPersistence.settleInvocation({
+        yield* validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: secondInvocation.dispatch.invocation.id,
           continuationId: secondInvocation.dispatch.continuation.id,
           settlement: {
             settledAt: "2026-10-02T10:00:02.000Z",
             kind: "returned",
           },
-          settleDomain: validation.execution.settleAgentInvocationResult({
+          entry: {
+            kind: "change_reviewer_settlement",
             validationRunId: started.validationRunId,
             phase: "specialist_review",
             producer: "second",
             outcome: "passed",
             findings: [],
             artifactRecords: [],
-          }),
+          },
         });
         yield* validation.execution.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
@@ -338,14 +342,15 @@ describe("SQLite Validation ownership", () => {
           producer: "first",
         });
         if (!invocation.ok) throw new Error(invocation.code);
-        yield* specialists.validation.agentPersistence.settleInvocation({
+        yield* specialists.validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: invocation.dispatch.invocation.id,
           continuationId: invocation.dispatch.continuation.id,
           settlement: {
             settledAt: "2026-10-02T10:00:03.000Z",
             kind: "returned",
           },
-          settleDomain: specialists.validation.execution.settleAgentInvocationResult({
+          entry: {
+            kind: "change_reviewer_settlement",
             validationRunId: specialists.started.validationRunId,
             phase: "specialist_review",
             producer: "first",
@@ -363,7 +368,7 @@ describe("SQLite Validation ownership", () => {
               },
             ],
             artifactRecords: [],
-          }),
+          },
         });
         yield* specialists.validation.execution.recordWorkspaceCleanup({
           validationRunId: specialists.started.validationRunId,
@@ -404,14 +409,15 @@ describe("SQLite Validation ownership", () => {
           producer: "first",
         });
         if (!failedInvocation.ok) throw new Error(failedInvocation.code);
-        yield* invalidSpecialists.validation.agentPersistence.settleInvocation({
+        yield* invalidSpecialists.validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: failedInvocation.dispatch.invocation.id,
           continuationId: failedInvocation.dispatch.continuation.id,
           settlement: {
             settledAt: "2026-10-02T10:00:04.000Z",
             kind: "returned",
           },
-          settleDomain: invalidSpecialists.validation.execution.settleAgentInvocationResult({
+          entry: {
+            kind: "change_reviewer_settlement",
             validationRunId: invalidSpecialists.started.validationRunId,
             phase: "specialist_review",
             producer: "first",
@@ -429,7 +435,7 @@ describe("SQLite Validation ownership", () => {
               },
             ],
             artifactRecords: [],
-          }),
+          },
         });
         const laterInvocation = yield* beginInvocation(invalidSpecialists.validation, {
           validationRunId: invalidSpecialists.started.validationRunId,
@@ -437,21 +443,22 @@ describe("SQLite Validation ownership", () => {
           producer: "second",
         });
         if (!laterInvocation.ok) throw new Error(laterInvocation.code);
-        yield* invalidSpecialists.validation.agentPersistence.settleInvocation({
+        yield* invalidSpecialists.validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: laterInvocation.dispatch.invocation.id,
           continuationId: laterInvocation.dispatch.continuation.id,
           settlement: {
             settledAt: "2026-10-02T10:00:05.000Z",
             kind: "returned",
           },
-          settleDomain: invalidSpecialists.validation.execution.settleAgentInvocationResult({
+          entry: {
+            kind: "change_reviewer_settlement",
             validationRunId: invalidSpecialists.started.validationRunId,
             phase: "specialist_review",
             producer: "second",
             outcome: "passed",
             findings: [],
             artifactRecords: [],
-          }),
+          },
         });
         yield* invalidSpecialists.validation.execution.recordWorkspaceCleanup({
           validationRunId: invalidSpecialists.started.validationRunId,
@@ -715,7 +722,7 @@ describe("SQLite Validation ownership", () => {
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(
-          yield* fixture.validation.agentPersistence
+          yield* fixture.validation.agentSessions.agentSessionJournal
             .settleInvocation({
               invocationId: invocation.dispatch.invocation.id,
               continuationId: invocation.dispatch.continuation.id,
@@ -723,7 +730,8 @@ describe("SQLite Validation ownership", () => {
                 settledAt: "2026-10-02T10:00:05.000Z",
                 kind: "launch_failed",
               },
-              settleDomain: fixture.validation.execution.settleAgentInvocationResult({
+              entry: {
+                kind: "change_reviewer_settlement",
                 validationRunId: fixture.started.validationRunId,
                 phase: "specialist_review",
                 producer: "first",
@@ -741,11 +749,11 @@ describe("SQLite Validation ownership", () => {
                   },
                 ],
                 artifactRecords: [],
-              }),
+              },
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* fixture.validation.agentPersistence.settleInvocation({
+        yield* fixture.validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: invocation.dispatch.invocation.id,
           continuationId: invocation.dispatch.continuation.id,
           settlement: { settledAt: "2026-10-02T10:00:06.000Z", kind: "returned" },
@@ -778,32 +786,34 @@ describe("SQLite Validation ownership", () => {
       Effect.gen(function* () {
         const fixture = yield* createRun(input.commonDirectory, "reviewer-roster");
         expect(
-          yield* fixture.validation.agentPersistence
+          yield* fixture.validation.agentSessions.agentSessionJournal
             .beginInvocation({
               configuration,
               createdAt: "2026-10-02T10:00:10.000Z",
-              linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
+              entry: {
+                kind: "change_reviewer_dispatch",
                 validationRunId: fixture.started.validationRunId,
                 changeId: fixture.captured.changeId,
                 phase: "checks",
                 producer: "types",
                 configurationSnapshot: specialist("first"),
-              }),
+              },
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(
-          yield* fixture.validation.agentPersistence
+          yield* fixture.validation.agentSessions.agentSessionJournal
             .beginInvocation({
               configuration,
               createdAt: "2026-10-02T10:00:11.000Z",
-              linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
+              entry: {
+                kind: "change_reviewer_dispatch",
                 validationRunId: fixture.started.validationRunId,
                 changeId: fixture.captured.changeId,
                 phase: "specialist_review",
                 producer: "first",
                 configurationSnapshot: specialist("first"),
-              }),
+              },
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -843,10 +853,9 @@ describe("SQLite Validation ownership", () => {
         const unowned = yield* first.validation.agentPersistence.beginInvocation({
           configuration,
           createdAt: "2026-10-02T10:01:00.000Z",
-          linkInvocation: () => Effect.void,
         });
         if (!unowned.ok) throw new Error(unowned.code);
-        yield* first.validation.agentPersistence.settleInvocation({
+        yield* first.validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: unowned.dispatch.invocation.id,
           continuationId: unowned.dispatch.continuation.id,
           settlement: { settledAt: "2026-10-02T10:01:01.000Z", kind: "returned" },
@@ -875,10 +884,9 @@ describe("SQLite Validation ownership", () => {
         const changeOwned = yield* first.validation.agentPersistence.beginInvocation({
           configuration,
           createdAt: "2026-10-02T10:01:02.000Z",
-          linkInvocation: () => Effect.void,
         });
         if (!changeOwned.ok) throw new Error(changeOwned.code);
-        yield* first.validation.agentPersistence.settleInvocation({
+        yield* first.validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: changeOwned.dispatch.invocation.id,
           continuationId: changeOwned.dispatch.continuation.id,
           settlement: { settledAt: "2026-10-02T10:01:03.000Z", kind: "returned" },
@@ -914,10 +922,9 @@ describe("SQLite Validation ownership", () => {
           const initial = yield* fixture.validation.agentPersistence.beginInvocation({
             configuration,
             createdAt: "2026-10-02T10:01:10.000Z",
-            linkInvocation: () => Effect.void,
           });
           if (!initial.ok) throw new Error(initial.code);
-          yield* fixture.validation.agentPersistence.settleInvocation({
+          yield* fixture.validation.agentSessions.agentSessionJournal.settleInvocation({
             invocationId: initial.dispatch.invocation.id,
             continuationId: initial.dispatch.continuation.id,
             settlement: {
@@ -928,18 +935,19 @@ describe("SQLite Validation ownership", () => {
           });
 
           expect(
-            yield* fixture.validation.agentPersistence
+            yield* fixture.validation.agentSessions.agentSessionJournal
               .beginInvocation({
                 agentSessionId: initial.dispatch.agentSessionId,
                 configuration,
                 createdAt: "2026-10-02T10:01:12.000Z",
-                linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
+                entry: {
+                  kind: "change_reviewer_dispatch",
                   validationRunId: fixture.started.validationRunId,
                   changeId: fixture.captured.changeId,
                   phase: "specialist_review",
                   producer: "first",
                   configurationSnapshot: { ...specialist("first"), id: "acceptance" },
-                }),
+                },
               })
               .pipe(Effect.flip),
           ).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -1015,17 +1023,18 @@ describe("SQLite Validation ownership", () => {
         expect(
           yield* reviews.getReviewerAgentSession(publicTaskId(`${repository.idPrefix}-1`)),
         ).toBeUndefined();
-        const firstInvocation = yield* validation.agentPersistence.beginInvocation({
+        const firstInvocation = yield* reviews.agentSessionJournal.beginInvocation({
           configuration,
           createdAt: "2026-10-02T10:02:02.000Z",
-          linkInvocation: reviews.linkAgentInvocation({
+          entry: {
+            kind: "task_review_dispatch",
             taskId: publicTaskId(`${repository.idPrefix}-1`),
             reviewId: admitted.review.id,
             admittedPolicy: admitted.policy,
-          }),
+          },
         });
         if (!firstInvocation.ok) throw new Error(firstInvocation.code);
-        yield* validation.agentPersistence.settleInvocation({
+        yield* validation.agentSessions.agentSessionJournal.settleInvocation({
           invocationId: firstInvocation.dispatch.invocation.id,
           continuationId: firstInvocation.dispatch.continuation.id,
           settlement: { settledAt: "2026-10-02T10:02:03.000Z", kind: "returned" },
@@ -1042,16 +1051,17 @@ describe("SQLite Validation ownership", () => {
           },
         };
         expect(
-          yield* validation.agentPersistence
+          yield* reviews.agentSessionJournal
             .beginInvocation({
               agentSessionId,
               configuration: { ...configuration, model: "competing-model" },
               createdAt: "2026-10-02T10:02:04.000Z",
-              linkInvocation: reviews.linkAgentInvocation({
+              entry: {
+                kind: "task_review_dispatch",
                 taskId: publicTaskId(`${repository.idPrefix}-1`),
                 reviewId: admitted.review.id,
                 admittedPolicy: competingPolicy,
-              }),
+              },
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);

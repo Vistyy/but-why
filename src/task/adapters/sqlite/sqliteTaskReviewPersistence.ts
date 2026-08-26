@@ -5,14 +5,21 @@ import {
   decodeSqliteAgentInvocation,
   type SqliteAgentInvocationRow,
 } from "../../../agent/agentSession/adapters/sqlite/sqliteAgentInvocation.js";
-import { settleUnsettledAgentInvocations } from "../../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import {
+  beginAgentInvocation,
+  settleAgentInvocation,
+  settleUnsettledAgentInvocations,
+} from "../../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type {
   AgentInvocationRecord,
-  AgentSessionSqlLink,
+  AgentSessionJournal,
 } from "../../../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { decodeReviewerFindingCore } from "../../../contracts/reviewerFinding.js";
-import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  type RepositorySqlService,
+} from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type { TaskState } from "../../lifecycle.js";
 import {
@@ -31,6 +38,7 @@ import type {
   CompleteTaskReviewSuccess,
   SettleSimplificationAdviceInput,
   TaskReviewAdmissionRejection,
+  TaskReviewAgentSessionEntry,
   TaskReviewPersistence,
 } from "../../review/taskReviewPersistence.js";
 import { expectedTaskReviewWorkspacePath } from "../../review/taskReviewWorkspace.js";
@@ -80,14 +88,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transactionImmediate("record unavailable Task Simplification Advice", (sql) =>
         recordSimplificationAdviceFailure(sql, reviewId, failure),
       ),
-    linkSimplificationAdviceInvocation:
-      (input): AgentSessionSqlLink =>
-      (sql, invocationId) =>
-        linkSimplificationAdviceInvocation(sql, input.reviewId, invocationId),
-    settleSimplificationAdvice:
-      (input): AgentSessionSqlLink =>
-      (sql, invocationId) =>
-        settleSimplificationAdvice(sql, { ...input, invocationId }),
+    agentSessionJournal: taskReviewAgentSessionJournal(repository),
     reuseJudgment: (taskId, now) =>
       repository.transactionImmediate("reuse Task Review judgment", (sql) =>
         reuseTaskReviewJudgment(sql, taskId, now, repository.idPrefix, repository.commonDirectory),
@@ -189,83 +190,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transaction("read Task Reviewer configuration", (sql) =>
         readReviewerConfiguration(sql, taskId, repository.idPrefix),
       ),
-    linkAgentInvocation:
-      (input): AgentSessionSqlLink =>
-      (sql, invocationId) =>
-        linkAgentInvocation(sql, invocationId, input, repository.idPrefix),
-    settleAgentReview:
-      (input): AgentSessionSqlLink =>
-      (sql, invocationId) =>
-        Effect.gen(function* () {
-          const operationName = "settle Task Review with Agent Invocation";
-          const toolingFailure =
-            input.toolingFailure === undefined
-              ? undefined
-              : yield* decodeTaskReviewToolingFailureEffect(operationName, input.toolingFailure);
-          const invocations = yield* readTaskReviewInvocationEvidence(
-            sql,
-            input.reviewId,
-            operationName,
-          );
-          const terminal = invocations.at(-1);
-          if (terminal?.invocation.id !== invocationId) {
-            return yield* invalid(
-              operationName,
-              "Only the terminal linked Invocation can settle the Task Review",
-            );
-          }
-          if (
-            invocations.some(
-              (evidence) =>
-                evidence.taskOwned !== 1 ||
-                evidence.invocation.settledAt === null ||
-                evidence.invocation.settlementKind === null,
-            )
-          ) {
-            return yield* invalid(
-              operationName,
-              "Every Task Review Invocation must be Task-owned and settled",
-            );
-          }
-          if (input.complete && toolingFailure !== undefined) {
-            return yield* invalid(
-              operationName,
-              "A completed Agent Task Review settlement cannot contain a Tooling Failure",
-            );
-          }
-          if (input.complete && terminal.invocation.settlementKind !== "returned") {
-            return yield* invalid(
-              operationName,
-              "Passing and Finding-blocked Task Reviews require a returned terminal Invocation",
-            );
-          }
-          if (input.complete) {
-            const completed = yield* completeReview(
-              sql,
-              input.reviewId,
-              input.findings,
-              toolingFailure,
-              repository.idPrefix,
-              repository.commonDirectory,
-              "agent_settlement",
-            );
-            if (!completed.ok)
-              return yield* invalid(
-                "settle Task Review with Agent Invocation",
-                `Task Review did not complete: ${completed.code}`,
-              );
-          } else {
-            if (toolingFailure === undefined)
-              return yield* invalid(
-                "settle Task Review with Agent Invocation",
-                "Active Agent Task Review settlement requires a Tooling Failure",
-              );
-            yield* sql`
-              UPDATE task_reviews SET tooling_failure = ${JSON.stringify(toolingFailure)}
-              WHERE id = ${input.reviewId} AND outcome IS NULL
-            `;
-          }
-        }).pipe(Effect.asVoid),
     recordActiveFailure: (reviewId, failure) =>
       repository.transactionImmediate("record active Task Review failure", (sql) =>
         Effect.gen(function* () {
@@ -297,6 +221,139 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         currentProposalMatches(sql, review, repository.idPrefix),
       ),
   }));
+
+const taskReviewAgentSessionJournal = (
+  repository: RepositorySqlService,
+): AgentSessionJournal<TaskReviewAgentSessionEntry> => ({
+  beginInvocation: (input) =>
+    repository.transactionImmediate("dispatch Task Agent Invocation", (sql) =>
+      Effect.gen(function* () {
+        const { entry, ...dispatch } = input;
+        const result = yield* beginAgentInvocation(sql, dispatch);
+        if (!result.ok) return result;
+        if (entry.kind === "task_review_dispatch") {
+          yield* linkTaskReviewInvocation(
+            sql,
+            result.dispatch.invocation.id,
+            entry,
+            repository.idPrefix,
+          );
+        } else if (entry.kind === "simplification_advice_dispatch") {
+          yield* linkTaskSimplificationAdviceInvocation(
+            sql,
+            entry.reviewId,
+            result.dispatch.invocation.id,
+          );
+        } else {
+          return yield* invalid(
+            "dispatch Task Agent Invocation",
+            "Dispatch journal entry does not describe a Task Review owner",
+          );
+        }
+        return result;
+      }),
+    ),
+  settleInvocation: (input) =>
+    repository.transactionImmediate("settle Agent Invocation with owner journal", (sql) =>
+      Effect.gen(function* () {
+        const { entry, ...settlement } = input;
+        yield* settleAgentInvocation(sql, settlement);
+        if (entry === undefined) return;
+        if (entry.kind === "task_review_settlement") {
+          yield* settleTaskReviewAgentInvocation(
+            sql,
+            input.invocationId,
+            entry,
+            repository.idPrefix,
+            repository.commonDirectory,
+          );
+        } else if (entry.kind === "simplification_advice_settlement") {
+          yield* settleTaskSimplificationAdvice(sql, {
+            ...entry,
+            invocationId: input.invocationId,
+          });
+        } else {
+          return yield* invalid(
+            "settle Agent Invocation with owner journal",
+            "Settlement journal entry does not describe a Task owner",
+          );
+        }
+      }),
+    ),
+});
+
+const settleTaskReviewAgentInvocation = (
+  sql: SqlClient.SqlClient,
+  invocationId: number,
+  input: Extract<TaskReviewAgentSessionEntry, { readonly kind: "task_review_settlement" }>,
+  idPrefix: string,
+  repositoryCommonDirectory: string,
+) =>
+  Effect.gen(function* () {
+    const operationName = "settle Task Review with Agent Invocation";
+    const toolingFailure =
+      input.toolingFailure === undefined
+        ? undefined
+        : yield* decodeTaskReviewToolingFailureEffect(operationName, input.toolingFailure);
+    const invocations = yield* readTaskReviewInvocationEvidence(sql, input.reviewId, operationName);
+    const terminal = invocations.at(-1);
+    if (terminal?.invocation.id !== invocationId) {
+      return yield* invalid(
+        operationName,
+        "Only the terminal linked Invocation can settle the Task Review",
+      );
+    }
+    if (
+      invocations.some(
+        (evidence) =>
+          evidence.taskOwned !== 1 ||
+          evidence.invocation.settledAt === null ||
+          evidence.invocation.settlementKind === null,
+      )
+    ) {
+      return yield* invalid(
+        operationName,
+        "Every Task Review Invocation must be Task-owned and settled",
+      );
+    }
+    if (input.complete && toolingFailure !== undefined) {
+      return yield* invalid(
+        operationName,
+        "A completed Agent Task Review settlement cannot contain a Tooling Failure",
+      );
+    }
+    if (input.complete && terminal.invocation.settlementKind !== "returned") {
+      return yield* invalid(
+        operationName,
+        "Passing and Finding-blocked Task Reviews require a returned terminal Invocation",
+      );
+    }
+    if (input.complete) {
+      const completed = yield* completeReview(
+        sql,
+        input.reviewId,
+        input.findings,
+        toolingFailure,
+        idPrefix,
+        repositoryCommonDirectory,
+        "agent_settlement",
+      );
+      if (!completed.ok) {
+        return yield* invalid(operationName, `Task Review did not complete: ${completed.code}`);
+      }
+    } else {
+      if (toolingFailure === undefined) {
+        return yield* invalid(
+          operationName,
+          "Active Agent Task Review settlement requires a Tooling Failure",
+        );
+      }
+      yield* sql`
+        UPDATE task_reviews SET tooling_failure = ${JSON.stringify(toolingFailure)}
+        WHERE id = ${input.reviewId} AND outcome IS NULL
+      `;
+    }
+  }).pipe(Effect.asVoid);
 
 export const taskReviewAdmissionRejection = (
   sql: SqlClient.SqlClient,
@@ -824,7 +881,7 @@ const recordSimplificationAdviceFailure = (
       AND json_extract(unavailable, '$.operation') = 'underengineer_pending'
   `.pipe(Effect.asVoid);
 
-const linkSimplificationAdviceInvocation = (
+const linkTaskSimplificationAdviceInvocation = (
   sql: SqlClient.SqlClient,
   reviewId: number,
   invocationId: number,
@@ -879,7 +936,7 @@ const linkSimplificationAdviceInvocation = (
     `;
   }).pipe(Effect.asVoid);
 
-const settleSimplificationAdvice = (
+const settleTaskSimplificationAdvice = (
   sql: SqlClient.SqlClient,
   input: SettleSimplificationAdviceInput & {
     readonly invocationId: number;
@@ -1054,10 +1111,10 @@ const readAgentInvocations = (sql: SqlClient.SqlClient, reviewId: number) =>
     [reviewId],
   );
 
-const linkAgentInvocation = (
+const linkTaskReviewInvocation = (
   sql: SqlClient.SqlClient,
   invocationId: number,
-  input: Parameters<NonNullable<TaskReviewPersistence["linkAgentInvocation"]>>[0],
+  input: Extract<TaskReviewAgentSessionEntry, { readonly kind: "task_review_dispatch" }>,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {

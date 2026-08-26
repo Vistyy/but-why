@@ -1,6 +1,4 @@
 import { Effect } from "effect";
-import { openSqliteAgentSessionPersistence } from "../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
-import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
@@ -96,7 +94,6 @@ export const loadChangeSubmit = (input: {
   const layerFor = (
     persistence: CandidateValidationExecutionPort,
     agentSessions: ChangeAgentSessionPort,
-    agentPersistence: AgentSessionPersistence,
   ) =>
     candidateValidationLayer({
       localRepositoryRoot: context.root,
@@ -107,9 +104,8 @@ export const loadChangeSubmit = (input: {
         ? {}
         : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
       agentSessionsRoot: context.paths.agentSessionsPath,
-      agentPersistence,
       getAgentSession: agentSessions.getAgentSession,
-      linkAgentInvocation: agentSessions.linkAgentInvocation,
+      agentSessionsJournal: agentSessions.agentSessionJournal,
       stallDetector: makePiAiStallDetector(),
     });
 
@@ -126,7 +122,6 @@ export const loadChangeSubmit = (input: {
             taskChangeCompletionOperations,
           ),
           agentSessions: openSqliteChangeAgentSessionPort(),
-          agentPersistence: openSqliteAgentSessionPersistence(),
           publication: openSqliteCandidatePublicationPort(),
         }).pipe(
           Effect.flatMap(
@@ -137,12 +132,11 @@ export const loadChangeSubmit = (input: {
               submissionOwner,
               submissionCompletion,
               agentSessions,
-              agentPersistence,
               publication,
             }) =>
               programFor(capture, authority, submissionOwner, submissionCompletion, publication)
                 .submit(submitInput)
-                .pipe(Effect.provide(layerFor(validation, agentSessions, agentPersistence))),
+                .pipe(Effect.provide(layerFor(validation, agentSessions))),
           ),
           loaded.runtime.provide,
         ),

@@ -3,7 +3,10 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { onTestFinished } from "vitest";
-import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
+import type {
+  AgentSessionJournal,
+  AgentSessionPersistence,
+} from "../../src/agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { DisposableWorkspaceRestorationFailed } from "../../src/disposableWorkspace/disposableWorkspace.js";
@@ -14,7 +17,10 @@ import {
 } from "../../src/task/review/adapters/taskReviewGit.js";
 import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
-import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
+import type {
+  TaskReviewAgentSessionEntry,
+  TaskReviewPersistence,
+} from "../../src/task/review/taskReviewPersistence.js";
 import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";
@@ -67,7 +73,12 @@ const defaultAgentPersistence = (): AgentSessionPersistence => ({
   readInvocationHistory: () => Effect.succeed([]),
 });
 
-const defaultAgentLink = () => () => Effect.void;
+const defaultAgentJournal = (): AgentSessionJournal<TaskReviewAgentSessionEntry> => ({
+  beginInvocation: ({ entry: _entry, ...input }) =>
+    defaultAgentPersistence().beginInvocation(input),
+  settleInvocation: ({ entry: _entry, ...input }) =>
+    defaultAgentPersistence().settleInvocation(input),
+});
 
 it.effect("records Task Review preparation integrity failures and skips the reviewer", () =>
   Effect.gen(function* () {
@@ -278,10 +289,9 @@ it.effect("observes final Task Review restoration and restoration failure", () =
         let restoredUntracked = true;
         let reviewerCalls = 0;
         const persistence: TaskReviewPersistence = {
+          agentSessionJournal: defaultAgentJournal(),
           getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
           recordSimplificationAdviceFailure: () => Effect.void,
-          linkSimplificationAdviceInvocation: defaultAgentLink,
-          settleSimplificationAdvice: () => () => Effect.void,
           reuseJudgment: () => Effect.succeed(undefined),
           checkAdmission: () => Effect.succeed(undefined),
           admit: () =>
@@ -327,8 +337,6 @@ it.effect("observes final Task Review restoration and restoration failure", () =
           listForTask: () => Effect.succeed([]),
           getReviewerAgentSession: () => Effect.succeed(undefined),
           getReviewerConfiguration: () => Effect.succeed(undefined),
-          linkAgentInvocation: defaultAgentLink,
-          settleAgentReview: () => () => Effect.void,
           recordActiveFailure: () => Effect.die("Unexpected persistence operation"),
           proposalIsCurrent: () => Effect.succeed(true),
         };
@@ -348,7 +356,6 @@ it.effect("observes final Task Review restoration and restoration failure", () =
           }),
           persistence,
           agentSessionStorageRoot,
-          agentPersistence: defaultAgentPersistence(),
           underengineerRuntime: {
             review: () =>
               Effect.succeed({
@@ -479,10 +486,9 @@ it.effect("returns a reused judgment before every repository and reviewer collab
     };
     const unused = () => Effect.die("Unexpected persistence operation");
     const persistence: TaskReviewPersistence = {
+      agentSessionJournal: defaultAgentJournal(),
       getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
       recordSimplificationAdviceFailure: () => Effect.void,
-      linkSimplificationAdviceInvocation: defaultAgentLink,
-      settleSimplificationAdvice: () => () => Effect.void,
       reuseJudgment: () =>
         Effect.succeed({
           ok: true,
@@ -506,8 +512,6 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       listForTask: unused,
       getReviewerAgentSession: unused,
       getReviewerConfiguration: () => Effect.succeed(undefined),
-      linkAgentInvocation: defaultAgentLink,
-      settleAgentReview: () => () => Effect.void,
       recordActiveFailure: unused,
       proposalIsCurrent: unused,
     };
@@ -528,7 +532,6 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       }),
       persistence,
       agentSessionStorageRoot: createTestWorkspace(),
-      agentPersistence: defaultAgentPersistence(),
       underengineerRuntime: {
         review: () => Effect.die("must not review"),
       },
@@ -616,10 +619,9 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
     const submit = (completion: "missing" | "inactive") => {
       const unused = () => Effect.die("Unexpected persistence operation");
       const persistence: TaskReviewPersistence = {
+        agentSessionJournal: defaultAgentJournal(),
         getCompletedSimplificationAdvice: () => Effect.succeed(undefined),
         recordSimplificationAdviceFailure: () => Effect.void,
-        linkSimplificationAdviceInvocation: defaultAgentLink,
-        settleSimplificationAdvice: () => () => Effect.void,
         reuseJudgment: () => Effect.succeed(undefined),
         checkAdmission: () => Effect.succeed(undefined),
         admit: () =>
@@ -643,8 +645,6 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
         listForTask: () => Effect.succeed([]),
         getReviewerAgentSession: () => Effect.succeed(undefined),
         getReviewerConfiguration: () => Effect.succeed(undefined),
-        linkAgentInvocation: defaultAgentLink,
-        settleAgentReview: () => () => Effect.void,
         recordActiveFailure: unused,
         proposalIsCurrent: unused,
       };
@@ -662,7 +662,6 @@ it.effect("preserves missing and inactive Task Review outcomes through submissio
         }),
         persistence,
         agentSessionStorageRoot: createTestWorkspace(),
-        agentPersistence: defaultAgentPersistence(),
         underengineerRuntime: {
           review: () => Effect.die("must not review"),
         },

@@ -8,7 +8,9 @@ import type {
   AgentDispatchResult,
   AgentInvocationRecord,
   AgentSessionConfiguration,
+  AgentSessionDispatchInput,
   AgentSessionPersistence,
+  AgentSessionSettlementInput,
 } from "../../agentSession.js";
 import { piSessionIdForContinuation } from "../../agentSession.js";
 import {
@@ -40,11 +42,11 @@ export const openSqliteAgentSessionPersistence = (): Effect.Effect<
     (repository): AgentSessionPersistence => ({
       beginInvocation: (input) =>
         repository.transactionImmediate("dispatch Agent Invocation", (sql) =>
-          beginInvocation(sql, input),
+          beginAgentInvocation(sql, input),
         ),
       settleInvocation: (input) =>
         repository.transactionImmediate("settle Agent Invocation", (sql) =>
-          settleInvocation(sql, input),
+          settleAgentInvocation(sql, input),
         ),
       readInvocationHistory: (agentSessionId) =>
         repository.transaction("read Agent Invocation history", (sql) =>
@@ -53,10 +55,7 @@ export const openSqliteAgentSessionPersistence = (): Effect.Effect<
     }),
   );
 
-const beginInvocation = (
-  sql: SqlClient.SqlClient,
-  input: Parameters<AgentSessionPersistence["beginInvocation"]>[0],
-) =>
+export const beginAgentInvocation = (sql: SqlClient.SqlClient, input: AgentSessionDispatchInput) =>
   Effect.gen(function* () {
     if (input.configuration.model.trim().length === 0) {
       return yield* invalid("dispatch Agent Invocation", "Agent model must not be blank");
@@ -131,8 +130,6 @@ const beginInvocation = (
     const invocationId = created[0]?.id;
     if (invocationId === undefined)
       return yield* invalid("dispatch Agent Invocation", "Invocation was not created");
-    yield* input.linkInvocation(sql, invocationId);
-
     const invocation: AgentInvocationRecord = {
       id: invocationId,
       continuationId: continuation.id,
@@ -201,9 +198,9 @@ const createContinuation = (
     },
   );
 
-const settleInvocation = (
+export const settleAgentInvocation = (
   sql: SqlClient.SqlClient,
-  input: Parameters<AgentSessionPersistence["settleInvocation"]>[0],
+  input: AgentSessionSettlementInput,
 ) =>
   Effect.gen(function* () {
     const usage = input.settlement.usage;
@@ -241,7 +238,6 @@ const settleInvocation = (
         WHERE id = ${input.continuationId}
       `;
     }
-    if (input.settleDomain !== undefined) yield* input.settleDomain(sql, input.invocationId);
   });
 
 export const settleUnsettledAgentInvocations = (

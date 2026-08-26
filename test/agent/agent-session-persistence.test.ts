@@ -9,7 +9,6 @@ import {
 import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
-  AgentSessionSqlLink,
 } from "../../src/agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
 import {
@@ -27,7 +26,16 @@ const configuration: AgentSessionConfiguration = {
   thinking: "medium",
 };
 
-const noOpLink: AgentSessionSqlLink = () => Effect.void;
+const noOpJournal = (persistence: AgentSessionPersistence) => ({
+  beginInvocation: (
+    input: Parameters<AgentSessionPersistence["beginInvocation"]>[0] & { entry?: undefined },
+  ) => persistence.beginInvocation(input),
+  settleInvocation: ({
+    entry: _entry,
+    ...input
+  }: Parameters<AgentSessionPersistence["settleInvocation"]>[0] & { entry?: undefined }) =>
+    persistence.settleInvocation(input),
+});
 
 const withPersistence = <A, E>(
   root: string,
@@ -57,7 +65,6 @@ it.effect("rejects a blank selected model before creating Agent evidence", () =>
           .beginInvocation({
             configuration: { ...configuration, model: "  " },
             createdAt: "2026-08-14T11:59:00.000Z",
-            linkInvocation: noOpLink,
           })
           .pipe(Effect.flip);
         expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -80,7 +87,6 @@ it.effect("records and resumes a usable Agent Continuation with exact token evid
         const first = yield* persistence.beginInvocation({
           configuration,
           createdAt: "2026-08-14T12:00:00.000Z",
-          linkInvocation: noOpLink,
         });
         expect(first).toMatchObject({ ok: true });
         if (!first.ok) return;
@@ -105,7 +111,6 @@ it.effect("records and resumes a usable Agent Continuation with exact token evid
           agentSessionId: first.dispatch.agentSessionId,
           configuration,
           createdAt: "2026-08-14T12:00:02.000Z",
-          linkInvocation: noOpLink,
         });
         expect(resumed).toMatchObject({
           ok: true,
@@ -150,7 +155,6 @@ it.effect("reports malformed persisted Agent evidence as repository data errors"
           const started = yield* persistence.beginInvocation({
             configuration,
             createdAt: "2026-08-14T12:00:00.000Z",
-            linkInvocation: noOpLink,
           });
           if (!started.ok) throw new Error(started.code);
           yield* persistence.settleInvocation({
@@ -192,7 +196,6 @@ it.effect("reports malformed persisted Agent evidence as repository data errors"
               agentSessionId: invalidHarness.agentSessionId,
               configuration,
               createdAt: "2026-08-14T12:00:02.000Z",
-              linkInvocation: noOpLink,
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -211,7 +214,6 @@ it.effect("reports malformed persisted Agent evidence as repository data errors"
               agentSessionId: invalidThinking.agentSessionId,
               configuration,
               createdAt: "2026-08-14T12:00:02.000Z",
-              linkInvocation: noOpLink,
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -220,7 +222,7 @@ it.effect("reports malformed persisted Agent evidence as repository data errors"
   }),
 );
 
-it.effect("rejects concurrent unsettled dispatch and rolls back failed domain settlement", () =>
+it.effect("rejects concurrent unsettled dispatch and rolls back invalid settlement", () =>
   Effect.gen(function* () {
     const root = yield* initializedRepository();
     yield* withPersistence(root, (persistence) =>
@@ -228,7 +230,6 @@ it.effect("rejects concurrent unsettled dispatch and rolls back failed domain se
         const first = yield* persistence.beginInvocation({
           configuration,
           createdAt: "2026-08-14T12:00:00.000Z",
-          linkInvocation: noOpLink,
         });
         expect(first).toMatchObject({ ok: true });
         if (!first.ok) return;
@@ -236,25 +237,17 @@ it.effect("rejects concurrent unsettled dispatch and rolls back failed domain se
           agentSessionId: first.dispatch.agentSessionId,
           configuration,
           createdAt: "2026-08-14T12:00:01.000Z",
-          linkInvocation: noOpLink,
         });
         expect(concurrent).toEqual({ ok: false, code: "concurrent_unsettled_invocation" });
 
         const failed = yield* Effect.exit(
           persistence.settleInvocation({
             invocationId: first.dispatch.invocation.id,
-            continuationId: first.dispatch.continuation.id,
+            continuationId: first.dispatch.continuation.id + 1,
             settlement: {
               settledAt: "2026-08-14T12:00:02.000Z",
               kind: "failed",
             },
-            settleDomain: () =>
-              Effect.fail(
-                new RepositoryPersistedDataInvalid({
-                  operationName: "settle test domain result",
-                  cause: new Error("domain result failed"),
-                }),
-              ),
           }),
         );
         expect(failed._tag).toBe("Failure");
@@ -272,7 +265,6 @@ it.effect("rejects concurrent unsettled dispatch and rolls back failed domain se
           agentSessionId: first.dispatch.agentSessionId,
           configuration,
           createdAt: "2026-08-14T12:00:04.000Z",
-          linkInvocation: noOpLink,
         });
         expect(retry).toMatchObject({ ok: true, dispatch: { invocation: { id: 2 } } });
       }),
@@ -288,7 +280,6 @@ it.effect("retries a failed launch with the same frozen configuration", () =>
         const first = yield* persistence.beginInvocation({
           configuration,
           createdAt: "2026-08-14T12:00:00.000Z",
-          linkInvocation: noOpLink,
         });
         if (!first.ok) return;
         yield* persistence.settleInvocation({
@@ -305,7 +296,6 @@ it.effect("retries a failed launch with the same frozen configuration", () =>
             agentSessionId: first.dispatch.agentSessionId,
             configuration: { ...configuration, model: "provider/changed" },
             createdAt: "2026-08-14T12:00:02.000Z",
-            linkInvocation: noOpLink,
           }),
         );
         expect(changed._tag).toBe("Failure");
@@ -314,7 +304,6 @@ it.effect("retries a failed launch with the same frozen configuration", () =>
           agentSessionId: first.dispatch.agentSessionId,
           configuration,
           createdAt: "2026-08-14T12:00:03.000Z",
-          linkInvocation: noOpLink,
         });
         expect(retry).toMatchObject({
           ok: true,
@@ -339,8 +328,9 @@ it.effect("does not resume a continuation marked unusable despite its transcript
       Effect.gen(function* () {
         const result = yield* executeAgentSession({
           configuration,
-          agentPersistence: persistence,
-          linkInvocation: noOpLink,
+          journal: noOpJournal(persistence),
+          dispatchEntry: undefined,
+          settlementEntry: () => Effect.succeed(undefined),
           reviewerRuntime: {
             review: () =>
               Effect.succeed({
@@ -405,7 +395,6 @@ it.effect("does not resume a continuation marked unusable despite its transcript
           agentSessionId: result.evidence.agentSessionId,
           configuration,
           createdAt: "2026-08-14T12:00:02.000Z",
-          linkInvocation: noOpLink,
         });
         expect(resumed).toMatchObject({ ok: true, dispatch: { resumed: false } });
       }),
@@ -426,8 +415,9 @@ it.effect("returns the terminal retry result with ordered Invocation evidence", 
         );
         const result = yield* executeAgentSession({
           configuration,
-          agentPersistence: persistence,
-          linkInvocation: noOpLink,
+          journal: noOpJournal(persistence),
+          dispatchEntry: undefined,
+          settlementEntry: () => Effect.succeed(undefined),
           reviewerRuntime: {
             review: (reviewInput) => {
               prompts.push(reviewInput.prompt);
@@ -495,8 +485,9 @@ it.effect("discovers an initial transcript after interruption and keeps it resum
         const transcript = join(root, "interrupted-initial.jsonl");
         const result = yield* executeAgentSession({
           configuration,
-          agentPersistence: persistence,
-          linkInvocation: noOpLink,
+          journal: noOpJournal(persistence),
+          dispatchEntry: undefined,
+          settlementEntry: () => Effect.succeed(undefined),
           reviewerRuntime: {
             review: (reviewInput) => {
               writeFileSync(
@@ -543,7 +534,6 @@ it.effect("discovers an initial transcript after interruption and keeps it resum
           agentSessionId: result.evidence.agentSessionId,
           configuration,
           createdAt: "2026-08-14T12:00:02.000Z",
-          linkInvocation: noOpLink,
         });
         expect(resumed).toMatchObject({ ok: true, dispatch: { resumed: true } });
       }),
@@ -558,8 +548,9 @@ it.effect("continues an interrupted invocation when transcript discovery fails",
       Effect.gen(function* () {
         const result = yield* executeAgentSession({
           configuration,
-          agentPersistence: persistence,
-          linkInvocation: noOpLink,
+          journal: noOpJournal(persistence),
+          dispatchEntry: undefined,
+          settlementEntry: () => Effect.succeed(undefined),
           reviewerRuntime: {
             review: (reviewInput) => {
               const header = `${JSON.stringify({
@@ -630,7 +621,6 @@ it.effect("keeps an interrupted invocation resumable when its transcript is know
         const started = yield* persistence.beginInvocation({
           configuration,
           createdAt: "2026-08-14T12:00:00.000Z",
-          linkInvocation: noOpLink,
         });
         expect(started).toMatchObject({ ok: true });
         if (!started.ok) return;
@@ -664,7 +654,6 @@ it.effect("keeps an interrupted invocation resumable when its transcript is know
           agentSessionId: started.dispatch.agentSessionId,
           configuration,
           createdAt: "2026-08-14T12:00:02.000Z",
-          linkInvocation: noOpLink,
         });
         expect(resumed).toMatchObject({ ok: true, dispatch: { resumed: true } });
       }),

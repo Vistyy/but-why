@@ -1,5 +1,4 @@
 import type { Effect } from "effect";
-import type { AgentSessionSqlLink } from "../../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type {
@@ -22,6 +21,7 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../candidateValidation/candidateValidationRunStore.js";
+import type { ChangeReviewerPolicy } from "../changeReviewerConfiguration.js";
 import type {
   ValidationPhase,
   ValidationRunArtifactRecord,
@@ -52,17 +52,6 @@ export type CandidateValidationExecutionPort = {
   readonly recordSpecialistResult: (
     input: RecordCandidateSpecialistResultInput,
   ) => StorageEffect<void>;
-  readonly settleAgentInvocationResult: (input: {
-    readonly validationRunId: number;
-    readonly phase: ValidationPhase;
-    readonly producer: string;
-    readonly outcome: "passed" | "failed";
-    readonly findings: readonly ValidationRunFindingRecord[];
-    readonly artifactRecords: readonly ValidationRunArtifactRecord[];
-    readonly toolingFailure?: ValidationToolingFailureRecordInput & {
-      readonly validationRunId: number;
-    };
-  }) => AgentSessionSqlLink;
   readonly listPhaseResults: (
     validationRunId: number,
   ) => StorageEffect<readonly CandidateValidationPhaseResult[]>;
@@ -84,6 +73,28 @@ export type CandidateValidationExecutionPort = {
     validationRunId: number,
   ) => StorageEffect<readonly CandidateValidationArtifact[]>;
 };
+
+export type ChangeValidationAgentSessionEntry =
+  | {
+      readonly kind: "change_reviewer_dispatch";
+      readonly changeId: string;
+      readonly producer: string;
+      readonly validationRunId: number;
+      readonly phase: ValidationPhase;
+      readonly configurationSnapshot: ChangeReviewerPolicy;
+    }
+  | {
+      readonly kind: "change_reviewer_settlement";
+      readonly validationRunId: number;
+      readonly phase: ValidationPhase;
+      readonly producer: string;
+      readonly outcome: "passed" | "failed";
+      readonly findings: readonly ValidationRunFindingRecord[];
+      readonly artifactRecords: readonly ValidationRunArtifactRecord[];
+      readonly toolingFailure?: ValidationToolingFailureRecordInput & {
+        readonly validationRunId: number;
+      };
+    };
 
 export type ChangeValidationReadPort = {
   readonly getCandidateById: (candidateId: number) => StorageEffect<CandidateRecord | undefined>;

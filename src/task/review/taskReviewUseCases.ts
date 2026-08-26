@@ -4,10 +4,7 @@ import {
   repoAgentEnvironment,
 } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
-import type {
-  AgentSessionConfiguration,
-  AgentSessionPersistence,
-} from "../../agent/agentSession/agentSession.js";
+import type { AgentSessionConfiguration } from "../../agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import {
   type ReviewerAgentResult,
@@ -197,7 +194,6 @@ export const openTaskReviewUseCases = (input: {
   readonly persistence: TaskReviewPersistence;
   readonly admission?: TaskReviewAdmissionPersistence;
   readonly agentSessionStorageRoot: string;
-  readonly agentPersistence: AgentSessionPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly underengineerRuntime: ReviewerAgentRuntime<TaskSimplificationAdviceOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
@@ -407,12 +403,13 @@ const submitTaskReview = (
               const execution = yield* executeAgentSession({
                 ...(agentSessionId === undefined ? {} : { agentSessionId }),
                 configuration: agentConfiguration(resolvedPolicy.policy.profile),
-                agentPersistence: input.agentPersistence,
-                linkInvocation: input.persistence.linkAgentInvocation({
+                journal: input.persistence.agentSessionJournal,
+                dispatchEntry: {
+                  kind: "task_review_dispatch",
                   taskId,
                   reviewId,
                   admittedPolicy: admitted.policy,
-                }),
+                },
                 reviewerRuntime: input.reviewerRuntime,
                 reviewerExecutor: input.reviewerExecutor,
                 decodeOutput,
@@ -436,7 +433,7 @@ const submitTaskReview = (
                     repositoryCommonDirectory: input.repositoryCommonDirectory,
                     workspaceId: taskReviewWorkspaceId(reviewId),
                   }),
-                settleDomain: ({ result }) =>
+                settlementEntry: ({ result }) =>
                   Effect.gen(function* () {
                     const evidence = yield* Effect.either(
                       settleTaskReviewEvidence(input, admitted.review, now),
@@ -461,13 +458,14 @@ const submitTaskReview = (
                             operation: result.failure.operationName,
                             message: result.failure.message,
                           });
-                    return input.persistence.settleAgentReview({
+                    return {
+                      kind: "task_review_settlement" as const,
                       reviewId,
                       findings: result.ok ? result.report.findings : [],
                       ...(toolingFailure === undefined ? {} : { toolingFailure }),
                       now,
                       complete: toolingFailure === undefined,
-                    });
+                    };
                   }),
               });
               const reviewed = execution.result;
@@ -595,10 +593,11 @@ const runTaskSimplificationAdvice = (input: {
       },
       run: executeAgentSession({
         configuration: agentConfiguration(profile),
-        agentPersistence: input.input.agentPersistence,
-        linkInvocation: persistence.linkSimplificationAdviceInvocation({
+        journal: persistence.agentSessionJournal,
+        dispatchEntry: {
+          kind: "simplification_advice_dispatch" as const,
           reviewId: input.reviewId,
-        }),
+        },
         reviewerRuntime: input.input.underengineerRuntime,
         reviewerExecutor: input.input.reviewerExecutor,
         decodeOutput,
@@ -631,21 +630,20 @@ const runTaskSimplificationAdvice = (input: {
             repositoryCommonDirectory: input.input.repositoryCommonDirectory,
             workspaceId: taskReviewWorkspaceId(input.reviewId),
           }),
-        settleDomain: ({ result }) =>
-          Effect.succeed(
-            persistence.settleSimplificationAdvice({
-              reviewId: input.reviewId,
-              ...(result.ok
-                ? { advice: result.report, complete: true }
-                : {
-                    complete: false,
-                    failure: {
-                      operation: result.failure.operationName,
-                      message: result.failure.message,
-                    },
-                  }),
-            }),
-          ),
+        settlementEntry: ({ result }) =>
+          Effect.succeed({
+            kind: "simplification_advice_settlement" as const,
+            reviewId: input.reviewId,
+            ...(result.ok
+              ? { advice: result.report, complete: true as const }
+              : {
+                  complete: false as const,
+                  failure: {
+                    operation: result.failure.operationName,
+                    message: result.failure.message,
+                  },
+                }),
+          }),
       }),
       outcome: (result) => (result.result.ok ? "passed" : "failed"),
     });
