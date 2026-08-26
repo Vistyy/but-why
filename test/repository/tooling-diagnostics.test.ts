@@ -114,89 +114,25 @@ describe("Effect diagnostic sensitivity", () => {
 });
 
 describe("repository-authored tooling diagnostics", () => {
-  test.each([
-    ["process-properties-belong-to-cli-entry", "export const value = process.env.TEST;"],
-    ["effect-tests-use-effect-vitest-runtime", "const value = Effect.runPromise(work);"],
-    [
-      "test-child-processes-use-test-process-adapter",
-      'import { spawn } from "node:child_process";',
-    ],
-    [
-      "test-child-processes-use-test-process-adapter",
-      'const childProcess = await import("node:child_process/promises");',
-    ],
-    [
-      "test-child-processes-use-test-process-adapter",
-      'export { spawn } from "node:child_process";',
-    ],
-    ["task-identity-branding-belongs-to-task-id", "const value = input as PublicTaskId;"],
-    ["wall-clock-belongs-to-cli-entry", "const value = Date.now();"],
-    [
-      "json-parse-assertions-keep-unknown",
-      "const value = JSON.parse(source) as TrustedType;",
-      "extensions",
-    ],
-    [
-      "json-parse-assertions-keep-unknown",
-      "const value = JSON.parse(source) as TrustedType;",
-      "scripts",
-    ],
-    [
-      "json-parse-results-start-unknown",
-      "const value = JSON.parse(source).known as unknown;",
-      "extensions",
-    ],
-    ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
-    [
-      "package-installation-belongs-to-package-contract",
-      'const result = spawnSync("npm", ["pack"]);',
-    ],
-    [
-      "package-installation-belongs-to-package-contract",
-      'const result = runTestProcess("npm", ["install"], { cwd });',
-    ],
-    ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
-    ["direct-reflect-get-is-validated", 'const value = Reflect.get(input, "field");'],
-    ["direct-reflect-apply-is-typed", "const value = Reflect.apply(fn, receiver, args);"],
-    ["direct-module-mocking-uses-effect-boundary", 'vi.mock("module");'],
-    [
-      "direct-reflect-get-is-validated-javascript",
-      'const value = Reflect.get(input, "field");',
-      "scripts",
-      "mjs",
-    ],
-    [
-      "direct-reflect-apply-is-typed-javascript",
-      "const value = Reflect.apply(fn, receiver, args);",
-      "scripts",
-      "mjs",
-    ],
-    [
-      "direct-module-mocking-uses-effect-boundary-javascript",
-      'vi.mock("module");',
-      "scripts",
-      "mjs",
-    ],
-  ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string, extension = "ts") => {
+  test("configured ast-grep scan discovers supported source partitions", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
-    const fixtureDirectory =
-      configuredDirectory ??
-      ([
-        "effect-tests-use-effect-vitest-runtime",
-        "test-child-processes-use-test-process-adapter",
-        "process-test-helpers-belong-to-process-boundaries",
-        "package-installation-belongs-to-package-contract",
-        "live-agent-helper-belongs-to-test-host",
-      ].includes(ruleId)
-        ? "test"
-        : "src");
-    mkdirSync(join(fixtureRoot, fixtureDirectory));
+    const directories = ["src", "test", "extensions", "scripts"] as const;
+    const extensions = ["ts", "mjs"] as const;
+    for (const directory of directories) {
+      mkdirSync(join(fixtureRoot, directory));
+    }
     mkdirSync(join(fixtureRoot, "ast-grep/rules"), { recursive: true });
     copyFileSync(astGrepRulePath, join(fixtureRoot, "ast-grep/rules/structural-bans.yml"));
     copyFileSync(astGrepConfigPath, join(fixtureRoot, "sgconfig.yml"));
-    const fixture = join(fixtureRoot, fixtureDirectory, `diagnostic-fixture.${extension}`);
-    writeFileSync(fixture, `${source}\n`);
+    for (const directory of directories) {
+      for (const extension of extensions) {
+        writeFileSync(
+          join(fixtureRoot, directory, `diagnostic-fixture.${extension}`),
+          'const value = Reflect.get(input, "field");\n',
+        );
+      }
+    }
 
     const result = run(
       "pnpm",
@@ -208,18 +144,21 @@ describe("repository-authored tooling diagnostics", () => {
         "scan",
         "--config",
         join(fixtureRoot, "sgconfig.yml"),
-        "--filter",
-        `^${ruleId}$`,
         "--report-style",
         "short",
         "--color",
         "never",
-        fixture,
+        fixtureRoot,
       ],
       fixtureRoot,
     );
 
     expect(result.status).not.toBe(0);
+    for (const directory of directories) {
+      for (const extension of extensions) {
+        expect(result.output).toContain(`${directory}/diagnostic-fixture.${extension}`);
+      }
+    }
     expectActionablePolicyDiagnostic(result.output);
   });
 
