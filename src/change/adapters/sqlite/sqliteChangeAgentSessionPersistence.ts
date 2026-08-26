@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import {
   beginAgentInvocation,
   settleAgentInvocation,
+  validateAgentSessionJournalSettlement,
 } from "../../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentSessionJournal } from "../../../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
@@ -71,17 +72,10 @@ const changeAgentSessionJournal = (
   settleInvocation: (input) =>
     repository.transactionImmediate("settle Change Agent Invocation", (sql) =>
       Effect.gen(function* () {
+        yield* validateAgentSessionJournalSettlement(input);
         const { entry, ...settlement } = input;
         yield* settleAgentInvocation(sql, settlement);
-        if (entry === undefined) {
-          if (!("retry" in input) || input.retry !== true) {
-            return yield* invalid(
-              "settle Change Agent Invocation",
-              "Ownerless Change settlement is only valid for an output-correction retry",
-            );
-          }
-          return;
-        }
+        if (entry === undefined) return;
         if (entry.kind === "change_reviewer_settlement") {
           yield* settleCandidateValidationAgentInvocation(
             sql,

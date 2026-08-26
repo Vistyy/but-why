@@ -9,6 +9,7 @@ import {
   beginAgentInvocation,
   settleAgentInvocation,
   settleUnsettledAgentInvocations,
+  validateAgentSessionJournalSettlement,
 } from "../../../agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type {
   AgentInvocationRecord,
@@ -256,17 +257,10 @@ const taskReviewAgentSessionJournal = (
   settleInvocation: (input) =>
     repository.transactionImmediate("settle Agent Invocation with owner journal", (sql) =>
       Effect.gen(function* () {
+        yield* validateAgentSessionJournalSettlement(input);
         const { entry, ...settlement } = input;
         yield* settleAgentInvocation(sql, settlement);
-        if (entry === undefined) {
-          if (!("retry" in input) || input.retry !== true) {
-            return yield* invalid(
-              "settle Agent Invocation with owner journal",
-              "Ownerless Task settlement is only valid for an output-correction retry",
-            );
-          }
-          return;
-        }
+        if (entry === undefined) return;
         if (entry.kind === "task_review_settlement") {
           yield* settleTaskReviewAgentInvocation(
             sql,

@@ -171,6 +171,17 @@ const createContinuation = (
     },
   );
 
+export const validateAgentSessionJournalSettlement = (input: {
+  readonly entry: unknown;
+  readonly retry?: boolean;
+}) =>
+  input.entry !== undefined || input.retry === true
+    ? Effect.void
+    : invalid(
+        "settle Agent Invocation",
+        "Ownerless Agent settlement is only valid for an output-correction retry",
+      );
+
 export const settleAgentInvocation = (
   sql: SqlClient.SqlClient,
   input: AgentSessionSettlementInput,
