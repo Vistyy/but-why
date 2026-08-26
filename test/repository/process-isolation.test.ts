@@ -43,6 +43,12 @@ describe("test subprocess isolation", () => {
     );
     expect(overflowing.status).toBeNull();
     expect(overflowing.error).toMatchObject({ code: "ENOBUFS" });
+
+    const missing = runTestProcess(join(fixture, "missing-command"), [], { cwd: fixture });
+    expect(missing.status).toBeNull();
+    expect(missing.error).toMatchObject({ code: "ENOENT" });
+    expect(missing.stdout).toBe("");
+    expect(missing.stderr).toBe("");
   });
 
   test("rejects shared checkout paths and HOME overrides", () => {

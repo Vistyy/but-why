@@ -159,7 +159,7 @@ export const runTestProcess = (
 ): SpawnSyncReturns<string> => {
   const prepared = processOptions(options);
   try {
-    return spawnSync(command, args, {
+    const result = spawnSync(command, args, {
       ...prepared.options,
       ...(options.input === undefined ? {} : { input: options.input }),
       encoding: "utf8",
@@ -169,6 +169,11 @@ export const runTestProcess = (
           : positiveFinite(options.maxBuffer, "Test process maxBuffer"),
       timeout: options.timeout ?? synchronousTestProcessTimeoutMs,
     });
+    return {
+      ...result,
+      stderr: result.stderr ?? "",
+      stdout: result.stdout ?? "",
+    };
   } finally {
     prepared.cleanup();
   }
