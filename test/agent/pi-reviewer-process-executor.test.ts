@@ -17,6 +17,8 @@ import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piRevi
 import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
 import { observeUntil } from "../support/observe.js";
 
+const reviewerProcessTerminationTestTimeoutMs = 15_000;
+
 const profile = {
   agentProfile: "review",
   scope: "repo" as const,
@@ -635,8 +637,9 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.scoped("waits for reviewer process-tree termination when interrupted", () =>
-    Effect.gen(function* () {
+  it.scoped(
+    "waits for reviewer process-tree termination when interrupted",
+    () => {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-interrupt-"));
       const pidFile = join(root, "pid");
       const executor = createPiReviewerProcessExecutor(() =>
@@ -645,17 +648,19 @@ describe("Pi reviewer process executor", () => {
           args: ["-c", `sleep 30 & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`],
         }),
       );
-      try {
-        const fiber = yield* Effect.fork(executor.execute(input));
-        yield* Effect.promise(() => waitForFile(pidFile));
-        const childPid = Number(readFileSync(pidFile, "utf8"));
-        yield* Fiber.interrupt(fiber);
-        yield* Effect.promise(() => waitForProcessExit(childPid));
-        expect(processIsGone(childPid)).toBe(true);
-      } finally {
-        rmSync(root, { recursive: true, force: true });
-      }
-    }),
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.fork(executor.execute(input));
+          yield* Effect.addFinalizer(() => Fiber.interrupt(fiber).pipe(Effect.asVoid));
+          yield* Effect.promise(() => waitForFile(pidFile));
+          const childPid = Number(readFileSync(pidFile, "utf8"));
+          yield* Fiber.interrupt(fiber);
+          yield* Effect.promise(() => waitForProcessExit(childPid));
+          expect(processIsGone(childPid)).toBe(true);
+        }),
+      ).pipe(Effect.ensuring(Effect.sync(() => rmSync(root, { recursive: true, force: true }))));
+    },
+    reviewerProcessTerminationTestTimeoutMs,
   );
 });
 

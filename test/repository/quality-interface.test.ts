@@ -169,6 +169,12 @@ const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Si
 const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> =>
   stopProcess(justProcess, "Just settlement after stop");
 
+const awaitAllCleanup = async (...cleanups: readonly Promise<void>[]): Promise<void> => {
+  const results = await Promise.allSettled(cleanups);
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+};
+
 const waitForFile = (file: string): Promise<string> =>
   observeUntil({
     description: `file ${file} to contain its readiness handshake`,
@@ -412,8 +418,10 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       expect(readFileSync(buildFile, "utf8")).toBe("build");
       expect(readFileSync(testFile, "utf8")).toBe("test");
     } finally {
-      if (quality?.child.exitCode === null) await stopJust(quality);
-      await stopRunner(holder);
+      await awaitAllCleanup(
+        ...(quality === undefined ? [] : [stopJust(quality)]),
+        stopRunner(holder),
+      );
     }
   });
 
@@ -477,8 +485,10 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       );
       expect(unselectedResult.status, unselectedResult.output).toBe(0);
     } finally {
-      if (unselected?.child.exitCode === null) await stopJust(unselected);
-      await stopRunner(holder);
+      await awaitAllCleanup(
+        ...(unselected === undefined ? [] : [stopJust(unselected)]),
+        stopRunner(holder),
+      );
     }
   });
 
@@ -510,8 +520,10 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       expect(() => readFileSync(acquiredFile)).toThrow();
     } finally {
       writeFileSync(releaseFile, "release");
-      if (waiter !== undefined) await stopRunner(waiter);
-      await stopRunner(holder);
+      await awaitAllCleanup(
+        ...(waiter === undefined ? [] : [stopRunner(waiter)]),
+        stopRunner(holder),
+      );
     }
   });
 
@@ -551,10 +563,11 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       descendantPidFile,
     ]);
 
+    let observer: ReturnType<typeof startRunner> | undefined;
     try {
       await waitForFile(readyFile);
       const descendantIdentity = await readProcessIdentity(descendantPidFile);
-      const observer = startCleanupObserver(lockFile, descendantIdentity);
+      observer = startCleanupObserver(lockFile, descendantIdentity);
       await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
       holder.child.kill("SIGINT");
       expect(
@@ -568,7 +581,10 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after descendant cleanup");
     } finally {
-      await stopRunner(holder);
+      await awaitAllCleanup(
+        ...(observer === undefined ? [] : [stopRunner(observer)]),
+        stopRunner(holder),
+      );
     }
   });
 
@@ -592,10 +608,11 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       directory,
     );
 
+    let observer: ReturnType<typeof startRunner> | undefined;
     try {
       await waitForFile(readyFile);
       await readProcessIdentity(descendantPidFile);
-      const observer = startCapacityObserver(lockFile);
+      observer = startCapacityObserver(lockFile);
       await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       signalJust(quality, signal);
       expect(
@@ -611,7 +628,10 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
-      await stopJust(quality);
+      await awaitAllCleanup(
+        ...(observer === undefined ? [] : [stopRunner(observer)]),
+        stopJust(quality),
+      );
     }
   });
 
