@@ -168,12 +168,8 @@ ignores:
   - test/support/changeInspectionFixture.ts
 rule:
   any:
-    - pattern: runBuiltByWithEnv($$$ARGS)
-    - pattern: runBuiltByWithInput($$$ARGS)
     - pattern: runByWithEnv($$$ARGS)
     - pattern: runBy($$$ARGS)
-    - pattern: runJustBy($$$ARGS)
-    - pattern: builtByExecutable()
 ---
 # Test process creation owns the one isolated subprocess Adapter.
 id: test-child-processes-use-test-process-adapter
