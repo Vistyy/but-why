@@ -12,7 +12,6 @@ import { Effect } from "effect";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const synchronousTestProcessTimeoutMs = 4_000;
 const testProcessMaxBufferBytes = 50 * 1024 * 1024;
 
 const positiveFinite = (value: number, label: string): number => {
@@ -169,7 +168,6 @@ export const runTestProcess = (
         options.maxBuffer === undefined
           ? testProcessMaxBufferBytes
           : positiveFinite(options.maxBuffer, "Test process maxBuffer"),
-      timeout: options.timeout ?? synchronousTestProcessTimeoutMs,
     });
     return {
       ...result,
