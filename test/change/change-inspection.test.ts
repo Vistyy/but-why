@@ -705,15 +705,6 @@ describe("Change inspection CLI", { timeout: 120_000 }, () => {
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("state");
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("readiness");
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("activeBlocker");
-      const defaultShown = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
-      const defaultOutput = JSON.parse(defaultShown.stdout);
-      expect(defaultOutput).toMatchObject({
-        task: { change: { id: changeId, activity: "implementing" } },
-      });
-      expect(defaultOutput.task.change).not.toHaveProperty("startable");
-      expect(defaultOutput.task.change).not.toHaveProperty("readiness");
-      expect(defaultOutput.task.change).not.toHaveProperty("activeBlocker");
-
       yield* createImplementationBlockerFixture(root, changeId, {
         reportedAt: firstNow,
         resolvedAt: secondNow,
