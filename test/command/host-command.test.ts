@@ -12,6 +12,8 @@ import {
 } from "../../src/command/hostCommand.js";
 import { observeUntil } from "../support/observe.js";
 
+const hostCommandProcessTestTimeoutMs = 20_000;
+
 describe("host command Adapter", () => {
   it("captures stdout, stderr, and the exit status", async () => {
     await expect(
@@ -41,59 +43,69 @@ describe("host command Adapter", () => {
     );
   });
 
-  effectIt.effect("interrupts a command and a descendant that ignores SIGTERM", () =>
-    Effect.gen(function* () {
+  effectIt.effect(
+    "interrupts a command and a descendant that ignores SIGTERM",
+    () => {
       const directory = mkdtempSync(join(tmpdir(), "but-why-host-command-"));
       const pidFile = join(directory, "pid");
-      try {
-        const fiber = yield* Effect.fork(
-          executeHostCommandEffect({
-            command: "sh",
-            args: [
-              "-c",
-              `sh -c 'trap "" TERM; exec sleep 30' & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`,
-            ],
-          }),
-        );
-        yield* Effect.promise(() => waitForFile(pidFile));
-        expect(existsSync(pidFile)).toBe(true);
-        yield* Fiber.interrupt(fiber);
-        yield* Effect.promise(() => waitForProcessExit(Number(readFileSync(pidFile, "utf8"))));
-        expect(processIsGone(Number(readFileSync(pidFile, "utf8")))).toBe(true);
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
-      }
-    }),
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.fork(
+            executeHostCommandEffect({
+              command: "sh",
+              args: [
+                "-c",
+                `sh -c 'trap "" TERM; exec sleep 30' & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`,
+              ],
+            }),
+          );
+          yield* Effect.addFinalizer(() => Fiber.interrupt(fiber).pipe(Effect.asVoid));
+          yield* Effect.promise(() => waitForFile(pidFile));
+          expect(existsSync(pidFile)).toBe(true);
+          yield* Fiber.interrupt(fiber);
+          yield* Effect.promise(() => waitForProcessExit(Number(readFileSync(pidFile, "utf8"))));
+          expect(processIsGone(Number(readFileSync(pidFile, "utf8")))).toBe(true);
+        }),
+      ).pipe(
+        Effect.ensuring(Effect.sync(() => rmSync(directory, { recursive: true, force: true }))),
+      );
+    },
+    hostCommandProcessTestTimeoutMs,
   );
 
-  effectIt.effect("interrupts descendants after the command root exits", () =>
-    Effect.gen(function* () {
+  effectIt.effect(
+    "interrupts descendants after the command root exits",
+    () => {
       const directory = mkdtempSync(join(tmpdir(), "but-why-host-command-"));
       const rootPidFile = join(directory, "root-pid");
       const childPidFile = join(directory, "child-pid");
-      try {
-        const fiber = yield* Effect.fork(
-          executeHostCommandEffect({
-            command: "sh",
-            args: [
-              "-c",
-              `printf '%s' "$$" > '${rootPidFile}'; sh -c 'trap "" TERM; exec sleep 30' & child=$!; printf '%s' "$child" > '${childPidFile}'`,
-            ],
-          }),
-        );
-        yield* Effect.promise(() => waitForFile(childPidFile));
-        const rootPid = Number(readFileSync(rootPidFile, "utf8"));
-        const childPid = Number(readFileSync(childPidFile, "utf8"));
-        yield* Effect.promise(() => waitForProcessExit(rootPid));
-        expect(processIsGone(rootPid)).toBe(true);
-        expect(processIsGone(childPid)).toBe(false);
-        yield* Fiber.interrupt(fiber);
-        yield* Effect.promise(() => waitForProcessExit(childPid));
-        expect(processIsGone(childPid)).toBe(true);
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
-      }
-    }),
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.fork(
+            executeHostCommandEffect({
+              command: "sh",
+              args: [
+                "-c",
+                `printf '%s' "$$" > '${rootPidFile}'; sh -c 'trap "" TERM; exec sleep 30' & child=$!; printf '%s' "$child" > '${childPidFile}'`,
+              ],
+            }),
+          );
+          yield* Effect.addFinalizer(() => Fiber.interrupt(fiber).pipe(Effect.asVoid));
+          yield* Effect.promise(() => waitForFile(childPidFile));
+          const rootPid = Number(readFileSync(rootPidFile, "utf8"));
+          const childPid = Number(readFileSync(childPidFile, "utf8"));
+          yield* Effect.promise(() => waitForProcessExit(rootPid));
+          expect(processIsGone(rootPid)).toBe(true);
+          expect(processIsGone(childPid)).toBe(false);
+          yield* Fiber.interrupt(fiber);
+          yield* Effect.promise(() => waitForProcessExit(childPid));
+          expect(processIsGone(childPid)).toBe(true);
+        }),
+      ).pipe(
+        Effect.ensuring(Effect.sync(() => rmSync(directory, { recursive: true, force: true }))),
+      );
+    },
+    hostCommandProcessTestTimeoutMs,
   );
 });
 
