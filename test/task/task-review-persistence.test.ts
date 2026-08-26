@@ -337,6 +337,8 @@ it.scoped("rejects Task reviewer policy changes after the first Invocation", () 
         invocationId: failedInvocation.dispatch.invocation.id,
         continuationId: failedInvocation.dispatch.continuation.id,
         settlement: { settledAt: later, kind: "launch_failed" },
+        entry: undefined,
+        retry: true,
       });
       yield* reviews.recordCleanup(first.review.id, "removed", later);
       yield* reviews.complete({
@@ -409,6 +411,8 @@ it.scoped("attributes frozen Task Reviewer configuration to every matching invok
         invocationId: olderInvocation.dispatch.invocation.id,
         continuationId: olderInvocation.dispatch.continuation.id,
         settlement: { settledAt: later, kind: "launch_failed" },
+        entry: undefined,
+        retry: true,
       });
       yield* reviews.recordCleanup(older.review.id, "removed", later);
       yield* reviews.complete({

@@ -82,8 +82,13 @@ const sharedAgentSessionOperations = (repository: RepositorySqlService) => ({
 });
 
 type SharedAgentSessionOperations = ReturnType<typeof sharedAgentSessionOperations>;
+type TestAgentSessionEntry =
+  | { readonly kind: "test_dispatch" }
+  | { readonly kind: "test_settlement" };
 
-const noOpJournal = (operations: SharedAgentSessionOperations): AgentSessionJournal<undefined> => ({
+const noOpJournal = (
+  operations: SharedAgentSessionOperations,
+): AgentSessionJournal<TestAgentSessionEntry> => ({
   beginInvocation: ({ entry: _entry, ...input }) => operations.beginInvocation(input),
   settleInvocation: ({ entry: _entry, ...input }) => operations.settleInvocation(input),
 });
@@ -383,8 +388,8 @@ it.effect("does not resume a continuation marked unusable despite its transcript
         const result = yield* executeAgentSession({
           configuration,
           journal: noOpJournal(persistence),
-          dispatchEntry: undefined,
-          settlementEntry: () => Effect.succeed(undefined),
+          dispatchEntry: { kind: "test_dispatch" },
+          settlementEntry: () => Effect.succeed({ kind: "test_settlement" as const }),
           reviewerRuntime: {
             review: () =>
               Effect.succeed({
@@ -470,8 +475,8 @@ it.effect("returns the terminal retry result with ordered Invocation evidence", 
         const result = yield* executeAgentSession({
           configuration,
           journal: noOpJournal(persistence),
-          dispatchEntry: undefined,
-          settlementEntry: () => Effect.succeed(undefined),
+          dispatchEntry: { kind: "test_dispatch" },
+          settlementEntry: () => Effect.succeed({ kind: "test_settlement" as const }),
           reviewerRuntime: {
             review: (reviewInput) => {
               prompts.push(reviewInput.prompt);
@@ -540,8 +545,8 @@ it.effect("discovers an initial transcript after interruption and keeps it resum
         const result = yield* executeAgentSession({
           configuration,
           journal: noOpJournal(persistence),
-          dispatchEntry: undefined,
-          settlementEntry: () => Effect.succeed(undefined),
+          dispatchEntry: { kind: "test_dispatch" },
+          settlementEntry: () => Effect.succeed({ kind: "test_settlement" as const }),
           reviewerRuntime: {
             review: (reviewInput) => {
               writeFileSync(
@@ -603,8 +608,8 @@ it.effect("continues an interrupted invocation when transcript discovery fails",
         const result = yield* executeAgentSession({
           configuration,
           journal: noOpJournal(persistence),
-          dispatchEntry: undefined,
-          settlementEntry: () => Effect.succeed(undefined),
+          dispatchEntry: { kind: "test_dispatch" },
+          settlementEntry: () => Effect.succeed({ kind: "test_settlement" as const }),
           reviewerRuntime: {
             review: (reviewInput) => {
               const header = `${JSON.stringify({

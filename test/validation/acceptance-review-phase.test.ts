@@ -586,10 +586,9 @@ const acceptancePhaseFixture = (
           if (options.settlementObserver === undefined) results.push(entry);
           else options.settlementObserver(entry);
         }
-        yield* agentJournal.settleInvocation({
-          ...input,
-          ...(entry === undefined ? {} : { entry }),
-        });
+        if (entry === undefined)
+          yield* agentJournal.settleInvocation({ ...input, entry, retry: true });
+        else yield* agentJournal.settleInvocation({ ...input, entry });
       }),
   };
   const recordAcceptanceResult =

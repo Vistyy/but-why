@@ -73,7 +73,15 @@ const changeAgentSessionJournal = (
       Effect.gen(function* () {
         const { entry, ...settlement } = input;
         yield* settleAgentInvocation(sql, settlement);
-        if (entry === undefined) return;
+        if (entry === undefined) {
+          if (!("retry" in input) || input.retry !== true) {
+            return yield* invalid(
+              "settle Change Agent Invocation",
+              "Ownerless Change settlement is only valid for an output-correction retry",
+            );
+          }
+          return;
+        }
         if (entry.kind === "change_reviewer_settlement") {
           yield* settleCandidateValidationAgentInvocation(
             sql,

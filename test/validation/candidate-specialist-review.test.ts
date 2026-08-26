@@ -157,7 +157,8 @@ const journalFor = (
   settleInvocation: ({ entry, ...input }) =>
     Effect.gen(function* () {
       if (entry?.kind === "change_reviewer_settlement") observe(entry);
-      yield* journal.settleInvocation({ ...input, ...(entry === undefined ? {} : { entry }) });
+      if (entry === undefined) yield* journal.settleInvocation({ ...input, entry, retry: true });
+      else yield* journal.settleInvocation({ ...input, entry });
     }),
 });
 

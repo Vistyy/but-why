@@ -761,6 +761,8 @@ describe("SQLite Validation ownership", () => {
           invocationId: invocation.dispatch.invocation.id,
           continuationId: invocation.dispatch.continuation.id,
           settlement: { settledAt: "2026-10-02T10:00:06.000Z", kind: "returned" },
+          entry: undefined,
+          retry: true,
         });
 
         yield* fixture.validation.execution.recordToolingFailure({
@@ -1055,6 +1057,8 @@ describe("SQLite Validation ownership", () => {
           invocationId: firstInvocation.dispatch.invocation.id,
           continuationId: firstInvocation.dispatch.continuation.id,
           settlement: { settledAt: "2026-10-02T10:02:03.000Z", kind: "returned" },
+          entry: undefined,
+          retry: true,
         });
         const agentSessionId = firstInvocation.dispatch.agentSessionId;
         const competingPolicy = {

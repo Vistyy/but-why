@@ -70,12 +70,17 @@ export type AgentSessionSettlementInput = {
  * A semantic owner journal composes Agent Session persistence with one owner's
  * linkage and settlement data inside the same transaction.
  */
+type AgentSessionDispatchEntry<Entry> = Extract<Entry, { readonly kind: `${string}_dispatch` }>;
+type AgentSessionSettlementEntry<Entry> = Extract<Entry, { readonly kind: `${string}_settlement` }>;
+
 export type AgentSessionJournal<Entry> = {
   readonly beginInvocation: (
-    input: AgentSessionDispatchInput & { readonly entry: Entry },
+    input: AgentSessionDispatchInput & { readonly entry: AgentSessionDispatchEntry<Entry> },
   ) => Effect.Effect<AgentDispatchResult, RepositoryStorageError>;
   readonly settleInvocation: (
-    input: AgentSessionSettlementInput & { readonly entry?: Entry },
+    input:
+      | (AgentSessionSettlementInput & { readonly entry: AgentSessionSettlementEntry<Entry> })
+      | (AgentSessionSettlementInput & { readonly entry: undefined; readonly retry: true }),
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
 

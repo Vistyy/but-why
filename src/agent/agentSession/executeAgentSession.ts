@@ -37,7 +37,7 @@ export type ExecuteAgentSessionInput<
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
   readonly journal: AgentSessionJournal<Entry>;
-  readonly dispatchEntry: Entry;
+  readonly dispatchEntry: Extract<Entry, { readonly kind: `${string}_dispatch` }>;
   readonly reviewerRuntime: ReviewerAgentRuntime<Output>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly decodeOutput: (
@@ -65,7 +65,11 @@ export type ExecuteAgentSessionInput<
     readonly result: ReviewerAgentResult<Output>;
     readonly invocationNumber: number;
     readonly evidence: AgentExecutionEvidence;
-  }) => Effect.Effect<Entry, DomainError, DomainRequirements>;
+  }) => Effect.Effect<
+    Extract<Entry, { readonly kind: `${string}_settlement` }>,
+    DomainError,
+    DomainRequirements
+  >;
 };
 
 export type ExecuteAgentSessionResult<Output> = {
@@ -219,22 +223,32 @@ export const executeAgentSession = <Output, Entry, DomainError = never, DomainRe
         continuationId,
         invocations: [...invocationEvidence, invocationEvidenceRecord],
       };
-      const entry = !shouldRetry
-        ? yield* input.settlementEntry({
+      if (shouldRetry) {
+        yield* Effect.uninterruptible(
+          input.journal.settleInvocation({
             invocationId: dispatch.dispatch.invocation.id,
-            result: settledResult,
-            invocationNumber,
-            evidence,
-          })
-        : undefined;
-      yield* Effect.uninterruptible(
-        input.journal.settleInvocation({
+            continuationId,
+            settlement,
+            entry: undefined,
+            retry: true,
+          }),
+        );
+      } else {
+        const entry = yield* input.settlementEntry({
           invocationId: dispatch.dispatch.invocation.id,
-          continuationId,
-          settlement,
-          ...(entry === undefined ? {} : { entry }),
-        }),
-      );
+          result: settledResult,
+          invocationNumber,
+          evidence,
+        });
+        yield* Effect.uninterruptible(
+          input.journal.settleInvocation({
+            invocationId: dispatch.dispatch.invocation.id,
+            continuationId,
+            settlement,
+            entry,
+          }),
+        );
+      }
       invocationEvidence.push(invocationEvidenceRecord);
 
       if (settledResult.ok || !shouldRetry) {
