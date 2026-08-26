@@ -17,11 +17,15 @@
     ]
   },
   "review": {
-    "specialists": ["removal", "standards"]
+    "specialists": ["removal", "consolidation", "standards"]
   },
   "reviewers": {
     "removal": {
       "instructionsFile": ".but-why/reviewers/removal.md",
+      "agentProfile": { "scope": "global", "name": "reviewer" }
+    },
+    "consolidation": {
+      "instructionsFile": ".but-why/reviewers/consolidation.md",
       "agentProfile": { "scope": "global", "name": "reviewer" }
     },
     "standards": {
