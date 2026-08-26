@@ -3,7 +3,6 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import type { ResolvedReviewerPiAgentProfile } from "../../src/agent/agentProfiles.js";
-import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
   cleanupExactDisposableWorkspace,
@@ -69,7 +68,6 @@ it.effect("submits through the supported Task Review operation with a real Agent
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
-        const agents = yield* openSqliteAgentSessionPersistence();
         const created = yield* tasks.createTask({
           title: "Real Agent Session sentinel",
           description: "Exercise the supported Task Review submission boundary.",
@@ -92,7 +90,6 @@ it.effect("submits through the supported Task Review operation with a real Agent
           }),
           persistence: reviews,
           agentSessionStorageRoot: sessionStorageRoot,
-          agentPersistence: agents,
           underengineerRuntime: {
             review: () =>
               Effect.succeed({

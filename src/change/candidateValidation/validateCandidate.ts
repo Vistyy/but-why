@@ -1,6 +1,6 @@
 import * as FileSystem from "@effect/platform/FileSystem";
 import { Context, Effect, Layer } from "effect";
-import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
+import type { AgentSessionJournal } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
@@ -16,7 +16,10 @@ import type {
   StallDetector,
   StallDetectorResult,
 } from "../stallDetection/stallDetector.js";
-import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
+import type {
+  CandidateValidationExecutionPort,
+  ChangeValidationAgentSessionEntry,
+} from "../validation/changeValidationPorts.js";
 import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckPhase.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
@@ -69,12 +72,11 @@ type CandidateValidationPathsValue = {
   readonly artifactsRoot: string;
   readonly agentSessionsRoot: string;
   readonly restoreWorkspace: RestoreDisposableWorkspace;
-  readonly agentPersistence: AgentSessionPersistence;
+  readonly journal: ChangeAgentSessionPort["agentSessionJournal"];
   readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
 };
 
 export class CandidateValidationPaths extends Context.Tag("CandidateValidationPaths")<
@@ -185,9 +187,8 @@ const makeCandidateValidation = (dependencies: {
   readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
   readonly agentSessionsRoot: string;
   readonly restoreWorkspace: RestoreDisposableWorkspace;
-  readonly agentPersistence: AgentSessionPersistence;
+  readonly journal: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
   readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
-  readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
   readonly stallDetector: StallDetector;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
@@ -409,9 +410,8 @@ const runCandidatePhases = (
     readonly reviewerExecution: CandidateReviewerExecutionValue;
     readonly agentSessionsRoot: string;
     readonly restoreWorkspace: RestoreDisposableWorkspace;
-    readonly agentPersistence: AgentSessionPersistence;
+    readonly journal: CandidateValidationPathsValue["journal"];
     readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
-    readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
   },
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   authority: CandidateValidationAuthority,
@@ -448,10 +448,8 @@ const runCandidatePhases = (
         workspaceId: snapshotWorkspaceId(validationRunId),
       },
       sessionStorageRoot: dependencies.agentSessionsRoot,
-      agentPersistence: dependencies.agentPersistence,
+      journal: dependencies.journal,
       getAgentSession: dependencies.getAgentSession,
-      linkAgentInvocation: dependencies.linkAgentInvocation,
-      settleAgentInvocationResult: dependencies.persistence.settleAgentInvocationResult,
     };
     return yield* runCandidateValidationGate({
       ...(prepare === null

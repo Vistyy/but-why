@@ -1,7 +1,6 @@
 import { Effect, Layer } from "effect";
 
 import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -47,16 +46,14 @@ export const candidateValidationForTest = (input: {
     CandidateValidationPaths,
     Effect.gen(function* () {
       const agentSessions = yield* openSqliteChangeAgentSessionPort();
-      const agentPersistence = yield* openSqliteAgentSessionPersistence();
       return {
         localRepositoryRoot: input.localRepositoryRoot,
         localRepositoryCommonDirectory: input.repository.commonDirectory,
         artifactsRoot: input.artifactsRoot,
         agentSessionsRoot: input.artifactsRoot,
         restoreWorkspace: restoreDisposableWorkspace,
-        agentPersistence,
         getAgentSession: agentSessions.getAgentSession,
-        linkAgentInvocation: agentSessions.linkAgentInvocation,
+        journal: agentSessions.agentSessionJournal,
       };
     }),
   ).pipe(Layer.provide(repositoryLayer));

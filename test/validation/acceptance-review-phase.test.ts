@@ -5,6 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
 import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
+import type { AgentSessionJournal } from "../../src/agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentResult,
@@ -19,6 +20,7 @@ import {
 } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { ImplementationBlockerHistory } from "../../src/change/implementationBlocker.js";
 import type { ImplementationDecision } from "../../src/change/implementationDecision.js";
+import type { ChangeValidationAgentSessionEntry } from "../../src/change/validation/changeValidationPorts.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -92,6 +94,20 @@ const finding = (title: string) => ({
   artifactRefs: [],
 });
 
+type ObservedAcceptanceResult = {
+  readonly validationRunId?: number;
+  readonly phase?: string;
+  readonly producer?: string;
+  readonly outcome: string;
+  readonly findings: readonly { readonly title: string }[];
+  readonly artifactRecords: readonly {
+    readonly path: string;
+    readonly phase?: string;
+    readonly producer?: string;
+  }[];
+  readonly toolingFailure?: { readonly operationName?: string };
+};
+
 describe("Acceptance Review phase", () => {
   it.scoped("judges the exact Candidate against all admitted immutable authority", () =>
     Effect.gen(function* () {
@@ -149,8 +165,8 @@ describe("Acceptance Review phase", () => {
   it.scoped("runs an oversized Acceptance Context through the normal Pi reviewer process", () =>
     Effect.gen(function* () {
       const workspace = createTestWorkspace();
-      const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
-        beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+      const journal: AgentSessionJournal<ChangeValidationAgentSessionEntry> = {
+        beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
           const sessionId = agentSessionId ?? 1;
           const continuation = {
             id: 1,
@@ -181,15 +197,8 @@ describe("Acceptance Review phase", () => {
             },
           });
         },
-        settleInvocation: () => Effect.void,
-        readInvocationHistory: () => Effect.succeed([]),
+        settleInvocation: ({ entry: _entry }) => Effect.void,
       };
-      const linkAgentInvocation: NonNullable<RunAcceptanceReviewPhaseInput["linkAgentInvocation"]> =
-        () => () =>
-          Effect.void;
-      const settleAgentInvocationResult: NonNullable<
-        RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]
-      > = () => () => Effect.void;
       const actualPolicy = {
         ...policy,
         profile: {
@@ -211,9 +220,7 @@ describe("Acceptance Review phase", () => {
         },
         policy: actualPolicy,
         agentEnvironment: ["env"],
-        agentPersistence,
-        linkAgentInvocation,
-        settleAgentInvocationResult,
+        journal,
         commandCwd: workspace,
         resourceRoot: workspace,
         reviewerExecutor: createPiReviewerProcessExecutor(),
@@ -232,11 +239,9 @@ describe("Acceptance Review phase", () => {
       writeFileSync(artifactsRoot, "not a directory");
       const settledInvocationIds: number[] = [];
       const settlementKinds: string[] = [];
-      const results: Parameters<
-        NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]>
-      >[0][] = [];
-      const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
-        beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+      const results: ObservedAcceptanceResult[] = [];
+      const journal: AgentSessionJournal<ChangeValidationAgentSessionEntry> = {
+        beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
           const sessionId = agentSessionId ?? 1;
           const continuation = {
             id: 1,
@@ -267,22 +272,17 @@ describe("Acceptance Review phase", () => {
             },
           });
         },
-        settleInvocation: ({ invocationId, settlement }) =>
+        settleInvocation: ({ entry: _entry, invocationId, settlement }) =>
           Effect.sync(() => {
             settledInvocationIds.push(invocationId);
             settlementKinds.push(settlement.kind);
           }),
-        readInvocationHistory: () => Effect.succeed([]),
       };
       const fixture = acceptancePhaseFixture(
         { review: () => Effect.succeed(cleanReport) },
         {
-          agentPersistence,
-          linkAgentInvocation: () => () => Effect.void,
-          settleAgentInvocationResult: (result) => {
-            results.push(result);
-            return () => Effect.void;
-          },
+          journal,
+          settlementObserver: (result) => results.push(result),
           artifactsRoot,
         },
       );
@@ -519,10 +519,9 @@ type FixtureOptions = {
   readonly policy?: RunAcceptanceReviewPhaseInput["policy"];
   readonly agentEnvironment?: RunAcceptanceReviewPhaseInput["agentEnvironment"];
   readonly reviewerExecutor?: RunAcceptanceReviewPhaseInput["reviewerExecutor"];
-  readonly agentPersistence?: RunAcceptanceReviewPhaseInput["agentPersistence"];
+  readonly journal?: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
   readonly getAgentSession?: RunAcceptanceReviewPhaseInput["getAgentSession"];
-  readonly linkAgentInvocation?: RunAcceptanceReviewPhaseInput["linkAgentInvocation"];
-  readonly settleAgentInvocationResult?: RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"];
+  readonly settlementObserver?: (result: ObservedAcceptanceResult) => void;
   readonly recordAcceptanceResult?: RunAcceptanceReviewPhaseInput["recordAcceptanceResult"];
   readonly commandCwd?: string;
   readonly resourceRoot?: string;
@@ -546,9 +545,7 @@ const acceptancePhaseFixture = (
 ) => {
   const validationRunId = options.validationRunId ?? 1;
   const exactCandidate = options.candidate ?? candidate;
-  const results: Parameters<
-    NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]>
-  >[0][] = [];
+  const results: ObservedAcceptanceResult[] = [];
   let integrityCheck = 0;
   const commandExecutor = (command: string) => {
     if (command === "git worktree list --porcelain") {
@@ -579,15 +576,21 @@ const acceptancePhaseFixture = (
   };
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
   const phasePolicy = options.policy ?? policy;
-  const agentPersistence = options.agentPersistence ?? defaultAgentPersistence();
+  const agentJournal = options.journal ?? defaultAgentJournal();
   const getAgentSession = options.getAgentSession ?? (() => Effect.succeed(undefined));
-  const linkAgentInvocation = options.linkAgentInvocation ?? (() => () => Effect.void);
-  const settleAgentInvocationResult =
-    options.settleAgentInvocationResult ??
-    ((result) => {
-      results.push(result);
-      return () => Effect.void;
-    });
+  const journal: AgentSessionJournal<ChangeValidationAgentSessionEntry> = {
+    beginInvocation: (input) => agentJournal.beginInvocation(input),
+    settleInvocation: ({ entry, ...input }) =>
+      Effect.gen(function* () {
+        if (entry?.kind === "change_reviewer_settlement") {
+          if (options.settlementObserver === undefined) results.push(entry);
+          else options.settlementObserver(entry);
+        }
+        if (entry === undefined)
+          yield* agentJournal.settleInvocation({ ...input, entry, retry: true });
+        else yield* agentJournal.settleInvocation({ ...input, entry });
+      }),
+  };
   const recordAcceptanceResult =
     options.recordAcceptanceResult ??
     ((result) =>
@@ -624,10 +627,8 @@ const acceptancePhaseFixture = (
         },
         sessionStorageRoot: options.sessionStorageRoot ?? artifactsRoot,
         restoreWorkspace: () => Effect.void,
-        agentPersistence,
+        journal,
         getAgentSession,
-        linkAgentInvocation,
-        settleAgentInvocationResult,
         recordAcceptanceResult,
         allowedUntrackedFiles: [],
         listArtifacts: () =>
@@ -648,10 +649,8 @@ const acceptancePhaseFixture = (
   };
 };
 
-const defaultAgentPersistence = (): NonNullable<
-  RunAcceptanceReviewPhaseInput["agentPersistence"]
-> => ({
-  beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+const defaultAgentJournal = (): AgentSessionJournal<ChangeValidationAgentSessionEntry> => ({
+  beginInvocation: ({ entry: _entry, agentSessionId, configuration, createdAt }) => {
     const sessionId = agentSessionId ?? 1;
     const continuation = {
       id: 1,
@@ -682,6 +681,5 @@ const defaultAgentPersistence = (): NonNullable<
       },
     });
   },
-  settleInvocation: () => Effect.void,
-  readInvocationHistory: () => Effect.succeed([]),
+  settleInvocation: ({ entry: _entry }) => Effect.void,
 });

@@ -1,22 +1,20 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodePersisted } from "../../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type {
   AgentContinuationRecord,
   AgentDispatchResult,
   AgentInvocationRecord,
   AgentSessionConfiguration,
-  AgentSessionPersistence,
+  AgentSessionDispatchInput,
+  AgentSessionSettlementInput,
 } from "../../agentSession.js";
 import { piSessionIdForContinuation } from "../../agentSession.js";
 import {
   decodeHarness,
-  decodeSqliteAgentInvocation,
   decodeSqliteAgentThinking,
   requiredModel,
-  type SqliteAgentInvocationRow,
 } from "./sqliteAgentInvocation.js";
 
 type ContinuationRow = {
@@ -30,33 +28,7 @@ type ContinuationRow = {
   readonly unusableReason: string | null;
 };
 
-export const openSqliteAgentSessionPersistence = (): Effect.Effect<
-  AgentSessionPersistence,
-  never,
-  RepositorySql
-> =>
-  Effect.map(
-    RepositorySql,
-    (repository): AgentSessionPersistence => ({
-      beginInvocation: (input) =>
-        repository.transactionImmediate("dispatch Agent Invocation", (sql) =>
-          beginInvocation(sql, input),
-        ),
-      settleInvocation: (input) =>
-        repository.transactionImmediate("settle Agent Invocation", (sql) =>
-          settleInvocation(sql, input),
-        ),
-      readInvocationHistory: (agentSessionId) =>
-        repository.transaction("read Agent Invocation history", (sql) =>
-          readInvocationHistory(sql, agentSessionId),
-        ),
-    }),
-  );
-
-const beginInvocation = (
-  sql: SqlClient.SqlClient,
-  input: Parameters<AgentSessionPersistence["beginInvocation"]>[0],
-) =>
+export const beginAgentInvocation = (sql: SqlClient.SqlClient, input: AgentSessionDispatchInput) =>
   Effect.gen(function* () {
     if (input.configuration.model.trim().length === 0) {
       return yield* invalid("dispatch Agent Invocation", "Agent model must not be blank");
@@ -131,8 +103,6 @@ const beginInvocation = (
     const invocationId = created[0]?.id;
     if (invocationId === undefined)
       return yield* invalid("dispatch Agent Invocation", "Invocation was not created");
-    yield* input.linkInvocation(sql, invocationId);
-
     const invocation: AgentInvocationRecord = {
       id: invocationId,
       continuationId: continuation.id,
@@ -201,9 +171,20 @@ const createContinuation = (
     },
   );
 
-const settleInvocation = (
+export const validateAgentSessionJournalSettlement = (input: {
+  readonly entry: unknown;
+  readonly retry?: boolean;
+}) =>
+  input.entry !== undefined || input.retry === true
+    ? Effect.void
+    : invalid(
+        "settle Agent Invocation",
+        "Ownerless Agent settlement is only valid for an output-correction retry",
+      );
+
+export const settleAgentInvocation = (
   sql: SqlClient.SqlClient,
-  input: Parameters<AgentSessionPersistence["settleInvocation"]>[0],
+  input: AgentSessionSettlementInput,
 ) =>
   Effect.gen(function* () {
     const usage = input.settlement.usage;
@@ -241,7 +222,6 @@ const settleInvocation = (
         WHERE id = ${input.continuationId}
       `;
     }
-    if (input.settleDomain !== undefined) yield* input.settleDomain(sql, input.invocationId);
   });
 
 export const settleUnsettledAgentInvocations = (
@@ -293,34 +273,6 @@ export const settleUnsettledAgentInvocations = (
       }
     }
   }).pipe(Effect.asVoid);
-
-const readInvocationHistory = (sql: SqlClient.SqlClient, agentSessionId: number) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<SqliteAgentInvocationRow>`
-      SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
-        invocation.continuation_id AS continuationId,
-        invocation.created_at AS createdAt, invocation.settled_at AS settledAt,
-        invocation.settlement_kind AS settlementKind,
-        invocation.input_tokens AS inputTokens,
-        invocation.cached_input_tokens AS cachedInputTokens,
-        invocation.cache_write_tokens AS cacheWriteTokens,
-        invocation.output_tokens AS outputTokens,
-        invocation.total_tokens AS totalTokens,
-        continuation.harness,
-        continuation.provider,
-        continuation.model,
-        continuation.thinking,
-        continuation.transcript_path AS transcriptPath,
-        continuation.unusable_reason AS unusableReason
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE continuation.agent_session_id = ${agentSessionId}
-      ORDER BY invocation.id
-    `;
-    return yield* decodePersisted("read Agent Invocation history", () =>
-      rows.map(decodeSqliteAgentInvocation),
-    );
-  });
 
 const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({
   id: row.id,

@@ -1,7 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { type Effect, Layer } from "effect";
 import { piReviewerProcessExecutor } from "../../../agent/adapters/piReviewerProcessExecutor.js";
-import type { AgentSessionPersistence } from "../../../agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -31,12 +30,11 @@ export const candidateValidationLayer = (input: {
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly agentSessionsRoot: string;
-  readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
+  readonly agentSessionsJournal: ChangeAgentSessionPort["agentSessionJournal"];
   readonly stallDetector: StallDetector;
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
@@ -49,9 +47,8 @@ export const candidateValidationLayer = (input: {
           artifactsRoot: input.artifactsRoot,
           agentSessionsRoot: input.agentSessionsRoot,
           restoreWorkspace: restoreDisposableWorkspace,
-          agentPersistence: input.agentPersistence,
+          journal: input.agentSessionsJournal,
           getAgentSession: input.getAgentSession,
-          linkAgentInvocation: input.linkAgentInvocation,
         }),
         Layer.succeed(CandidateValidationExecution, input.persistence),
         Layer.succeed(

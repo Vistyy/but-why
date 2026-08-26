@@ -4,8 +4,7 @@ import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type {
   AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+  AgentSessionJournal,
 } from "../../agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import type {
@@ -26,11 +25,11 @@ import {
   reviewerEvidenceFromAgentSession,
   writeReviewerArtifacts,
 } from "../validationRun/reviewerArtifacts.js";
+import type { ValidationRunFindingRecord } from "../validationRun/validationRun.js";
 import type {
-  ValidationPhase,
-  ValidationRunFindingRecord,
-} from "../validationRun/validationRun.js";
-import type { CandidateValidationExecutionPort } from "./changeValidationPorts.js";
+  ChangeValidationAgentInvocationSettlement,
+  ChangeValidationAgentSessionEntry,
+} from "./changeValidationPorts.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import {
   InfrastructureToolingFailed,
@@ -45,14 +44,14 @@ export type TranslatedReviewerResult<Output> =
     });
 
 export type RunAgentReviewerInput = {
-  readonly validationRunId: number;
-  readonly phase: ValidationPhase;
-  readonly producer: string;
   readonly reviewer: string;
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
-  readonly agentPersistence: AgentSessionPersistence;
-  readonly linkInvocation: AgentSessionSqlLink;
+  readonly journal: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
+  readonly dispatchEntry: Extract<
+    ChangeValidationAgentSessionEntry,
+    { readonly kind: "change_reviewer_dispatch" }
+  >;
   readonly reviewerRuntime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly decodeOutput: (
@@ -76,9 +75,6 @@ export type RunAgentReviewerInput = {
   readonly makeFindings: (
     result: TranslatedReviewerResult<ReviewerOutput>,
   ) => readonly ValidationRunFindingRecord[];
-  readonly settleAgentInvocationResult: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationResult"]
-  >;
 };
 
 export type RunAgentReviewerResult = {
@@ -92,14 +88,20 @@ export const runAgentReviewer = (
   ValidationToolingFailure | RepositoryStorageError,
   FileSystem.FileSystem
 > => {
+  const { validationRunId, phase, producer } = input.dispatchEntry;
   let phaseOutcome: CandidateValidationOutcome | undefined;
   let integrityFailure: ValidationToolingFailure | undefined;
   return Effect.gen(function* () {
-    yield* executeAgentSession<ReviewerOutput, never, FileSystem.FileSystem>({
+    yield* executeAgentSession<
+      ReviewerOutput,
+      ChangeValidationAgentSessionEntry,
+      never,
+      FileSystem.FileSystem
+    >({
       ...(input.agentSessionId === undefined ? {} : { agentSessionId: input.agentSessionId }),
       configuration: input.configuration,
-      agentPersistence: input.agentPersistence,
-      linkInvocation: input.linkInvocation,
+      journal: input.journal,
+      dispatchEntry: input.dispatchEntry,
       reviewerRuntime: input.reviewerRuntime,
       reviewerExecutor: input.reviewerExecutor,
       decodeOutput: input.decodeOutput,
@@ -126,13 +128,13 @@ export const runAgentReviewer = (
           );
           if (restored._tag === "Right") return result;
           const failure = new InfrastructureToolingFailed({
-            operationName: `verify_${input.phase}_candidate`,
+            operationName: `verify_${phase}_candidate`,
             message: restored.left.message,
           });
           integrityFailure = failure;
           return integrityFailureResult(result, failure);
         }),
-      settleDomain: ({ result: runtimeResult, evidence }) =>
+      settlementEntry: ({ result: runtimeResult, evidence }) =>
         Effect.gen(function* () {
           const result = translateRuntimeResult(runtimeResult, input.reviewer);
           const reviewerEvidence = reviewerEvidenceFromAgentSession(evidence);
@@ -140,29 +142,29 @@ export const runAgentReviewer = (
             !result.ok &&
             result.failure._tag === "ReviewerProcessToolingFailed" &&
             (result.failure.operationName === "verify_candidate_head" ||
-              result.failure.operationName === `verify_${input.phase}_candidate`)
+              result.failure.operationName === `verify_${phase}_candidate`)
           ) {
             phaseOutcome = "tooling_failed";
             const failure = integrityFailure ?? result.failure;
-            return input.settleAgentInvocationResult({
-              validationRunId: input.validationRunId,
-              phase: input.phase,
-              producer: input.producer,
+            return changeReviewerSettlement({
+              validationRunId,
+              phase,
+              producer,
               outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(failure),
-                validationRunId: input.validationRunId,
+                validationRunId,
               },
             });
           }
 
           const findings = input.makeFindings(result);
           const artifacts = yield* writeReviewerArtifacts({
-            validationRunId: input.validationRunId,
-            phase: input.phase,
-            producer: input.producer,
+            validationRunId,
+            phase,
+            producer,
             result,
             artifactsRoot: input.artifactsRoot,
             ...(input.artifactMaxBytes === undefined
@@ -175,16 +177,16 @@ export const runAgentReviewer = (
           );
           if (!artifacts.ok) {
             phaseOutcome = "tooling_failed";
-            return input.settleAgentInvocationResult({
-              validationRunId: input.validationRunId,
-              phase: input.phase,
-              producer: input.producer,
+            return changeReviewerSettlement({
+              validationRunId,
+              phase,
+              producer,
               outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
                 ...validationToolingFailureRecord(artifacts.failure),
-                validationRunId: input.validationRunId,
+                validationRunId,
               },
             });
           }
@@ -196,10 +198,10 @@ export const runAgentReviewer = (
               : findings.length > 0
                 ? "blocked"
                 : "passed";
-          return input.settleAgentInvocationResult({
-            validationRunId: input.validationRunId,
-            phase: input.phase,
-            producer: input.producer,
+          return changeReviewerSettlement({
+            validationRunId,
+            phase,
+            producer,
             outcome: result.ok && findings.length === 0 ? "passed" : "failed",
             findings,
             artifactRecords: artifacts.artifactRecords,
@@ -208,7 +210,7 @@ export const runAgentReviewer = (
               : {
                   toolingFailure: {
                     ...validationToolingFailureRecord(toolingFailure),
-                    validationRunId: input.validationRunId,
+                    validationRunId,
                   },
                 }),
           });
@@ -220,6 +222,13 @@ export const runAgentReviewer = (
     return { outcome: phaseOutcome };
   });
 };
+
+const changeReviewerSettlement = (
+  input: ChangeValidationAgentInvocationSettlement,
+): Extract<ChangeValidationAgentSessionEntry, { readonly kind: "change_reviewer_settlement" }> => ({
+  kind: "change_reviewer_settlement",
+  ...input,
+});
 
 const integrityFailureResult = <Output>(
   result: ReviewerAgentResult<Output>,

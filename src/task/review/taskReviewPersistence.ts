@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import type { AgentSessionSqlLink } from "../../agent/agentSession/agentSession.js";
+import type { AgentSessionJournal } from "../../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { TaskState } from "../lifecycle.js";
@@ -112,6 +112,24 @@ export type CompleteTaskReviewResult =
   | CompleteTaskReviewSuccess
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" };
 
+export type TaskReviewAgentSessionEntry =
+  | {
+      readonly kind: "task_review_dispatch";
+      readonly taskId: string;
+      readonly reviewId: number;
+      readonly admittedPolicy: TaskReviewPolicySnapshot;
+    }
+  | {
+      readonly kind: "task_review_settlement";
+      readonly reviewId: number;
+      readonly findings: readonly TaskReviewFinding[];
+      readonly toolingFailure?: TaskReviewToolingFailure;
+      readonly now: string;
+      readonly complete: boolean;
+    }
+  | { readonly kind: "simplification_advice_dispatch"; readonly reviewId: number }
+  | ({ readonly kind: "simplification_advice_settlement" } & SettleSimplificationAdviceInput);
+
 export type TaskReviewPersistence = {
   readonly getCompletedSimplificationAdvice: (
     taskId: PublicTaskId,
@@ -120,12 +138,7 @@ export type TaskReviewPersistence = {
     reviewId: number,
     failure: TaskReviewToolingFailure,
   ) => Effect.Effect<void, RepositoryStorageError>;
-  readonly linkSimplificationAdviceInvocation: (input: {
-    readonly reviewId: number;
-  }) => AgentSessionSqlLink;
-  readonly settleSimplificationAdvice: (
-    input: SettleSimplificationAdviceInput,
-  ) => AgentSessionSqlLink;
+  readonly agentSessionJournal: AgentSessionJournal<TaskReviewAgentSessionEntry>;
   readonly reuseJudgment: (
     taskId: PublicTaskId,
     now: string,
@@ -165,18 +178,6 @@ export type TaskReviewPersistence = {
   readonly getReviewerConfiguration: (
     taskId: string,
   ) => Effect.Effect<TaskReviewPolicySnapshot | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: (input: {
-    readonly taskId: string;
-    readonly reviewId: number;
-    readonly admittedPolicy: TaskReviewPolicySnapshot;
-  }) => AgentSessionSqlLink;
-  readonly settleAgentReview: (input: {
-    readonly reviewId: number;
-    readonly findings: readonly TaskReviewFinding[];
-    readonly toolingFailure?: TaskReviewToolingFailure;
-    readonly now: string;
-    readonly complete: boolean;
-  }) => AgentSessionSqlLink;
   readonly recordActiveFailure: (
     reviewId: number,
     failure: TaskReviewToolingFailure,

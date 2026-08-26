@@ -17,7 +17,10 @@ import type {
 } from "../../candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../../changeId.js";
 import { latestResolvedBlockerId } from "../../implementationBlocker.js";
-import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
+import type {
+  CandidateValidationExecutionPort,
+  ChangeValidationAgentInvocationSettlement,
+} from "../../validation/changeValidationPorts.js";
 import { deriveAcceptanceContext } from "../../validationRun/acceptanceContextSnapshot.js";
 import {
   isValidationRunEligibleForCurrentChangeAuthority,
@@ -52,6 +55,58 @@ import {
   type StoredValidationRunRow,
   validationRunReadColumns,
 } from "./sqliteValidationRunStorage.js";
+
+export const settleCandidateValidationAgentInvocation = (
+  sql: SqlClient.SqlClient,
+  invocationId: number,
+  input: ChangeValidationAgentInvocationSettlement,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const operationName = "settle Candidate validation Agent Invocation";
+    const links = yield* sql<{
+      readonly invocationId: number;
+      readonly settledAt: string | null;
+      readonly settlementKind: string | null;
+    }>`
+      SELECT link.agent_invocation_id AS invocationId,
+        invocation.settled_at AS settledAt,
+        invocation.settlement_kind AS settlementKind
+      FROM validation_phase_agent_invocations AS link
+      JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+      WHERE link.validation_run_id = ${input.validationRunId}
+        AND link.phase = ${input.phase}
+        AND link.producer = ${input.producer}
+      ORDER BY link.agent_invocation_id
+    `;
+    const terminal = links.at(-1);
+    if (terminal?.invocationId !== invocationId) {
+      return yield* invalidData(
+        operationName,
+        "Only the terminal linked Invocation can settle the Validation position",
+      );
+    }
+    if (links.some((link) => link.settledAt === null || link.settlementKind === null)) {
+      return yield* invalidData(
+        operationName,
+        "Every linked reviewer Invocation must be settled before the final Result",
+      );
+    }
+    const hasFindings = input.findings.length > 0;
+    if ((input.outcome === "passed" || hasFindings) && terminal.settlementKind !== "returned") {
+      return yield* invalidData(
+        operationName,
+        "Reviewer Findings and passing Results require a returned terminal Invocation",
+      );
+    }
+    if (
+      (input.outcome === "passed" && (hasFindings || input.toolingFailure !== undefined)) ||
+      (input.outcome === "failed" && hasFindings === (input.toolingFailure !== undefined))
+    ) {
+      return yield* invalidData(operationName, "Reviewer Result evidence is incoherent");
+    }
+    yield* recordPhaseResult(sql, input, idPrefix, operationName);
+  });
 
 export const openSqliteCandidateValidationExecutionPort = () =>
   Effect.map(
@@ -137,70 +192,6 @@ export const openSqliteCandidateValidationExecutionPort = () =>
             );
           }),
         ),
-      settleAgentInvocationResult: (input) => (sql, invocationId) =>
-        Effect.gen(function* () {
-          const operationName = "settle Candidate validation Agent Invocation";
-          const links = yield* sql<{
-            readonly invocationId: number;
-            readonly settledAt: string | null;
-            readonly settlementKind: string | null;
-          }>`
-            SELECT link.agent_invocation_id AS invocationId,
-              invocation.settled_at AS settledAt,
-              invocation.settlement_kind AS settlementKind
-            FROM validation_phase_agent_invocations AS link
-            JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
-            WHERE link.validation_run_id = ${input.validationRunId}
-              AND link.phase = ${input.phase}
-              AND link.producer = ${input.producer}
-            ORDER BY link.agent_invocation_id
-          `;
-          const terminal = links.at(-1);
-          if (terminal?.invocationId !== invocationId) {
-            return yield* invalidData(
-              operationName,
-              "Only the terminal linked Invocation can settle the Validation position",
-            );
-          }
-          if (links.some((link) => link.settledAt === null || link.settlementKind === null)) {
-            return yield* invalidData(
-              operationName,
-              "Every linked reviewer Invocation must be settled before the final Result",
-            );
-          }
-          const hasFindings = input.findings.length > 0;
-          if (
-            (input.outcome === "passed" || hasFindings) &&
-            terminal.settlementKind !== "returned"
-          ) {
-            return yield* invalidData(
-              operationName,
-              "Reviewer Findings and passing Results require a returned terminal Invocation",
-            );
-          }
-          if (
-            (input.outcome === "passed" && (hasFindings || input.toolingFailure !== undefined)) ||
-            (input.outcome === "failed" && hasFindings === (input.toolingFailure !== undefined))
-          ) {
-            return yield* invalidData(operationName, "Reviewer Result evidence is incoherent");
-          }
-          yield* recordPhaseResult(
-            sql,
-            {
-              validationRunId: input.validationRunId,
-              phase: input.phase,
-              producer: input.producer,
-              outcome: input.outcome,
-              artifactRecords: input.artifactRecords,
-              findings: input.findings,
-              ...(input.toolingFailure === undefined
-                ? {}
-                : { toolingFailure: input.toolingFailure }),
-            },
-            repository.idPrefix,
-            "settle Candidate validation Agent Invocation",
-          );
-        }),
       listPhaseResults: (validationRunId) =>
         repository.transaction("list Validation Phase Results", (sql) =>
           listValidationPhaseResults(sql, validationRunId, repository.idPrefix),

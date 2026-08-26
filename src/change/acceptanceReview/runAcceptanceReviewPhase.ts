@@ -3,8 +3,7 @@ import { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type {
   AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+  AgentSessionJournal,
 } from "../../agent/agentSession/agentSession.js";
 import {
   type ReviewerAgentRuntime,
@@ -39,7 +38,10 @@ import {
 import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
-import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
+import type {
+  CandidateValidationExecutionPort,
+  ChangeValidationAgentSessionEntry,
+} from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
 import {
   type ValidationToolingFailure,
@@ -73,21 +75,11 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly workspaceIdentity: DisposableWorkspaceIdentity;
   readonly restoreWorkspace: RestoreDisposableWorkspace;
   readonly sessionStorageRoot: string;
-  readonly agentPersistence: AgentSessionPersistence;
+  readonly journal: AgentSessionJournal<ChangeValidationAgentSessionEntry>;
   readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: (input: {
-    readonly changeId: string;
-    readonly producer: string;
-    readonly validationRunId: number;
-    readonly phase: string;
-    readonly configurationSnapshot: AcceptanceReviewPolicy;
-  }) => AgentSessionSqlLink;
-  readonly settleAgentInvocationResult: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationResult"]
-  >;
   readonly recordAcceptanceResult: CandidateValidationExecutionPort["recordAcceptanceResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
@@ -171,19 +163,17 @@ export const runAcceptanceReviewPhase = (
       const agentSessionId = yield* input.getAgentSession(input.changeId, "acceptance");
       const execution = yield* runAgentReviewer({
         ...(agentSessionId === undefined ? {} : { agentSessionId }),
-        validationRunId: input.validationRunId,
-        phase: validationPhase.acceptanceReview,
-        producer: "acceptance",
         reviewer: "acceptance",
         configuration: agentConfiguration(input.policy.profile),
-        agentPersistence: input.agentPersistence,
-        linkInvocation: input.linkAgentInvocation({
+        journal: input.journal,
+        dispatchEntry: {
+          kind: "change_reviewer_dispatch" as const,
           changeId: input.changeId,
           producer: "acceptance",
           validationRunId: input.validationRunId,
           phase: validationPhase.acceptanceReview,
           configurationSnapshot: input.policy,
-        }),
+        },
         reviewerRuntime: input.runtime,
         reviewerExecutor: input.reviewerExecutor,
         decodeOutput: (output, reviewCall) =>
@@ -240,7 +230,6 @@ export const runAcceptanceReviewPhase = (
                 ...finding,
               }))
             : [],
-        settleAgentInvocationResult: input.settleAgentInvocationResult,
       });
       return execution;
     }),

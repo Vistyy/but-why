@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { beginAgentInvocation } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import {
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
@@ -212,7 +212,6 @@ it.scoped("decodes persisted Task Simplification Advice Invocation evidence befo
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
@@ -225,23 +224,25 @@ it.scoped("decodes persisted Task Simplification Advice Invocation evidence befo
       });
       if (!admitted.ok) throw new Error(admitted.code);
 
-      const invocation = yield* agents.beginInvocation({
+      const invocation = yield* reviews.agentSessionJournal.beginInvocation({
         configuration: { harness: "pi", model: "test-model" },
         createdAt: now,
-        linkInvocation: reviews.linkSimplificationAdviceInvocation({
+        entry: {
+          kind: "simplification_advice_dispatch",
           reviewId: admitted.review.id,
-        }),
+        },
       });
       if (!invocation.ok) throw new Error(invocation.code);
-      yield* agents.settleInvocation({
+      yield* reviews.agentSessionJournal.settleInvocation({
         invocationId: invocation.dispatch.invocation.id,
         continuationId: invocation.dispatch.continuation.id,
         settlement: { settledAt: later, kind: "returned" },
-        settleDomain: reviews.settleSimplificationAdvice({
+        entry: {
+          kind: "simplification_advice_settlement",
           reviewId: admitted.review.id,
           complete: true,
           advice: simplificationAdvice,
-        }),
+        },
       });
 
       const decoded = yield* reviews.getById(admitted.review.id);
@@ -311,7 +312,6 @@ it.scoped("rejects Task reviewer policy changes after the first Invocation", () 
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
 
       const first = yield* reviews.admit({
@@ -322,20 +322,23 @@ it.scoped("rejects Task reviewer policy changes after the first Invocation", () 
         now,
       });
       if (!first.ok) throw new Error(first.code);
-      const failedInvocation = yield* agents.beginInvocation({
+      const failedInvocation = yield* reviews.agentSessionJournal.beginInvocation({
         configuration: { harness: "pi", model: "test-model" },
         createdAt: now,
-        linkInvocation: reviews.linkAgentInvocation({
+        entry: {
+          kind: "task_review_dispatch",
           taskId: publicTaskId("BY-1"),
           reviewId: first.review.id,
           admittedPolicy: first.policy,
-        }),
+        },
       });
       if (!failedInvocation.ok) throw new Error(failedInvocation.code);
-      yield* agents.settleInvocation({
+      yield* reviews.agentSessionJournal.settleInvocation({
         invocationId: failedInvocation.dispatch.invocation.id,
         continuationId: failedInvocation.dispatch.continuation.id,
         settlement: { settledAt: later, kind: "launch_failed" },
+        entry: undefined,
+        retry: true,
       });
       yield* reviews.recordCleanup(first.review.id, "removed", later);
       yield* reviews.complete({
@@ -381,7 +384,6 @@ it.scoped("attributes frozen Task Reviewer configuration to every matching invok
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       const taskId = publicTaskId("BY-1");
       const configuration = { harness: "pi" as const, model: "test-model" };
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
@@ -394,20 +396,23 @@ it.scoped("attributes frozen Task Reviewer configuration to every matching invok
         now,
       });
       if (!older.ok) throw new Error(older.code);
-      const olderInvocation = yield* agents.beginInvocation({
+      const olderInvocation = yield* reviews.agentSessionJournal.beginInvocation({
         configuration,
         createdAt: now,
-        linkInvocation: reviews.linkAgentInvocation({
+        entry: {
+          kind: "task_review_dispatch",
           taskId,
           reviewId: older.review.id,
           admittedPolicy: older.policy,
-        }),
+        },
       });
       if (!olderInvocation.ok) throw new Error(olderInvocation.code);
-      yield* agents.settleInvocation({
+      yield* reviews.agentSessionJournal.settleInvocation({
         invocationId: olderInvocation.dispatch.invocation.id,
         continuationId: olderInvocation.dispatch.continuation.id,
         settlement: { settledAt: later, kind: "launch_failed" },
+        entry: undefined,
+        retry: true,
       });
       yield* reviews.recordCleanup(older.review.id, "removed", later);
       yield* reviews.complete({
@@ -441,15 +446,16 @@ it.scoped("attributes frozen Task Reviewer configuration to every matching invok
         now: later,
       });
       if (!newest.ok) throw new Error(newest.code);
-      const newestInvocation = yield* agents.beginInvocation({
+      const newestInvocation = yield* reviews.agentSessionJournal.beginInvocation({
         agentSessionId: olderInvocation.dispatch.agentSessionId,
         configuration,
         createdAt: later,
-        linkInvocation: reviews.linkAgentInvocation({
+        entry: {
+          kind: "task_review_dispatch",
           taskId,
           reviewId: newest.review.id,
           admittedPolicy: newest.policy,
-        }),
+        },
       });
       if (!newestInvocation.ok) throw new Error(newestInvocation.code);
 
@@ -485,7 +491,6 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
@@ -507,14 +512,15 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
         harness: "pi" as const,
         model: "test-model",
       };
-      const started = yield* agents.beginInvocation({
+      const started = yield* reviews.agentSessionJournal.beginInvocation({
         configuration,
         createdAt: now,
-        linkInvocation: reviews.linkAgentInvocation({
+        entry: {
+          kind: "task_review_dispatch",
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
           admittedPolicy: admitted.policy,
-        }),
+        },
       });
       if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
 
@@ -541,7 +547,7 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
       expect(existsSync(workspacePath)).toBe(false);
       expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
 
-      const history = yield* agents.readInvocationHistory(started.dispatch.agentSessionId);
+      const history = (yield* reviews.getById(admitted.review.id))?.agentInvocations ?? [];
       expect(history).toMatchObject([
         {
           settlementKind: "return_unknown",
@@ -550,12 +556,16 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
           continuation: { unusableReason: expect.stringContaining("Reviewer process stopped") },
         },
       ]);
-      const replacement = yield* agents.beginInvocation({
-        agentSessionId: started.dispatch.agentSessionId,
-        configuration,
-        createdAt: later,
-        linkInvocation: () => Effect.void,
-      });
+      const repository = yield* RepositorySql;
+      const replacement = yield* repository.transactionImmediate(
+        "dispatch replacement Agent Invocation",
+        (sql) =>
+          beginAgentInvocation(sql, {
+            agentSessionId: started.dispatch.agentSessionId,
+            configuration,
+            createdAt: later,
+          }),
+      );
       expect(replacement).toMatchObject({ ok: true, dispatch: { resumed: false } });
     }),
   );
@@ -566,7 +576,6 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
@@ -605,24 +614,25 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
       );
       yield* reviews.recordCleanup(admitted.review.id, "removed", now);
       const configuration = { harness: "pi" as const, model: "test-model" };
-      const invocation = yield* agents.beginInvocation({
+      const invocation = yield* reviews.agentSessionJournal.beginInvocation({
         configuration,
         createdAt: now,
-        linkInvocation: reviews.linkAgentInvocation({
+        entry: {
+          kind: "task_review_dispatch",
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
           admittedPolicy: admitted.policy,
-        }),
+        },
       });
       if (!invocation.ok) throw new Error(invocation.code);
-      const agentSessionId = invocation.dispatch.agentSessionId;
       expect(
-        yield* agents
+        yield* reviews.agentSessionJournal
           .settleInvocation({
             invocationId: invocation.dispatch.invocation.id,
             continuationId: invocation.dispatch.continuation.id,
             settlement: { settledAt: later, kind: "returned" },
-            settleDomain: reviews.settleAgentReview({
+            entry: {
+              kind: "task_review_settlement",
               reviewId: admitted.review.id,
               findings: [
                 {
@@ -634,11 +644,11 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
               ],
               now: later,
               complete: true,
-            }),
+            },
           })
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-      expect(yield* agents.readInvocationHistory(agentSessionId)).toMatchObject([
+      expect((yield* reviews.getById(admitted.review.id))?.agentInvocations ?? []).toMatchObject([
         { settledAt: null, settlementKind: null },
       ]);
       expect(
@@ -661,7 +671,6 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
 
       const first = yield* reviews.admit({
@@ -687,18 +696,19 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       const configuration = { harness: "pi" as const, model: "test-model" };
-      const blockedInvocation = yield* agents.beginInvocation({
+      const blockedInvocation = yield* reviews.agentSessionJournal.beginInvocation({
         configuration,
         createdAt: now,
-        linkInvocation: reviews.linkAgentInvocation({
+        entry: {
+          kind: "task_review_dispatch",
           taskId: publicTaskId("BY-1"),
           reviewId: first.review.id,
           admittedPolicy: first.policy,
-        }),
+        },
       });
       if (!blockedInvocation.ok) throw new Error(blockedInvocation.code);
       expect(
-        yield* agents
+        yield* reviews.agentSessionJournal
           .settleInvocation({
             invocationId: blockedInvocation.dispatch.invocation.id,
             continuationId: blockedInvocation.dispatch.continuation.id,
@@ -707,25 +717,27 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
               kind: "launch_failed",
               unusableReason: "The Agent did not return Findings.",
             },
-            settleDomain: reviews.settleAgentReview({
+            entry: {
+              kind: "task_review_settlement",
               reviewId: first.review.id,
               findings: blockedFindings,
               now: later,
               complete: true,
-            }),
+            },
           })
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-      yield* agents.settleInvocation({
+      yield* reviews.agentSessionJournal.settleInvocation({
         invocationId: blockedInvocation.dispatch.invocation.id,
         continuationId: blockedInvocation.dispatch.continuation.id,
         settlement: { settledAt: later, kind: "returned" },
-        settleDomain: reviews.settleAgentReview({
+        entry: {
+          kind: "task_review_settlement",
           reviewId: first.review.id,
           findings: blockedFindings,
           now: later,
           complete: true,
-        }),
+        },
       });
       const blocked = yield* reviews.complete({
         reviewId: first.review.id,
@@ -744,27 +756,29 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
       if (!second.ok) throw new Error(`Task Review admission failed: ${second.code}`);
       expect(second.review.id).toBe(2);
       yield* reviews.recordCleanup(second.review.id, "removed", now);
-      const passedInvocation = yield* agents.beginInvocation({
+      const passedInvocation = yield* reviews.agentSessionJournal.beginInvocation({
         agentSessionId: blockedInvocation.dispatch.agentSessionId,
         configuration,
         createdAt: now,
-        linkInvocation: reviews.linkAgentInvocation({
+        entry: {
+          kind: "task_review_dispatch",
           taskId: publicTaskId("BY-1"),
           reviewId: second.review.id,
           admittedPolicy: second.policy,
-        }),
+        },
       });
       if (!passedInvocation.ok) throw new Error(passedInvocation.code);
-      yield* agents.settleInvocation({
+      yield* reviews.agentSessionJournal.settleInvocation({
         invocationId: passedInvocation.dispatch.invocation.id,
         continuationId: passedInvocation.dispatch.continuation.id,
         settlement: { settledAt: later, kind: "returned" },
-        settleDomain: reviews.settleAgentReview({
+        entry: {
+          kind: "task_review_settlement",
           reviewId: second.review.id,
           findings: [],
           now: later,
           complete: true,
-        }),
+        },
       });
       const passed = yield* reviews.complete({
         reviewId: second.review.id,

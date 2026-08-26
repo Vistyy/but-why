@@ -1,6 +1,4 @@
 import { Effect } from "effect";
-import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
-import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import { openSqliteActiveValidationRunPort } from "../../src/change/adapters/sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../src/change/adapters/sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../src/change/adapters/sqlite/sqliteChangeAgentSessionPersistence.js";
@@ -18,7 +16,6 @@ import type {
 
 export const openSqliteChangeValidationTestDependencies = () =>
   Effect.all({
-    agentPersistence: openSqliteAgentSessionPersistence(),
     agentSessions: openSqliteChangeAgentSessionPort(),
     active: openSqliteActiveValidationRunPort(),
     execution: openSqliteCandidateValidationExecutionPort(),
@@ -28,7 +25,6 @@ export const openSqliteChangeValidationTestDependencies = () =>
   });
 
 export type ChangeValidationTestDependencies = {
-  readonly agentPersistence: AgentSessionPersistence;
   readonly agentSessions: ChangeAgentSessionPort;
   readonly active: ActiveValidationRunPort;
   readonly execution: CandidateValidationExecutionPort;

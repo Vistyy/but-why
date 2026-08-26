@@ -15,8 +15,7 @@ import type {
   AgentInvocationRecord,
   AgentInvocationSettlementKind,
   AgentSessionConfiguration,
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
+  AgentSessionJournal,
 } from "./agentSession.js";
 
 class TranscriptDiscoveryFailed extends Data.TaggedError("TranscriptDiscoveryFailed")<{
@@ -29,11 +28,16 @@ export type AgentExecutionEvidence = {
   readonly continuationId: number;
 };
 
-export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirements = never> = {
+export type ExecuteAgentSessionInput<
+  Output,
+  Entry,
+  DomainError = never,
+  DomainRequirements = never,
+> = {
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
-  readonly agentPersistence: AgentSessionPersistence;
-  readonly linkInvocation: AgentSessionSqlLink;
+  readonly journal: AgentSessionJournal<Entry>;
+  readonly dispatchEntry: Extract<Entry, { readonly kind: `${string}_dispatch` }>;
   readonly reviewerRuntime: ReviewerAgentRuntime<Output>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly decodeOutput: (
@@ -56,12 +60,16 @@ export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirem
     readonly result: ReviewerAgentResult<Output>;
     readonly invocationNumber: number;
   }) => Effect.Effect<ReviewerAgentResult<Output>, DomainError, DomainRequirements>;
-  readonly settleDomain?: (input: {
+  readonly settlementEntry: (input: {
     readonly invocationId: number;
     readonly result: ReviewerAgentResult<Output>;
     readonly invocationNumber: number;
     readonly evidence: AgentExecutionEvidence;
-  }) => Effect.Effect<AgentSessionSqlLink | undefined, DomainError, DomainRequirements>;
+  }) => Effect.Effect<
+    Extract<Entry, { readonly kind: `${string}_settlement` }>,
+    DomainError,
+    DomainRequirements
+  >;
 };
 
 export type ExecuteAgentSessionResult<Output> = {
@@ -69,8 +77,8 @@ export type ExecuteAgentSessionResult<Output> = {
   readonly evidence: AgentExecutionEvidence;
 };
 
-export const executeAgentSession = <Output, DomainError = never, DomainRequirements = never>(
-  input: ExecuteAgentSessionInput<Output, DomainError, DomainRequirements>,
+export const executeAgentSession = <Output, Entry, DomainError = never, DomainRequirements = never>(
+  input: ExecuteAgentSessionInput<Output, Entry, DomainError, DomainRequirements>,
 ): Effect.Effect<
   ExecuteAgentSessionResult<Output>,
   RepositoryStorageError | DomainError,
@@ -86,11 +94,11 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
     let invocationNumber = 1;
 
     while (true) {
-      const dispatch = yield* input.agentPersistence.beginInvocation({
+      const dispatch = yield* input.journal.beginInvocation({
         ...(sessionId === undefined ? {} : { agentSessionId: sessionId }),
         configuration: input.configuration,
         createdAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-        linkInvocation: input.linkInvocation,
+        entry: input.dispatchEntry,
       });
       if (!dispatch.ok) {
         return yield* new RepositoryPersistedDataInvalid({
@@ -215,29 +223,32 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         continuationId,
         invocations: [...invocationEvidence, invocationEvidenceRecord],
       };
-      const settleDomain =
-        !shouldRetry && input.settleDomain !== undefined
-          ? yield* input.settleDomain({
-              invocationId: dispatch.dispatch.invocation.id,
-              result: settledResult,
-              invocationNumber,
-              evidence,
-            })
-          : undefined;
-      yield* Effect.uninterruptible(
-        settleDomain === undefined
-          ? input.agentPersistence.settleInvocation({
-              invocationId: dispatch.dispatch.invocation.id,
-              continuationId,
-              settlement,
-            })
-          : input.agentPersistence.settleInvocation({
-              invocationId: dispatch.dispatch.invocation.id,
-              continuationId,
-              settlement,
-              settleDomain,
-            }),
-      );
+      if (shouldRetry) {
+        yield* Effect.uninterruptible(
+          input.journal.settleInvocation({
+            invocationId: dispatch.dispatch.invocation.id,
+            continuationId,
+            settlement,
+            entry: undefined,
+            retry: true,
+          }),
+        );
+      } else {
+        const entry = yield* input.settlementEntry({
+          invocationId: dispatch.dispatch.invocation.id,
+          result: settledResult,
+          invocationNumber,
+          evidence,
+        });
+        yield* Effect.uninterruptible(
+          input.journal.settleInvocation({
+            invocationId: dispatch.dispatch.invocation.id,
+            continuationId,
+            settlement,
+            entry,
+          }),
+        );
+      }
       invocationEvidence.push(invocationEvidenceRecord);
 
       if (settledResult.ok || !shouldRetry) {
