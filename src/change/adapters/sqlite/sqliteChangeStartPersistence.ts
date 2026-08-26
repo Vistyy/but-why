@@ -2,16 +2,16 @@ import { join } from "node:path";
 
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangePrepareFailure } from "../change/change.js";
-import { changeBranchRefForSlug } from "../change/changeBranch.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { decodeSqliteChangePolicy, encodeSqliteChangePolicy } from "../change/changePolicy.js";
-import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
-import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangePrepareFailure } from "../../change.js";
+import { changeBranchRefForSlug } from "../../changeBranch.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import { decodeSqliteChangePolicy, encodeSqliteChangePolicy } from "../../changePolicy.js";
+import type { ChangeStartPersistence } from "../../changeStartPersistence.js";
+import type { ChangeStartRecord, CreateChangeStartInput } from "../../changeStartStore.js";
+import type { AcceptanceContextSnapshotV1 } from "../../validationRun/acceptanceContextSnapshot.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
   encodeSqliteAcceptanceContextSnapshot,

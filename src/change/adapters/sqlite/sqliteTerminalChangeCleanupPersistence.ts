@@ -1,12 +1,12 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangeCleanup } from "../change/change.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { TerminalChangeCleanupPort } from "../change/changePorts.js";
-import type { RecordChangeCleanupInput } from "../change/changeStore.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangeCleanup } from "../../change.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import type { TerminalChangeCleanupPort } from "../../changePorts.js";
+import type { RecordChangeCleanupInput } from "../../changeStore.js";
 import { decodeStoredNullableString } from "./sqliteChangeValueDecoders.js";
 
 export const openSqliteTerminalChangeCleanupPort = () =>

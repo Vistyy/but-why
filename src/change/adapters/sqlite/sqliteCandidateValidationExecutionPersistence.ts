@@ -1,28 +1,28 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   assertValidationArtifactRecord,
   assertValidationFindingEvidence,
   assertValidationToolingFailureEvidence,
   decodeValidationFindingEvidence,
-} from "../change/candidateValidation/candidateValidationEvidence.js";
+} from "../../candidateValidation/candidateValidationEvidence.js";
 import type {
   CandidateValidationFinding,
   RecordCandidateValidationPhaseResultInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
-} from "../change/candidateValidation/candidateValidationRunStore.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { latestResolvedBlockerId } from "../change/implementationBlocker.js";
-import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
-import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
+} from "../../candidateValidation/candidateValidationRunStore.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import { latestResolvedBlockerId } from "../../implementationBlocker.js";
+import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
+import { deriveAcceptanceContext } from "../../validationRun/acceptanceContextSnapshot.js";
 import {
   isValidationRunEligibleForCurrentChangeAuthority,
   validationPhase,
-} from "../change/validationRun/validationRun.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+} from "../../validationRun/validationRun.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import {
   compareCandidatesAscending,

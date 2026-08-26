@@ -1,12 +1,11 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangeRecord } from "../change/change.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
-import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangeRecord } from "../../change.js";
+import { internalChangeId } from "../../changeId.js";
+import type { ChangeSubmissionPort, SubmissionChange } from "../../changePorts.js";
+import { deriveAcceptanceContext } from "../../validationRun/acceptanceContextSnapshot.js";
 import {
   decodeImplementationDecisions,
   readImplementationBlockerHistory,
@@ -18,13 +17,14 @@ import {
   type StoredChangeRow,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";
 import { readCompletedCandidatePublicationEvidence } from "./sqlitePassingValidationEvidence.js";
+
+type ChangeSubmissionOwnerPort = Omit<ChangeSubmissionPort, "completeMergedChange">;
 
 export const openSqliteChangeSubmissionPort = () =>
   Effect.map(
     RepositorySql,
-    (repository): ChangeSubmissionPort => ({
+    (repository): ChangeSubmissionOwnerPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for submission", (sql) =>
           Effect.map(readFullChange(sql, changeId, repository.idPrefix), (change) =>
@@ -44,19 +44,6 @@ export const openSqliteChangeSubmissionPort = () =>
             validationRunId,
             repository.idPrefix,
           ),
-        ),
-      completeMergedChange: (input) =>
-        repository.transactionImmediate("complete merged Change", (sql) =>
-          Effect.gen(function* () {
-            const result = yield* completeChangeOnly(sql, input, repository.idPrefix);
-            if (!result.ok) return result;
-            const changeId = yield* readCommittedCompletionId(
-              sql,
-              input.changeId,
-              repository.idPrefix,
-            );
-            return { ...result, changeId };
-          }),
         ),
     }),
   );
@@ -118,21 +105,3 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string, idPrefix: str
         decodeImplementationDecisions(rows, changeId, idPrefix),
       ),
   );
-
-const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
-  Effect.gen(function* () {
-    const operationName = "complete merged Change";
-    const rows = yield* sql<{ readonly id: number }>`
-      SELECT id FROM changes WHERE id = ${internalChangeId(changeId, idPrefix)}
-    `;
-    const row = rows[0];
-    if (row === undefined) return yield* invalidData(operationName, "Change disappeared");
-    return yield* decodePersisted(operationName, () => {
-      const committedId = publicChangeId(idPrefix, row.id);
-      if (committedId !== changeId) throw new Error("Change identity does not match lookup");
-      return committedId;
-    });
-  });
-
-const invalidData = (operationName: string, message: string) =>
-  Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

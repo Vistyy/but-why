@@ -1,13 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type {
-  ChangePublicationEvidence,
-  CurrentChangeEvidenceQuery,
-} from "../change/changePorts.js";
-import { latestResolvedBlockerId } from "../change/implementationBlocker.js";
-import { isValidationRunEligibleForCurrentChangeAuthority } from "../change/validationRun/validationRun.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import type { ChangePublicationEvidence, CurrentChangeEvidenceQuery } from "../../changePorts.js";
+import { latestResolvedBlockerId } from "../../implementationBlocker.js";
+import { isValidationRunEligibleForCurrentChangeAuthority } from "../../validationRun/validationRun.js";
 import {
   candidateReadColumns,
   decodeCandidate,

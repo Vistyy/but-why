@@ -1,21 +1,21 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangePublication, ChangeRecord } from "../change/change.js";
-import { internalChangeId } from "../change/changeId.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangePublication, ChangeRecord } from "../../change.js";
+import { internalChangeId } from "../../changeId.js";
 import type {
   CandidatePublicationChange,
   CandidatePublicationPort,
   PendingCandidatePublicationChange,
   PublishedCandidatePublicationChange,
-} from "../change/changePorts.js";
+} from "../../changePorts.js";
 import type {
   BeginChangePublicationInput,
   RecordPublishedPullRequestInput,
   ReplacePendingChangePublicationInput,
-} from "../change/changeStore.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+} from "../../changeStore.js";
 import {
   decodeImplementationDecisions,
   type StoredImplementationDecisionRow,

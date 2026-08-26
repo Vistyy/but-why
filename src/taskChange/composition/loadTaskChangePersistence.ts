@@ -1,3 +1,4 @@
+import { taskChangeCompletionChangeOperations } from "../../change/composition/loadChangePersistence.js";
 import {
   cancelTaskState,
   completeTask,
@@ -29,6 +30,7 @@ export const taskChangeTaskMutationOperations: TaskChangeTaskMutationOperations 
 };
 
 export const taskChangeCompletionOperations: TaskChangeCompletionOperations = {
+  ...taskChangeCompletionChangeOperations,
   completeTask,
   getTaskById,
 };

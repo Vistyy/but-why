@@ -1,11 +1,11 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { ChangePublication } from "../change/change.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { CompleteMergedChangeInput } from "../change/changeStore.js";
-import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { ChangePublication } from "../../change.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import type { CompleteMergedChangeInput } from "../../changeStore.js";
+import type { ObservedMergedChangeEvidence } from "../../ownedPullRequestClassifier.js";
 import {
   decodeChangePublication,
   validateChangePublicationRelationships,

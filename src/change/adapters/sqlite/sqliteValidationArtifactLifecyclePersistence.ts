@@ -1,10 +1,9 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { ValidationArtifactLifecyclePort } from "../change/validation/changeValidationPorts.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
+import type { ValidationArtifactLifecyclePort } from "../../validation/changeValidationPorts.js";
 
 export const openSqliteValidationArtifactLifecyclePort = () =>
   Effect.map(

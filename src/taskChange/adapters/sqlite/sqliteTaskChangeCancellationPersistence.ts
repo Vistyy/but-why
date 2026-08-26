@@ -1,15 +1,11 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
-
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
+import type { ChangeCancellationRecord } from "../../../change/changePorts.js";
 import type { CancelChangeInput } from "../../../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import {
-  cancelChange as cancelChangeOnly,
-  readCancellationChange,
-} from "../../../sqlite/sqliteChangeCancellationPersistence.js";
 import { internalTaskId, publicTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import { canCancelLinkedTask } from "../../taskChange.js";
 import type {
@@ -22,6 +18,27 @@ import {
   type TaskReadOperation,
 } from "./sqliteTaskChangePersistence.js";
 
+export type TaskChangeCancellationChangeOperations = {
+  readonly readCancellationChange: (
+    sql: SqlClient.SqlClient,
+    changeId: string,
+    operationName: string,
+    idPrefix: string,
+  ) => Effect.Effect<
+    ChangeCancellationRecord | undefined,
+    SqlError | RepositoryPersistedDataInvalid
+  >;
+  readonly cancelChange: (
+    sql: SqlClient.SqlClient,
+    input: CancelChangeInput,
+    idPrefix: string,
+  ) => Effect.Effect<
+    | { readonly ok: true; readonly changed: boolean }
+    | { readonly ok: false; readonly code: "change_not_found" | "change_already_completed" },
+    SqlError | RepositoryPersistedDataInvalid
+  >;
+};
+
 export type TaskChangeCancellationOperations = TaskReadOperation & {
   readonly cancelTaskState: (
     sql: SqlClient.SqlClient,
@@ -33,6 +50,7 @@ export type TaskChangeCancellationOperations = TaskReadOperation & {
 };
 
 export const openSqliteTaskChangeCancellationPort = (
+  changeOperations: TaskChangeCancellationChangeOperations,
   taskOperations: TaskChangeCancellationOperations,
   completionOperations: TaskChangeCompletionOperations,
 ) =>
@@ -46,11 +64,12 @@ export const openSqliteTaskChangeCancellationPort = (
             changeId,
             "read Change for cancellation",
             repository.idPrefix,
+            changeOperations,
           ),
         ),
       getChangeByTaskId: (taskId) =>
         repository.transaction("read Change by Task for cancellation", (sql) =>
-          readTaskChangeCancellationByTaskId(sql, taskId, repository.idPrefix),
+          readTaskChangeCancellationByTaskId(sql, taskId, repository.idPrefix, changeOperations),
         ),
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
@@ -66,6 +85,7 @@ export const openSqliteTaskChangeCancellationPort = (
               sql,
               input.changeId,
               repository.idPrefix,
+              changeOperations,
             );
             const task = yield* readTaskForCancellation(
               sql,
@@ -78,7 +98,7 @@ export const openSqliteTaskChangeCancellationPort = (
         ),
       cancelChange: (input) =>
         repository.transactionImmediate("cancel Change", (sql) =>
-          cancelChange(sql, input, repository.idPrefix, taskOperations),
+          cancelChange(sql, input, repository.idPrefix, changeOperations, taskOperations),
         ),
     }),
   );
@@ -87,6 +107,7 @@ const cancelChange = (
   sql: SqlClient.SqlClient,
   input: CancelChangeInput,
   idPrefix: string,
+  changeOperations: TaskChangeCancellationChangeOperations,
   taskOperations: TaskChangeCancellationOperations,
 ) =>
   Effect.gen(function* () {
@@ -95,6 +116,7 @@ const cancelChange = (
       input.changeId,
       "read Change for cancellation",
       idPrefix,
+      changeOperations,
     );
     if (current?.state === "closed") {
       if (current.closeReason !== "cancelled") {
@@ -119,7 +141,7 @@ const cancelChange = (
       }
     }
 
-    const result = yield* cancelChangeOnly(sql, input, idPrefix);
+    const result = yield* changeOperations.cancelChange(sql, input, idPrefix);
     if (!result.ok) return result;
     if (result.changed && link !== undefined) {
       yield* taskOperations.cancelTaskState(
@@ -130,7 +152,12 @@ const cancelChange = (
         idPrefix,
       );
     }
-    const change = yield* requireTaskChangeCancellation(sql, input.changeId, idPrefix);
+    const change = yield* requireTaskChangeCancellation(
+      sql,
+      input.changeId,
+      idPrefix,
+      changeOperations,
+    );
     const task = yield* readTaskForCancellation(sql, change.taskId, idPrefix, taskOperations);
     return { ...result, change, task };
   });
@@ -140,9 +167,15 @@ const readTaskChangeCancellation = (
   changeId: string,
   operationName: string,
   idPrefix: string,
+  changeOperations: TaskChangeCancellationChangeOperations,
 ) =>
   Effect.gen(function* () {
-    const change = yield* readCancellationChange(sql, changeId, operationName, idPrefix);
+    const change = yield* changeOperations.readCancellationChange(
+      sql,
+      changeId,
+      operationName,
+      idPrefix,
+    );
     if (change === undefined) return undefined;
     const link = yield* linkedTask(sql, changeId, idPrefix);
     return {
@@ -155,6 +188,7 @@ const readTaskChangeCancellationByTaskId = (
   sql: SqlClient.SqlClient,
   taskId: string,
   idPrefix: string,
+  changeOperations: TaskChangeCancellationChangeOperations,
 ) =>
   Effect.gen(function* () {
     const link = yield* sql<{ readonly changeId: number }>`
@@ -170,6 +204,7 @@ const readTaskChangeCancellationByTaskId = (
           publicChangeId(idPrefix, changeId),
           "read Change by Task for cancellation",
           idPrefix,
+          changeOperations,
         );
   });
 
@@ -177,9 +212,16 @@ const requireTaskChangeCancellation = (
   sql: SqlClient.SqlClient,
   changeId: string,
   idPrefix: string,
+  changeOperations: TaskChangeCancellationChangeOperations,
 ) =>
   Effect.flatMap(
-    readTaskChangeCancellation(sql, changeId, "read committed cancellation", idPrefix),
+    readTaskChangeCancellation(
+      sql,
+      changeId,
+      "read committed cancellation",
+      idPrefix,
+      changeOperations,
+    ),
     (change) =>
       change === undefined
         ? invalidData("read committed cancellation", "Change disappeared")

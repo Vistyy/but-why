@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import {
   type ValidationInputSnapshot,
   validationInputSnapshotSchema,
-} from "../change/candidateValidation/validationInputSnapshot.js";
+} from "../../candidateValidation/validationInputSnapshot.js";
 
 export const encodeSqliteValidationInputSnapshot = (
   validationInput: ValidationInputSnapshot,

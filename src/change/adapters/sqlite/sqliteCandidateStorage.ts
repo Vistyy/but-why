@@ -1,8 +1,8 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import type { CandidateRecord } from "../change/candidate/candidate.js";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import type { CandidateRecord } from "../../candidate/candidate.js";
+import { internalChangeId, publicChangeId } from "../../changeId.js";
 
 export type StoredCandidateRow = {
   readonly id: number;

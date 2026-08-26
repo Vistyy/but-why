@@ -1,10 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { changeState } from "../change/change.js";
-import { internalChangeId } from "../change/changeId.js";
-import type { ChangeCancellationRecord } from "../change/changePorts.js";
-import type { CancelChangeInput } from "../change/changeStore.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { changeState } from "../../change.js";
+import { internalChangeId } from "../../changeId.js";
+import type { ChangeCancellationRecord } from "../../changePorts.js";
+import type { CancelChangeInput } from "../../changeStore.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { decodeChangeLifecycle, decodeStoredNullableString } from "./sqliteChangeValueDecoders.js";
 import { readChangeLifecycle } from "./sqliteCompleteMergedChangeStorage.js";

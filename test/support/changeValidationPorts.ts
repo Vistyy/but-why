@@ -1,6 +1,12 @@
 import { Effect } from "effect";
 import { openSqliteAgentSessionPersistence } from "../../src/agent/agentSession/adapters/sqlite/sqliteAgentSessionPersistence.js";
 import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
+import { openSqliteActiveValidationRunPort } from "../../src/change/adapters/sqlite/sqliteActiveValidationRunPersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../../src/change/adapters/sqlite/sqliteCandidateValidationExecutionPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../src/change/adapters/sqlite/sqliteChangeAgentSessionPersistence.js";
+import { openSqliteChangeValidationReadPort } from "../../src/change/adapters/sqlite/sqliteChangeValidationReadPersistence.js";
+import { openSqliteValidationArtifactLifecyclePort } from "../../src/change/adapters/sqlite/sqliteValidationArtifactLifecyclePersistence.js";
+import { openSqliteValidationRunAbandonmentPort } from "../../src/change/adapters/sqlite/sqliteValidationRunAbandonmentPersistence.js";
 import type { ChangeAgentSessionPort } from "../../src/change/changePorts.js";
 import type {
   ActiveValidationRunPort,
@@ -9,12 +15,6 @@ import type {
   ValidationArtifactLifecyclePort,
   ValidationRunAbandonmentPort,
 } from "../../src/change/validation/changeValidationPorts.js";
-import { openSqliteActiveValidationRunPort } from "../../src/sqlite/sqliteActiveValidationRunPersistence.js";
-import { openSqliteCandidateValidationExecutionPort } from "../../src/sqlite/sqliteCandidateValidationExecutionPersistence.js";
-import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
-import { openSqliteChangeValidationReadPort } from "../../src/sqlite/sqliteChangeValidationReadPersistence.js";
-import { openSqliteValidationArtifactLifecyclePort } from "../../src/sqlite/sqliteValidationArtifactLifecyclePersistence.js";
-import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteValidationRunAbandonmentPersistence.js";
 
 export const openSqliteChangeValidationTestDependencies = () =>
   Effect.all({

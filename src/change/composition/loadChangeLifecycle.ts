@@ -4,8 +4,6 @@ import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/a
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeReconciliationPersistence.js";
-import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { openSqliteTaskChangeReconciliationCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import { taskChangeCompletionOperations } from "../../taskChange/composition/loadTaskChangePersistence.js";
@@ -18,6 +16,8 @@ import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
 } from "../adapters/changeStartGit.js";
+import { openSqliteChangeReconciliationPort } from "../adapters/sqlite/sqliteChangeReconciliationPersistence.js";
+import { openSqliteChangeStartPersistence } from "../adapters/sqlite/sqliteChangeStartPersistence.js";
 import {
   type ChangeImplementResult,
   type ChangePrepareResult,
@@ -32,6 +32,7 @@ import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
+import { taskChangeTerminalOperations as changeTerminalOperations } from "./loadChangePersistence.js";
 import { resolveChangePolicyAtCommit } from "./resolveChangePolicy.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 
@@ -203,6 +204,7 @@ export const withChangeReconciliation = <A, E, R>(
       reconciliationOwner: openSqliteChangeReconciliationPort(),
       reconciliationCompletion: openSqliteTaskChangeReconciliationCompletion(
         taskChangeCompletionOperations,
+        changeTerminalOperations,
       ),
       cleanupTerminal: composeTerminalCleanup(context),
     }).pipe(

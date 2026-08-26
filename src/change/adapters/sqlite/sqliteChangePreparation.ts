@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { type ChangePrepareFailure, changePrepareFailureSchema } from "../change/change.js";
+import { type ChangePrepareFailure, changePrepareFailureSchema } from "../../change.js";
 
 export const encodeSqliteChangePrepareFailure = (failure: ChangePrepareFailure): string =>
   JSON.stringify(failure);

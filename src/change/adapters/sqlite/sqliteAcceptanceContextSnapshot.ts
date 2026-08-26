@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import {
   type AcceptanceContextSnapshotV1,
   acceptanceContextSnapshotSchema,
-} from "../change/validationRun/acceptanceContextSnapshot.js";
+} from "../../validationRun/acceptanceContextSnapshot.js";
 
 export const encodeSqliteAcceptanceContextSnapshot = (
   snapshot: AcceptanceContextSnapshotV1,

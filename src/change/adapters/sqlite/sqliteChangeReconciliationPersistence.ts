@@ -1,23 +1,23 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { publicChangeId } from "../change/changeId.js";
-import type { ChangeReconciliationPort } from "../change/changePorts.js";
-import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { publicChangeId } from "../../changeId.js";
+import type { ChangeReconciliationPort } from "../../changePorts.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
-import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";
 import {
   decodeTerminalChange,
   readTerminalChange,
-  requireTerminalChange,
   type StoredTerminalChangeRow,
   terminalChangeSelectionColumns,
 } from "./sqliteTerminalChangeStorage.js";
 
+type ChangeReconciliationOwnerPort = Omit<ChangeReconciliationPort, "completeMergedChange">;
+
 export const openSqliteChangeReconciliationPort = () =>
   Effect.map(
     RepositorySql,
-    (repository): ChangeReconciliationPort => ({
+    (repository): ChangeReconciliationOwnerPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for reconciliation", (sql) =>
           readTerminalChange(sql, changeId, "read Change for reconciliation", repository.idPrefix),
@@ -25,20 +25,6 @@ export const openSqliteChangeReconciliationPort = () =>
       listChangesForReconciliation: (commonDirectory) =>
         repository.transaction("list Changes for reconciliation", (sql) =>
           listReconciliationChanges(sql, commonDirectory, repository.idPrefix),
-        ),
-      completeMergedChange: (input) =>
-        repository.transactionImmediate("complete merged Change", (sql) =>
-          Effect.gen(function* () {
-            const result = yield* completeChangeOnly(sql, input, repository.idPrefix);
-            if (!result.ok) return result;
-            const change = yield* requireTerminalChange(
-              sql,
-              input.changeId,
-              "complete merged Change",
-              repository.idPrefix,
-            );
-            return { ...result, change };
-          }),
         ),
     }),
   );
