@@ -20,13 +20,13 @@ import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-export const byExecutable = "by";
+const byExecutable = "by";
 const inProcessExecutablePath = join(repoRoot, "dist/main.js");
 
 // Keep CLI process sentinels bounded without changing Vitest's global timeout.
 const cliProcessTimeoutMs = 4_000;
 
-export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
+const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
   const { HOME: isolatedHome, ...controlledEnvironment } = environment;
   return isolatedHome === undefined
     ? { env: controlledEnvironment }
