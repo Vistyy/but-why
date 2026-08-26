@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-Status: Active investigation authorized by the Operator.
+Status: Investigation complete and migration Tasks recorded as New and unapproved.
 
 This is a working planning artifact for the investigation into reducing But Why's existing implementation complexity before further feature work.
 It records established goals, evidence, accepted architecture decisions, investigation coverage, and remaining Task-shaping work.
@@ -246,10 +246,11 @@ It would retain the distinct external-effect workflows and recovery state machin
 
 A bounded disposable prototype established that owner-specific semantic Agent Session journals can replace generic raw-SQL callbacks without coupling Agent Session to Task or Change.
 The prototype made each owner SQLite Adapter compose shared Agent Session transaction mechanics with its own linkage and settlement writes, while workflows supplied plain semantic journal entries rather than `SqlClient`, Effects, callbacks, or registered transaction participants.
-Nine real-SQLite integration cases established atomic Task Review dispatch and settlement, Simplification Advice settlement, Change reviewer dispatch and Specialist settlement, rollback for invalid owner entries and relationships, rejection of a second unsettled Invocation without duplicate owner rows, and interrupted execution settlement as `return_unknown` with the owner tooling failure in the same journal.
+Eight behavior-relevant real-SQLite integration cases established atomic Task Review dispatch and settlement, Simplification Advice settlement, Change reviewer dispatch and Specialist settlement, rollback for invalid owner entries and relationships, and rejection of a second unsettled Invocation without duplicate owner rows.
 Task Review, Simplification Advice, Acceptance Review, and Specialist Review compiled through the same `AgentSessionJournal<Entry>` contract, while Agent Session imported neither Task nor Change.
-The interruption case exercised `executeAgentSession` with a fake interrupted runtime rather than OS process termination or transcript discovery, and the concurrency case used sequential immediate transactions rather than simultaneous connections.
-Those are retained behavior-verification obligations, not evidence that a second journal contract is needed.
+A ninth case showed that the journal shape could carry settlement after a directly interrupted fake runtime, but cancelled Tasks `BY-58` and `BY-72` establish that automatic graceful-interruption settlement is not worth supporting.
+The migrations must not add that behavior.
+The concurrency case used sequential immediate transactions rather than simultaneous connections, so retained concurrency behavior still requires verification at its supported boundary.
 The focused implementation changed 19 files with 457 insertions and 472 deletions, so its value is removal of a leaky public concept and clearer transaction ownership rather than demonstrated line-count reduction.
 The comparison no longer has an unresolved persisted-state reconstruction or Agent Session journal feasibility contract.
 
@@ -261,40 +262,35 @@ The investigation has not accepted a generic repository-wide decoder, codec, rep
 The investigation has not accepted moving external execution into persistence or moving atomic persisted invariants into callers.
 The investigation has not accepted Task Review as sufficient evidence for a repository-wide redesign.
 
-## Recommended migration decomposition
+## Recorded migration Tasks
 
-The implementation should be authorized as independently assessable vertical migrations rather than one repository-wide rewrite.
-Each migration removes its replaced supported path in the same Change and preserves real-SQLite evidence for its distinct transaction and persisted-state contracts.
+The Operator authorized these independently assessable vertical migrations rather than one repository-wide rewrite.
+Each Task is recorded as New and unapproved, removes its replaced supported path in the same Change, and preserves real-SQLite evidence for its distinct transaction and persisted-state contracts.
+Task Submission and implementation remain separately authorized actions.
 
-1. Replace Agent Session raw-SQL callback links with owner-specific semantic journals for Task Review, Simplification Advice, Acceptance Review, and Specialist Review.
-2. Replace ordinary and coordinated Task use-case loading with complete operations, including Task list and detail projections, Context Draft sequencing, dependencies, Revision, linked and standalone cancellation, and the supported coordination paths.
-3. Replace Task Review use-case loading with complete submission, inspection, listing, advice, abandonment, and interruption-recovery operations that require coordinated admission and use the semantic journal.
-4. Replace Candidate capture discovery and rebinding with the exact submission-selected capture contract.
-5. Construct Candidate Validation directly and migrate validation execution, inspection, Artifact content, abandonment, and interruption recovery to complete operations, including one Change Validation-private stored Findings decoder and the semantic journal.
-6. Replace Change read and authority port collections with complete list, detail, Finding, Validation history, Decision, and Blocker operations using requested projections and bounded related-record reads.
-7. Replace Change Start, Prepare, and Implement loaders and broad injection seams with their distinct complete operations while retaining their different Git and Interactive Session lifecycles.
-8. Replace Change Submit, Candidate Publication, and reconciliation composition seams with complete operations, reuse the exact Candidate capture operation, and reuse the existing GitHub remote parser instead of the duplicate gateway parser.
-9. Replace terminal cleanup and remaining recovery loaders with complete operations, introducing a private state kernel only where the migration proves shared durable lifecycle meaning.
-10. After the migrated paths exist, add only low-false-positive structural checks for the resulting dependency and visibility rules, and remove transitional architecture wording and obsolete test support seams.
+1. `BY-73` replaces Agent Session raw-SQL callback links with owner-specific semantic journals for Task Review, Simplification Advice, Acceptance Review, and Specialist Review.
+2. `BY-74` replaces ordinary and coordinated Task use-case loading with complete operations, including Task list and detail projections, Context Draft sequencing, dependencies, Revision, linked and standalone cancellation, and the supported coordination paths.
+3. `BY-75` replaces Task Review use-case loading with complete submission, inspection, listing, advice, and abandonment operations that require coordinated admission and use the semantic journal.
+4. `BY-76` replaces Candidate capture discovery and rebinding with the exact submission-selected capture contract.
+5. `BY-77` constructs Candidate Validation directly and migrates validation execution, inspection, Artifact content, and abandonment to complete operations, including one Change Validation-private stored Findings decoder and the semantic journal.
+6. `BY-78` replaces Change read and authority port collections with complete list, detail, Finding, Validation history, Decision, and Blocker operations using requested projections and bounded related-record reads.
+7. `BY-79` replaces Change Start, Prepare, and Implement loaders and broad injection seams with their distinct complete operations while retaining their different Git and Interactive Session lifecycles.
+8. `BY-80` replaces Change Submit composition with one complete operation that reuses exact Candidate capture, Candidate Validation, and Candidate Publication.
+9. `BY-81` replaces Candidate Publication and reconciliation composition while preserving uncertain-mutation recovery and reusing the existing GitHub remote parser.
+10. `BY-82` replaces terminal cleanup and remaining recovery loaders with complete operations, introducing a private state kernel only where the migration proves shared durable lifecycle meaning.
+11. `BY-83` removes obsolete migration seams and adds only low-false-positive safeguards after the preceding operation migrations are complete.
 
 The shared Config source-text parser belongs in the first migration that replaces Task Review or Change policy composition and must preserve distinct Repo Config, Global Config, and missing-file policy.
 No migration is needed for Pi traversal, Herdr decoding, command results, or text readers unless new evidence establishes material deletion without merging their distinct policies.
 
-Task Review interruption work `BY-58` and Validation Run interruption work `BY-72` define behavior that the journal, Task Review, and Candidate Validation migrations must preserve.
-The recommended sequence completes those Tasks before migrations 1, 3, and 5 rather than implementing recovery twice across the old and replacement structures.
-Test process work `BY-68` may continue independently, but test-support consolidation that overlaps its process lifecycle should wait for its merged result.
+Tasks `BY-58` and `BY-72` were cancelled because automatic graceful-interruption settlement was not worth its implementation and maintenance cost.
+The migrations must preserve current explicit abandonment and cleanup behavior without reintroducing the cancelled automatic behavior.
+Task `BY-68` was also cancelled, so no active interruption or process-lifecycle Change blocks these migrations.
 
-Migrations 3 and 5 depend on migration 1.
-Migration 8 depends on migrations 4 and 5.
-Migration 10 depends on the affected migration paths being complete.
-Other dependencies should be added only when Task authoring establishes a real delivery or verification constraint rather than a preferred execution order.
-
-## Remaining Task-shaping work
-
-Allocate every current production loader, use-case object, persistence port, Adapter opener, construction-only service or Layer, and CLI injection seam to one migration above or one retained responsibility while authoring the Tasks.
-Reconcile exact file overlap with the final merged results of `BY-58`, `BY-68`, and `BY-72`.
-Ensure each migration removes its replaced supported path without leaving an indefinite dual architecture.
-Do not change UTF-8, BOM, size, or missing-file behavior merely to consolidate readers.
+`BY-75` and `BY-77` depend on `BY-73`.
+`BY-80` depends on `BY-76`, `BY-77`, and `BY-81`.
+`BY-83` depends on `BY-74`, `BY-75`, `BY-78`, `BY-79`, `BY-80`, and `BY-82`; the remaining migrations are transitive prerequisites.
+Add another dependency only when delivery or verification cannot proceed until its prerequisite is Done, not for preferred order or likely file overlap.
 
 ## Prevention selection
 
