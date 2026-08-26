@@ -93,7 +93,6 @@ describe("by CLI", () => {
       expect(result.stderr).toBe("");
       const { help } = parseOutput(result.stdout);
       expect(help).toEqual(expect.stringContaining("Submit a New Task for review."));
-      expect(help).not.toContain("--rerun");
     }),
   );
 

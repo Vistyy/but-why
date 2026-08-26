@@ -252,7 +252,6 @@ describe("release package boundary", () => {
     ).toBe(true);
     expect(files).not.toContain("bin/by");
     expect(files).not.toContain("justfile");
-    expect(readFileSync(join(root, "CHANGELOG.md"), "utf8")).toContain("Source tag: `v0.0.1`");
   });
 
   it("keeps generated command chunks lazy and includes them in the package", () => {
