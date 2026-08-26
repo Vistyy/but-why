@@ -85,7 +85,7 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("omits the retired Task Review rerun option from generated help", () =>
+  it.effect("renders the Task Submit help description", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["task", "submit", "--help"]);
 
