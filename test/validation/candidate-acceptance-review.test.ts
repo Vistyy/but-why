@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
-import { afterAll, beforeAll, vi } from "vitest";
+import { afterAll, beforeAll, onTestFinished, vi } from "vitest";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -27,7 +27,12 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
-import { runTestProcess } from "../support/testProcess.js";
+import {
+  addRegisteredTestGitWorktree,
+  releaseRegisteredTestGitRepository,
+  removeRegisteredTestGitWorktree,
+} from "../support/testGit.js";
+import { runTestWorkspaceCommand } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
@@ -68,7 +73,8 @@ afterAll(() => {
   releaseTestWorkspace(candidateRepoTemplate);
 });
 
-const candidateReadyRepoCopy = () => cloneInitializedTestRepository(candidateRepoTemplate);
+const candidateReadyRepoCopy = (workspace?: string) =>
+  cloneInitializedTestRepository(candidateRepoTemplate, workspace);
 
 class AcceptanceTemplate extends Context.Tag("@but-why/AcceptanceTemplate")<
   AcceptanceTemplate,
@@ -364,91 +370,89 @@ const runReviewPhases = (
         started.validationRunId,
       );
       mkdirSync(dirname(worktreePath), { recursive: true });
-      git(ready.repo, "worktree", "add", "--detach", "--", worktreePath, captured.headSha);
+      addRegisteredTestGitWorktree(ready.repo, worktreePath, captured.headSha);
 
-      yield* persistence.execution.recordCheckResult({
-        validationRunId: started.validationRunId,
-        producer: "quality",
-        outcome: "passed",
-        artifactRecords: [
-          {
-            ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
-            validationRunId: started.validationRunId,
-            phase: "checks",
-            producer: "quality",
-            path: `${started.validationRunId}/checks/quality/stdout.txt`,
-            originalBytes: 0,
-            storedBytes: 0,
-            truncated: false,
-          },
-        ],
-      });
-      const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
-        Effect.sync(() => {
-          const result = runTestProcess("bash", ["-lc", command], {
-            cwd: options?.cwd ?? worktreePath,
-          });
-          return {
-            exitCode: result.status ?? 1,
-            stdout: result.stdout,
-            stderr: result.stderr,
-          };
-        });
-      const acceptance = yield* runAcceptanceReviewPhase({
-        validationRunId: started.validationRunId,
-        changeId: captured.changeId,
-        candidate: {
-          candidateId: captured.candidateId,
-          changeBaseSha: captured.changeBaseSha,
-          headSha: captured.headSha,
-        },
-        acceptanceContext,
-        implementationDecisions: [],
-        policy: policy.acceptanceReview,
-        ...(policy.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: policy.agentEnvironment }),
-        runtime: ready.reviewerAgentRuntime,
-        commandExecutor,
-        reviewerExecutor: unusedReviewerExecutor,
-        artifactsRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
-        artifactMaxBytes: maxValidationArtifactBytes,
-        commandCwd: worktreePath,
-        resourceRoot: worktreePath,
-        workspaceIdentity: {
-          repositoryRoot: ready.repo,
-          repositoryCommonDirectory,
-          workspaceId: `validation-run-${started.validationRunId}`,
-        },
-        sessionStorageRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
-        restoreWorkspace: restoreDisposableWorkspace,
-        agentPersistence: persistence.agentPersistence,
-        getAgentSession: persistence.agentSessions.getAgentSession,
-        linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
-        settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
-        recordAcceptanceResult: persistence.execution.recordAcceptanceResult,
-        allowedUntrackedFiles: [],
-        listArtifacts: persistence.reads.listArtifacts,
-        listPreviousCandidateReviewerFindings:
-          persistence.execution.listPreviousCandidateReviewerFindings,
-      }).pipe(Effect.provide(NodeFileSystem.layer));
-      git(ready.repo, "worktree", "remove", "--force", "--", worktreePath);
-      yield* persistence.execution.complete({
-        validationRunId: started.validationRunId,
-        outcome: acceptance.outcome,
-      });
-      return acceptance.outcome === "tooling_failed"
-        ? {
-            ok: false as const,
-            validationRunId: started.validationRunId,
-            outcome: acceptance.outcome,
-          }
-        : {
-            ok: true as const,
-            reused: false as const,
-            validationRunId: started.validationRunId,
-            outcome: acceptance.outcome,
-          };
+      const result = yield* Effect.acquireUseRelease(
+        Effect.succeed(undefined),
+        () =>
+          Effect.gen(function* () {
+            yield* persistence.execution.recordCheckResult({
+              validationRunId: started.validationRunId,
+              producer: "quality",
+              outcome: "passed",
+              artifactRecords: [
+                {
+                  ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
+                  validationRunId: started.validationRunId,
+                  phase: "checks",
+                  producer: "quality",
+                  path: `${started.validationRunId}/checks/quality/stdout.txt`,
+                  originalBytes: 0,
+                  storedBytes: 0,
+                  truncated: false,
+                },
+              ],
+            });
+            const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
+              runTestWorkspaceCommand(command, options?.cwd ?? worktreePath);
+            const acceptance = yield* runAcceptanceReviewPhase({
+              validationRunId: started.validationRunId,
+              changeId: captured.changeId,
+              candidate: {
+                candidateId: captured.candidateId,
+                changeBaseSha: captured.changeBaseSha,
+                headSha: captured.headSha,
+              },
+              acceptanceContext,
+              implementationDecisions: [],
+              policy: policy.acceptanceReview,
+              ...(policy.agentEnvironment === undefined
+                ? {}
+                : { agentEnvironment: policy.agentEnvironment }),
+              runtime: ready.reviewerAgentRuntime,
+              commandExecutor,
+              reviewerExecutor: unusedReviewerExecutor,
+              artifactsRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
+              artifactMaxBytes: maxValidationArtifactBytes,
+              commandCwd: worktreePath,
+              resourceRoot: worktreePath,
+              workspaceIdentity: {
+                repositoryRoot: ready.repo,
+                repositoryCommonDirectory,
+                workspaceId: `validation-run-${started.validationRunId}`,
+              },
+              sessionStorageRoot: join(repositoryCommonDirectory, "but-why", "artifacts"),
+              restoreWorkspace: restoreDisposableWorkspace,
+              agentPersistence: persistence.agentPersistence,
+              getAgentSession: persistence.agentSessions.getAgentSession,
+              linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
+              settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
+              recordAcceptanceResult: persistence.execution.recordAcceptanceResult,
+              allowedUntrackedFiles: [],
+              listArtifacts: persistence.reads.listArtifacts,
+              listPreviousCandidateReviewerFindings:
+                persistence.execution.listPreviousCandidateReviewerFindings,
+            }).pipe(Effect.provide(NodeFileSystem.layer));
+            yield* persistence.execution.complete({
+              validationRunId: started.validationRunId,
+              outcome: acceptance.outcome,
+            });
+            return acceptance.outcome === "tooling_failed"
+              ? {
+                  ok: false as const,
+                  validationRunId: started.validationRunId,
+                  outcome: acceptance.outcome,
+                }
+              : {
+                  ok: true as const,
+                  reused: false as const,
+                  validationRunId: started.validationRunId,
+                  outcome: acceptance.outcome,
+                };
+          }),
+        () => Effect.sync(() => removeRegisteredTestGitWorktree(ready.repo, worktreePath)),
+      );
+      return result;
     }),
   );
 
@@ -457,7 +461,9 @@ const acceptanceReadyRepo = (
 ): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError, AcceptanceTemplate> =>
   Effect.gen(function* () {
     const template = yield* AcceptanceTemplate;
-    const repo = yield* candidateReadyRepoCopy();
+    const workspace = acquireTestWorkspace();
+    onTestFinished(() => releaseRegisteredTestGitRepository(workspace));
+    const repo = yield* candidateReadyRepoCopy(workspace);
     const captured = template.captured;
     const validation = candidateValidationForTest({
       localRepositoryRoot: repo,

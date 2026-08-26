@@ -10,7 +10,7 @@ import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snaps
 import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { observeUntil } from "../support/observe.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcessExpectExit, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const validationRunId = 1;
@@ -185,9 +185,7 @@ describe("Snapshot Workspace lifecycle", () => {
 
         expect(cleanupResults).toEqual([{ workspace: "removed" }]);
         expect(existsSync(worktreePath)).toBe(false);
-        expect(runTestProcess("kill", ["-0", childProcessId], { cwd: repository }).status).not.toBe(
-          0,
-        );
+        runTestProcessExpectExit("kill", ["-0", childProcessId], { cwd: repository }, 1);
       }),
     snapshotWorkspaceProcessTestTimeoutMs,
   );
@@ -209,7 +207,7 @@ const repositoryCommonDirectory = (repository: string): string =>
   git(repository, "rev-parse", "--path-format=absolute", "--git-common-dir");
 
 const gitStatus = (cwd: string, ...args: readonly string[]): number =>
-  runTestProcess("git", args, { cwd }).status ?? -1;
+  runTestProcessExpectExit("git", args, { cwd }, 1).status ?? -1;
 
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });

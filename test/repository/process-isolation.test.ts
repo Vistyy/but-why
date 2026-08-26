@@ -1,9 +1,12 @@
-import { existsSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { expect, it } from "@effect/vitest";
+import { Effect, Fiber } from "effect";
+import { describe, test } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
-import { runTestProcess } from "../support/testProcess.js";
+import { observeUntil } from "../support/observe.js";
+import { runTestProcess, runTestWorkspaceCommand } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("test subprocess isolation", () => {
@@ -50,6 +53,45 @@ describe("test subprocess isolation", () => {
     expect(missing.stdout).toBe("");
     expect(missing.stderr).toBe("");
   });
+
+  it.effect("terminates workspace command process groups on timeout", () =>
+    Effect.gen(function* () {
+      const fixture = createTestWorkspace();
+      const processIdPath = join(fixture, "child-pid");
+      const fiber = yield* Effect.fork(
+        runTestWorkspaceCommand(
+          `sleep 30 & child=$!; printf '%s' "$child" > '${processIdPath}'; wait "$child"`,
+          fixture,
+          50,
+        ),
+      );
+      yield* Effect.promise(() =>
+        observeUntil({
+          description: `file ${processIdPath} to contain a child PID`,
+          observe: () => {
+            try {
+              return readFileSync(processIdPath, "utf8");
+            } catch {
+              return "";
+            }
+          },
+          isReady: (contents) => contents !== "",
+          timeoutMs: 5_000,
+        }),
+      );
+      const childProcessId = Number(readFileSync(processIdPath, "utf8"));
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 100)));
+      const result = yield* Effect.either(Fiber.join(fiber));
+      expect(result).toMatchObject({
+        _tag: "Left",
+        left: {
+          _tag: "WorkspaceCommandExecutionFailed",
+          message: "Test workspace command timed out after 50 ms.",
+        },
+      });
+      expect(() => process.kill(childProcessId, 0)).toThrow();
+    }),
+  );
 
   test("rejects shared checkout paths and HOME overrides", () => {
     const fixture = createTestWorkspace();

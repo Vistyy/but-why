@@ -8,10 +8,12 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:f
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
+import { Effect } from "effect";
+import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const synchronousTestProcessTimeoutMs = 4_000;
 const testProcessMaxBufferBytes = 50 * 1024 * 1024;
+const testWorkspaceCommandTimeoutMs = 30_000;
 
 const positiveFinite = (value: number, label: string): number => {
   if (!Number.isFinite(value) || value <= 0) {
@@ -33,6 +35,21 @@ const isInDirectory = (directory: string, path: string): boolean => {
 };
 
 const isInSharedCheckout = (path: string): boolean => isInDirectory(repositoryRoot, path);
+
+const signalTestProcessGroup = (
+  child: ChildProcessByStdio<null, Readable, Readable>,
+  signal: NodeJS.Signals,
+): void => {
+  if (child.pid === undefined) {
+    child.kill(signal);
+    return;
+  }
+  try {
+    globalThis.process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+};
 
 const safeTemporaryDirectory = (): string => {
   const temporaryDirectory = realpathSync(resolve(tmpdir()));
@@ -167,7 +184,6 @@ export const runTestProcess = (
         options.maxBuffer === undefined
           ? testProcessMaxBufferBytes
           : positiveFinite(options.maxBuffer, "Test process maxBuffer"),
-      timeout: options.timeout ?? synchronousTestProcessTimeoutMs,
     });
     return {
       ...result,
@@ -203,4 +219,119 @@ export const runTestProcessOrThrow = (
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout.trim();
+};
+
+export const runTestWorkspaceCommand = (
+  command: string,
+  cwd: string,
+  timeoutMs = testWorkspaceCommandTimeoutMs,
+): Effect.Effect<
+  { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
+  WorkspaceCommandExecutionFailed
+> =>
+  Effect.async((resume, signal) => {
+    const checkedTimeout = positiveInteger(timeoutMs, "Test workspace command timeout");
+    const child = startTestProcess("bash", ["-lc", command], {
+      cwd,
+      detached: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    let finished = false;
+    let cancelled = false;
+    let timedOut = false;
+    let resolveSettled: () => void = () => undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const settled = new Promise<void>((resolve) => {
+      resolveSettled = resolve;
+    });
+    const finish = (
+      effect: Effect.Effect<
+        { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
+        WorkspaceCommandExecutionFailed
+      >,
+    ): void => {
+      if (finished) return;
+      finished = true;
+      if (timeout !== undefined) clearTimeout(timeout);
+      resolveSettled();
+      if (!cancelled) resume(effect);
+    };
+    const terminate = async (wasCancelled: boolean): Promise<void> => {
+      if (finished) return;
+      if (wasCancelled) cancelled = true;
+      signalTestProcessGroup(child, "SIGTERM");
+      const forceKill = setTimeout(() => {
+        if (!finished) signalTestProcessGroup(child, "SIGKILL");
+      }, 1_000);
+      await settled;
+      clearTimeout(forceKill);
+    };
+    const onAbort = (): void => {
+      cancelled = true;
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    timeout = setTimeout(() => {
+      if (finished) return;
+      timedOut = true;
+      void terminate(false);
+    }, checkedTimeout);
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", (error) => {
+      finish(
+        Effect.fail(
+          new WorkspaceCommandExecutionFailed({
+            message: error.message,
+          }),
+        ),
+      );
+    });
+    child.once("close", (status) => {
+      if (timedOut) {
+        finish(
+          Effect.fail(
+            new WorkspaceCommandExecutionFailed({
+              message: `Test workspace command timed out after ${String(checkedTimeout)} ms.`,
+            }),
+          ),
+        );
+        return;
+      }
+      if (status === null) {
+        finish(
+          Effect.fail(
+            new WorkspaceCommandExecutionFailed({
+              message: "Test command exited without a status.",
+            }),
+          ),
+        );
+        return;
+      }
+      finish(Effect.succeed({ exitCode: status, stdout, stderr }));
+    });
+    return Effect.promise(async () => {
+      signal.removeEventListener("abort", onAbort);
+      await terminate(true);
+    });
+  });
+
+export const runTestProcessExpectExit = (
+  command: string,
+  args: readonly string[],
+  options: TestProcessOptions,
+  expectedExitCode: number,
+): SpawnSyncReturns<string> => {
+  const result = runTestProcess(command, args, options);
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== expectedExitCode) {
+    throw new Error(
+      `${command} ${args.join(" ")} exited with ${String(result.status)}; expected ${String(expectedExitCode)}.`,
+    );
+  }
+  return result;
 };

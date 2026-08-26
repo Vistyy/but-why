@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { onTestFinished } from "vitest";
 import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
@@ -22,8 +23,13 @@ import {
   createGitRepo,
   runByInProcessEffect,
 } from "../support/by-cli.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
+import {
+  addRegisteredTestGitWorktree,
+  releaseRegisteredTestGitRepository,
+  removeRegisteredTestGitWorktree,
+} from "../support/testGit.js";
+import { runTestProcessOrThrow, runTestWorkspaceCommand } from "../support/testProcess.js";
+import { acquireTestWorkspace, createTestWorkspace } from "../support/testWorkspace.js";
 
 const defaultAgentPersistence = (): AgentSessionPersistence => ({
   beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
@@ -76,10 +82,8 @@ it.effect("records Task Review preparation integrity failures and skips the revi
         prepare: { command: "printf changed > .but-why/config.json" },
       }),
     );
-    expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd: root }).status).toBe(0);
-    expect(
-      runTestProcess("git", ["commit", "-m", "Configure preparation"], { cwd: root }).status,
-    ).toBe(0);
+    runTestProcessOrThrow("git", ["add", ".but-why/config.json"], { cwd: root });
+    runTestProcessOrThrow("git", ["commit", "-m", "Configure preparation"], { cwd: root });
     writeFileSync(
       globalConfigPath,
       JSON.stringify({
@@ -175,7 +179,7 @@ it.effect("restores Task Review state before an output-correction retry", () =>
               `${JSON.stringify({ type: "session", id: input.sessionId, cwd })}\n`,
             );
             writeFileSync(join(cwd, ".but-why", "config.json"), "changed\n");
-            expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd }).status).toBe(0);
+            runTestProcessOrThrow("git", ["add", ".but-why/config.json"], { cwd });
             writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
             return Effect.succeed({
               ok: false as const,
@@ -223,26 +227,27 @@ it.effect("observes final Task Review restoration and restoration failure", () =
   Effect.gen(function* () {
     const runScenario = (scenario: "passed" | "restoration_failure" | "interrupted") =>
       Effect.gen(function* () {
-        const root = createGitRepo();
-        runTestProcess("git", ["config", "user.name", "But Why Test"], { cwd: root });
-        runTestProcess("git", ["config", "user.email", "but-why@example.test"], { cwd: root });
+        const root = acquireTestWorkspace();
+        onTestFinished(() => releaseRegisteredTestGitRepository(root));
+        createGitRepo(root);
+        runTestProcessOrThrow("git", ["config", "user.name", "But Why Test"], { cwd: root });
+        runTestProcessOrThrow("git", ["config", "user.email", "but-why@example.test"], {
+          cwd: root,
+        });
         mkdirSync(join(root, ".but-why"), { recursive: true });
         writeFileSync(join(root, ".but-why", "config.json"), "candidate\n");
-        runTestProcess("git", ["add", ".but-why/config.json"], { cwd: root });
-        runTestProcess("git", ["commit", "-m", "Candidate"], { cwd: root });
-        const baseCommit = runTestProcess("git", ["rev-parse", "HEAD"], {
-          cwd: root,
-        }).stdout.trim();
-        const repositoryCommonDirectory = runTestProcess(
+        runTestProcessOrThrow("git", ["add", ".but-why/config.json"], { cwd: root });
+        runTestProcessOrThrow("git", ["commit", "-m", "Candidate"], { cwd: root });
+        const baseCommit = runTestProcessOrThrow("git", ["rev-parse", "HEAD"], { cwd: root });
+        const repositoryCommonDirectory = runTestProcessOrThrow(
           "git",
           ["rev-parse", "--path-format=absolute", "--git-common-dir"],
           { cwd: root },
-        ).stdout.trim();
+        );
         const workspacePath = expectedTaskReviewWorkspacePath(repositoryCommonDirectory, 1);
+        const agentSessionStorageRoot = createTestWorkspace();
         mkdirSync(dirname(workspacePath), { recursive: true });
-        runTestProcess("git", ["worktree", "add", "--detach", "--", workspacePath, baseCommit], {
-          cwd: root,
-        });
+        addRegisteredTestGitWorktree(root, workspacePath, baseCommit);
         const taskId = publicTaskId("BY-1");
         const reviewerProfile = {
           agentProfile: "review",
@@ -328,16 +333,7 @@ it.effect("observes final Task Review restoration and restoration failure", () =
           proposalIsCurrent: () => Effect.succeed(true),
         };
         const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
-          Effect.sync(() => {
-            const result = runTestProcess("bash", ["-lc", command], {
-              cwd: options?.cwd ?? workspacePath,
-            });
-            return {
-              exitCode: result.status ?? 1,
-              stdout: result.stdout,
-              stderr: result.stderr,
-            };
-          });
+          runTestWorkspaceCommand(command, options?.cwd ?? workspacePath);
         const reviews = openTaskReviewUseCases({
           repositoryRoot: root,
           repositoryCommonDirectory,
@@ -351,7 +347,7 @@ it.effect("observes final Task Review restoration and restoration failure", () =
             message: "Test Underengineer is unavailable.",
           }),
           persistence,
-          agentSessionStorageRoot: createTestWorkspace(),
+          agentSessionStorageRoot,
           agentPersistence: defaultAgentPersistence(),
           underengineerRuntime: {
             review: () =>
@@ -373,7 +369,7 @@ it.effect("observes final Task Review restoration and restoration failure", () =
                 reviewerCalls += 1;
                 const cwd = input.commandCwd ?? workspacePath;
                 writeFileSync(join(cwd, ".but-why/config.json"), "changed\n");
-                runTestProcess("git", ["add", ".but-why/config.json"], { cwd });
+                runTestProcessOrThrow("git", ["add", ".but-why/config.json"], { cwd });
                 writeFileSync(join(cwd, "reviewer-untracked"), "remove\n");
                 if (scenario === "interrupted") return yield* Effect.interrupt;
                 return {
@@ -413,15 +409,19 @@ it.effect("observes final Task Review restoration and restoration failure", () =
                   : Effect.void,
               ),
             ),
-          cleanupWorkspace: () => {
-            runTestProcess("git", ["worktree", "remove", "--force", "--", workspacePath], {
-              cwd: root,
-            });
-            return Effect.succeed({ workspace: "removed" as const });
-          },
+          cleanupWorkspace: () =>
+            Effect.sync(() => removeRegisteredTestGitWorktree(root, workspacePath)).pipe(
+              Effect.as({ workspace: "removed" as const }),
+            ),
           inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
         });
-        const result = yield* reviews.submit(taskId, "2026-08-11T12:05:00.000Z");
+        const result = yield* reviews
+          .submit(taskId, "2026-08-11T12:05:00.000Z")
+          .pipe(
+            Effect.ensuring(
+              Effect.sync(() => removeRegisteredTestGitWorktree(root, workspacePath)),
+            ),
+          );
         return { result, restoredStatus, restoredUntracked, reviewerCalls };
       });
 
@@ -707,23 +707,20 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      expect(
-        runTestProcess("git", ["config", "user.name", "But Why Test"], { cwd: root }).status,
-      ).toBe(0);
-      expect(
-        runTestProcess("git", ["config", "user.email", "but-why@example.test"], { cwd: root })
-          .status,
-      ).toBe(0);
-      expect(runTestProcess("git", ["branch", "-M", "main"], { cwd: root }).status).toBe(0);
+      runTestProcessOrThrow("git", ["config", "user.name", "But Why Test"], { cwd: root });
+      runTestProcessOrThrow("git", ["config", "user.email", "but-why@example.test"], {
+        cwd: root,
+      });
+      runTestProcessOrThrow("git", ["branch", "-M", "main"], { cwd: root });
       writeFileSync(join(root, "initial.txt"), "initial\n");
-      expect(runTestProcess("git", ["add", "initial.txt"], { cwd: root }).status).toBe(0);
-      expect(runTestProcess("git", ["commit", "-m", "Initial"], { cwd: root }).status).toBe(0);
+      runTestProcessOrThrow("git", ["add", "initial.txt"], { cwd: root });
+      runTestProcessOrThrow("git", ["commit", "-m", "Initial"], { cwd: root });
       const base = yield* readCurrentWorktreeReviewBase(root);
       expect(base.ok).toBe(true);
       if (!base.ok) return;
       writeFileSync(join(root, "advance.txt"), "advance\n");
-      expect(runTestProcess("git", ["add", "advance.txt"], { cwd: root }).status).toBe(0);
-      expect(runTestProcess("git", ["commit", "-m", "Advance main"], { cwd: root }).status).toBe(0);
+      runTestProcessOrThrow("git", ["add", "advance.txt"], { cwd: root });
+      runTestProcessOrThrow("git", ["commit", "-m", "Advance main"], { cwd: root });
       expect(yield* verifyRecordedTaskReviewBase(root, base.base)).toEqual({ ok: true });
       expect(
         yield* verifyRecordedTaskReviewBase(root, {
@@ -797,10 +794,8 @@ it.effect("rejects missing Review Base guidance before Task Review admission", (
         review: { task: { instructionsFile: ".but-why/reviewers/missing.md" } },
       }),
     );
-    expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd: root }).status).toBe(0);
-    expect(
-      runTestProcess("git", ["commit", "-m", "Configure missing guidance"], { cwd: root }).status,
-    ).toBe(0);
+    runTestProcessOrThrow("git", ["add", ".but-why/config.json"], { cwd: root });
+    runTestProcessOrThrow("git", ["commit", "-m", "Configure missing guidance"], { cwd: root });
     writeFileSync(
       globalConfigPath,
       JSON.stringify({
@@ -851,16 +846,14 @@ it.effect("rejects a Review Base directory as guidance before Task Review admiss
         review: { task: { instructionsFile: ".but-why/reviewers/task" } },
       }),
     );
-    expect(
-      runTestProcess(
-        "git",
-        ["add", ".but-why/config.json", ".but-why/reviewers/task/guidance.md"],
-        { cwd: root },
-      ).status,
-    ).toBe(0);
-    expect(
-      runTestProcess("git", ["commit", "-m", "Configure directory guidance"], { cwd: root }).status,
-    ).toBe(0);
+    runTestProcessOrThrow(
+      "git",
+      ["add", ".but-why/config.json", ".but-why/reviewers/task/guidance.md"],
+      { cwd: root },
+    );
+    runTestProcessOrThrow("git", ["commit", "-m", "Configure directory guidance"], {
+      cwd: root,
+    });
     writeFileSync(
       globalConfigPath,
       JSON.stringify({
@@ -968,14 +961,10 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
         },
       }),
     );
-    expect(
-      runTestProcess("git", ["add", ".but-why/config.json", ".but-why/reviewers/task.md"], {
-        cwd: root,
-      }).status,
-    ).toBe(0);
-    expect(
-      runTestProcess("git", ["commit", "-m", "Configure Task Review"], { cwd: root }).status,
-    ).toBe(0);
+    runTestProcessOrThrow("git", ["add", ".but-why/config.json", ".but-why/reviewers/task.md"], {
+      cwd: root,
+    });
+    runTestProcessOrThrow("git", ["commit", "-m", "Configure Task Review"], { cwd: root });
     writeFileSync(
       globalConfigPath,
       JSON.stringify({
