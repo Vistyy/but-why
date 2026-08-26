@@ -13,6 +13,7 @@ import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceComm
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const testProcessMaxBufferBytes = 50 * 1024 * 1024;
+const testWorkspaceCommandTimeoutMs = 30_000;
 
 const positiveFinite = (value: number, label: string): number => {
   if (!Number.isFinite(value) || value <= 0) {
@@ -213,7 +214,10 @@ export const runTestWorkspaceCommand = (
   WorkspaceCommandExecutionFailed
 > =>
   Effect.gen(function* () {
-    const result = runTestProcess("bash", ["-lc", command], { cwd });
+    const result = runTestProcess("bash", ["-lc", command], {
+      cwd,
+      timeout: testWorkspaceCommandTimeoutMs,
+    });
     if (result.error !== undefined) {
       return yield* new WorkspaceCommandExecutionFailed({ message: result.error.message });
     }
