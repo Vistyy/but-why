@@ -22,7 +22,7 @@ import {
   createGitRepo,
   runByInProcessEffect,
 } from "../support/by-cli.js";
-import { runTestProcess } from "../support/testProcess.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const defaultAgentPersistence = (): AgentSessionPersistence => ({
@@ -193,7 +193,7 @@ it.effect("restores Task Review state before an output-correction retry", () =>
             });
           }
           observedConfig = readFileSync(join(cwd, ".but-why", "config.json"), "utf8");
-          observedStatus = runTestProcess("git", ["status", "--porcelain=v1"], { cwd }).stdout;
+          observedStatus = runTestProcessOrThrow("git", ["status", "--porcelain=v1"], { cwd });
           observedUntracked = existsSync(join(cwd, "reviewer-untracked"));
           return Effect.succeed({
             ok: true as const,
@@ -401,9 +401,9 @@ it.effect("observes final Task Review restoration and restoration failure", () =
             restoreDisposableWorkspace(restoreInput).pipe(
               Effect.tap(() =>
                 Effect.sync(() => {
-                  restoredStatus = runTestProcess("git", ["status", "--porcelain=v1"], {
+                  restoredStatus = runTestProcessOrThrow("git", ["status", "--porcelain=v1"], {
                     cwd: workspacePath,
-                  }).stdout;
+                  });
                   restoredUntracked = existsSync(join(workspacePath, "reviewer-untracked"));
                 }),
               ),
