@@ -165,7 +165,6 @@ ignores:
   - test/support/by-cli.ts
   - test/support/initializedRepo.ts
   - test/repository/quality-interface.test.ts
-  - test/change/change-implement-process.test.ts
   - test/support/changeInspectionFixture.ts
 rule:
   any:
