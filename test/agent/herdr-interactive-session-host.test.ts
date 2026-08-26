@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import type { HerdrAgentPromptTransport } from "../../src/change/interactiveSession/adapters/herdrAgentPromptSocket.js";
 import {
   type HerdrCommandExecutor,
@@ -7,7 +9,10 @@ import {
   openHerdrInteractiveSessionHost as openRawHerdrInteractiveSessionHost,
   trustedContinuationExtensionPath,
 } from "../../src/change/interactiveSession/adapters/herdrInteractiveSessionHost.js";
-import { resolvePackageAsset } from "../../src/change/packageAssetPath.js";
+import * as packageAssets from "../../src/change/packageAssetPath.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
+
+const { resolvePackageAsset } = packageAssets;
 
 const systemPromptPaths = [
   resolvePackageAsset("docs/public/skills/but-why/references/command-guidance.md"),
@@ -143,6 +148,37 @@ describe("Herdr Interactive Session Host", () => {
     const start = commands[4] ?? [];
     expect(start.join(" ")).not.toContain("# But Why");
     expect(start.join(" ")).not.toContain("The Implementer must");
+  });
+
+  it.each([
+    ["missing", "Required trusted continuation extension is missing"],
+    ["invalid", "Required trusted continuation extension failed preflight"],
+  ] as const)("rejects a %s trusted continuation extension before invoking Herdr", async (kind, message) => {
+    const extension = join(createTestWorkspace(), "continue-change.ts");
+    if (kind === "invalid") writeFileSync(extension, "export default 42;\n");
+    const resolveAsset = vi
+      .spyOn(packageAssets, "resolvePackageAsset")
+      .mockImplementation((...segments: readonly string[]) =>
+        segments.join("/") === "extensions/continue-change.ts"
+          ? extension
+          : resolvePackageAsset(...segments),
+      );
+    const commands: readonly string[][] = [];
+    try {
+      await expect(
+        openHerdrInteractiveSessionHost(async (args) => {
+          (commands as string[][]).push([...args]);
+          return { ok: false, message: "unexpected Herdr command" };
+        }).launch(input),
+      ).resolves.toMatchObject({
+        ok: false,
+        code: "launch_failed",
+        message: expect.stringContaining(message),
+      });
+      expect(commands).toEqual([]);
+    } finally {
+      resolveAsset.mockRestore();
+    }
   });
 
   it("retries only a definite busy pane and submits one prompt after native readiness", async () => {
