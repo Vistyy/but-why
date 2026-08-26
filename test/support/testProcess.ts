@@ -20,6 +20,13 @@ const positiveFinite = (value: number, label: string): number => {
   return value;
 };
 
+const positiveInteger = (value: number, label: string): number => {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a finite positive integer.`);
+  }
+  return value;
+};
+
 const isInDirectory = (directory: string, path: string): boolean => {
   const relativePath = relative(directory, path);
   return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
@@ -113,7 +120,7 @@ const processOptions = (options: TestProcessOptions) => {
   const checkedTimeout =
     options.timeout === undefined
       ? undefined
-      : positiveFinite(options.timeout, "Test process timeout");
+      : positiveInteger(options.timeout, "Test process timeout");
   const cwd = checkedOutsideSharedCheckout(realpathSync(options.cwd), "Test subprocess cwd");
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
   const inheritedHome = options.env?.["HOME"];
