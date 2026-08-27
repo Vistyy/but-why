@@ -5,11 +5,11 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
-import { internalChangeId } from "../../src/change/changeId.js";
 import {
   readCurrentPassingValidationEvidence,
   readCurrentPassingValidationEvidenceForChanges,
 } from "../../src/change/adapters/sqlite/sqlitePassingValidationEvidence.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import {
   loadRaiseImplementationBlocker,
   loadRecordImplementationDecision,

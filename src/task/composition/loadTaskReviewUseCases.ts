@@ -26,12 +26,12 @@ import { taskSimplificationAdviceBuiltInInstructions } from "../../reviewerPromp
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
-import { type RepoTaskIdResolution, resolveRepoTaskId } from "../repoTaskIds.js";
 import {
   admitTaskReview,
   openSqliteTaskReviewPersistence,
   taskReviewAdmissionRejection,
 } from "../adapters/sqlite/sqliteTaskReviewPersistence.js";
+import { type RepoTaskIdResolution, resolveRepoTaskId } from "../repoTaskIds.js";
 import {
   readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,

@@ -10,8 +10,8 @@ import {
 import type { CandidateValidationOutcome } from "../../candidateValidation/candidateValidationRunStore.js";
 import type { ChangePolicy } from "../../changePolicy.js";
 import { type ValidationPhase, validationPhase } from "../../validationRun/validationRun.js";
-import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { decodeSqliteValidationToolingFailure } from "./sqliteValidationEvidenceStorage.js";
+import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 type PhaseResultEvidenceRow = {

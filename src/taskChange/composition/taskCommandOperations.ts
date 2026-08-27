@@ -4,7 +4,8 @@ import {
   type RepositoryOperationError,
   runRepositoryOperationAt,
 } from "../../repositoryRuntime/repositoryOperation.js";
-import { resolveRepoTaskId, type RepoTaskIdResolution } from "../../task/repoTaskIds.js";
+import { type RepoTaskIdResolution, resolveRepoTaskId } from "../../task/repoTaskIds.js";
+import type { PublicTaskId } from "../../task/taskId.js";
 import type {
   EditTaskDependenciesInput,
   EditTaskDependenciesResult,
@@ -13,7 +14,6 @@ import type {
   ReviseTaskInput,
   ReviseTaskResult,
 } from "../../task/taskStore.js";
-import type { PublicTaskId } from "../../task/taskId.js";
 import {
   editTaskDependenciesWithChangePrecondition,
   renameTaskWithChangePrecondition,

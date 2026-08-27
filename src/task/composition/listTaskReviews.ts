@@ -5,7 +5,7 @@ import {
   runRepositoryOperationAt,
 } from "../../repositoryRuntime/repositoryOperation.js";
 import { listTaskReviewsSqlite } from "../adapters/sqlite/sqliteTaskReviewPersistence.js";
-import { resolveRepoTaskId, type RepoTaskIdResolution } from "../repoTaskIds.js";
+import { type RepoTaskIdResolution, resolveRepoTaskId } from "../repoTaskIds.js";
 import type { TaskReviewRecord } from "../review/taskReview.js";
 import type { PublicTaskId } from "../taskId.js";
 

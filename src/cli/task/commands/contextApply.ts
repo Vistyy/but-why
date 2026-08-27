@@ -5,9 +5,9 @@ import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
+import { applyTaskContextDraft } from "../../../task/composition/taskContext.js";
 import type { TaskContextDraftReadError } from "../../../task/files/contextDraft.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import { applyTaskContextDraft } from "../../../task/composition/taskContext.js";
 import {
   type TaskCommandEnvironment,
   taskMutationView,

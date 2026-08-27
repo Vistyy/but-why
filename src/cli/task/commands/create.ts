@@ -8,10 +8,10 @@ import {
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
+import { createTask } from "../../../task/composition/createTask.js";
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { normalizeTaskTitle } from "../../../task/taskTitle.js";
-import { createTask } from "../../../task/composition/createTask.js";
 import { type TaskCommandEnvironment, taskMutationView, withTasks } from "../taskCliSupport.js";
 import { taskTitleInputError } from "../taskTitle.js";
 
