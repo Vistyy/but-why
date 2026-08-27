@@ -35,11 +35,11 @@ export const runCreateCommand = (
   const description = readRecordingText(environment.cwd, command.file, environment.stdin);
   if (!description.ok) return Effect.succeed(descriptionInputError(description.error));
 
-  return withTasks(environment, (context) => {
-    const dependencies = resolveDependencies(command.dependsOn, context);
+  return withTasks(environment, (runtime) => {
+    const dependencies = resolveDependencies(command.dependsOn, runtime);
     if (!dependencies.ok) return Effect.succeed(dependencies.result);
     return Effect.map(
-      createTask(environment.cwd, {
+      createTask(runtime, {
         title: title.title,
         description: description.content,
         now: environment.now().toISOString(),
@@ -64,13 +64,13 @@ type ResolveDependenciesResult =
 
 const resolveDependencies = (
   dependencies: readonly string[],
-  context: Parameters<typeof resolveTaskId>[0],
+  runtime: Parameters<typeof resolveTaskId>[0],
 ): ResolveDependenciesResult => {
   const taskIds: PublicTaskId[] = [];
   for (const dependency of dependencies) {
     const parsed = parseCliTaskIdValue(dependency);
     if (!parsed.ok) return parsed;
-    const resolved = resolveTaskId(context, parsed.taskId);
+    const resolved = resolveTaskId(runtime, parsed.taskId);
     if (!resolved.ok) return resolved;
     taskIds.push(resolved.taskId);
   }

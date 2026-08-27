@@ -25,10 +25,12 @@ import type {
   CancelTaskResult,
   CreateTaskInput,
   EditTaskDependenciesInput,
+  EditTaskDependenciesResult,
   ListTasksInput,
   RenameTaskInput,
   RenameTaskResult,
   ReviseTaskInput,
+  ReviseTaskResult,
   UpdateTaskContextInput,
 } from "../../taskStore.js";
 import { normalizeTaskTitle } from "../../taskTitle.js";
@@ -103,15 +105,26 @@ export const createTaskSqlite = (
     return { ok: true as const, task: created, context };
   });
 
+type ValidatedTask = { readonly ok: true; readonly task: TaskRecord };
+
 export const editTaskDependenciesSqlite = (
   sql: SqlClient.SqlClient,
   input: EditTaskDependenciesInput,
   idPrefix: string,
-) =>
-  Effect.gen(function* () {
-    const target = yield* validateTaskDependencyEditTarget(sql, input.taskId, idPrefix);
-    if (!target.ok) return target;
+): Effect.Effect<EditTaskDependenciesResult, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.flatMap(validateTaskDependencyEditTarget(sql, input.taskId, idPrefix), (target) =>
+    target.ok
+      ? editTaskDependenciesAfterValidationSqlite(sql, input, target, idPrefix)
+      : Effect.succeed(target),
+  );
 
+export const editTaskDependenciesAfterValidationSqlite = (
+  sql: SqlClient.SqlClient,
+  input: EditTaskDependenciesInput,
+  target: ValidatedTask,
+  idPrefix: string,
+): Effect.Effect<EditTaskDependenciesResult, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.gen(function* () {
     if (input.operation === "replace" && input.prerequisiteTaskIds.length === 0) {
       return { ok: false as const, code: "replace_requires_dependency" as const };
     }
@@ -407,14 +420,25 @@ export const renameTaskSqlite = (
     if (!title.ok) return title;
     const current = yield* getTaskById(sql, input.taskId, idPrefix);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.title === title.title) return { ok: true as const, noOp: true, task: current };
+    return yield* renameTaskAfterValidationSqlite(sql, input, title.title, current, idPrefix);
+  });
+
+export const renameTaskAfterValidationSqlite = (
+  sql: SqlClient.SqlClient,
+  input: RenameTaskInput,
+  title: string,
+  current: TaskRecord,
+  idPrefix: string,
+): Effect.Effect<RenameTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.gen(function* () {
+    if (current.title === title) return { ok: true as const, noOp: true, task: current };
     if (current.state !== "new") {
       return current.state === "todo"
         ? { ok: false as const, code: "task_revision_required" as const, state: current.state }
         : { ok: false as const, code: "invalid_task_state" as const, state: current.state };
     }
     yield* sql`
-      UPDATE tasks SET title = ${title.title}
+      UPDATE tasks SET title = ${title}
       WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
     const updated = yield* getTaskById(sql, input.taskId, idPrefix);
@@ -426,12 +450,21 @@ export const reviseTaskSqlite = (
   sql: SqlClient.SqlClient,
   input: ReviseTaskInput,
   idPrefix: string,
-) =>
+): Effect.Effect<ReviseTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.flatMap(validateTaskRevisionTarget(sql, input.taskId, idPrefix), (validated) =>
+    validated.ok
+      ? reviseTaskAfterValidationSqlite(sql, input, validated, idPrefix)
+      : Effect.succeed(validated),
+  );
+
+export const reviseTaskAfterValidationSqlite = (
+  sql: SqlClient.SqlClient,
+  input: ReviseTaskInput,
+  current: ValidatedTask,
+  idPrefix: string,
+): Effect.Effect<ReviseTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
-    const validated = yield* validateTaskRevisionTarget(sql, input.taskId, idPrefix);
-    if (!validated.ok) return validated;
-    const current = validated.task;
-    if (current.state === "new") {
+    if (current.task.state === "new") {
       const activeReview = yield* activeTaskReviewId(sql, input.taskId, idPrefix);
       if (activeReview !== undefined) {
         return {
@@ -440,7 +473,7 @@ export const reviseTaskSqlite = (
           reviewId: activeReview,
         };
       }
-      return { ok: true as const, changed: false, task: current };
+      return { ok: true as const, changed: false, task: current.task };
     }
     yield* sql`
       UPDATE tasks SET state = 'new'

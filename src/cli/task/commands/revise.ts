@@ -21,11 +21,11 @@ export const runReviseCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (context) => {
-    const taskId = resolveTaskId(context, parsed.taskId);
+  return withTasks(environment, (runtime) => {
+    const taskId = resolveTaskId(runtime, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.map(
-      reviseTask(environment.cwd, {
+      reviseTask(runtime, {
         taskId: taskId.taskId,
         now: environment.now().toISOString(),
       }),

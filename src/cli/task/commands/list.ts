@@ -3,14 +3,11 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
-import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
-import type { StructuredValue } from "../../../output/structured.js";
 import { listTasks } from "../../../task/composition/listTasks.js";
 import type { TaskState } from "../../../task/lifecycle.js";
-import type { TaskSummary } from "../../../task/task.js";
 import type { TaskListLimit } from "../../../task/taskStore.js";
-import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
-import { type TaskCommandEnvironment, taskRepositoryInput, withTasks } from "../taskCliSupport.js";
+import { loadTaskChangeProjections } from "../../../taskChange/composition/loadTaskChangeInspection.js";
+import { type TaskCommandEnvironment, withTasks } from "../taskCliSupport.js";
 
 export type TaskListCommand = {
   readonly all: boolean;
@@ -27,29 +24,37 @@ export const runListCommand = (
   const limit = parseTaskListLimit(command.limit);
   if (!limit.ok) return Effect.succeed(limit.result);
 
-  return withTasks(environment, (context) =>
+  return withTasks(environment, (runtime) =>
     Effect.flatMap(
-      listTasks(environment.cwd, {
+      listTasks(runtime, {
         includeDone: command.all || command.state !== undefined,
         ...(command.state === undefined ? {} : { state: command.state }),
         limit: limit.value,
       }),
       (result) => {
-        const changeInspection = loadTaskChangeProjection(taskRepositoryInput(environment));
+        const changeInspection = loadTaskChangeProjections(runtime);
         if (!changeInspection.ok) {
-          return Effect.succeed<CliResult>(stateStoreUnavailable(context.idPrefix));
+          return Effect.succeed<CliResult>(stateStoreUnavailable(runtime.context.idPrefix));
         }
-        return Effect.map(taskSummaryRows(result.tasks, changeInspection.operation), (rows) =>
-          success({
-            count: result.tasks.length,
-            total: result.total,
-            tasks: rows,
-            ...(result.tasks.length === 0
-              ? { help: [createTaskHelp] }
-              : result.tasks.length < result.total
-                ? { help: [listMoreTasksHelp(command)] }
-                : {}),
-          }),
+        return Effect.map(
+          changeInspection.operation(result.tasks.map((task) => task.id)),
+          (projections) =>
+            success({
+              count: result.tasks.length,
+              total: result.total,
+              tasks: result.tasks.map((task) => ({
+                id: task.id,
+                title: task.title,
+                state: task.state,
+                blockedBy: task.blockedBy,
+                change: projections.get(task.id) ?? null,
+              })),
+              ...(result.tasks.length === 0
+                ? { help: [createTaskHelp] }
+                : result.tasks.length < result.total
+                  ? { help: [listMoreTasksHelp(command)] }
+                  : {}),
+            }),
         );
       },
     ),
@@ -86,21 +91,5 @@ const listMoreTasksHelp = (command: TaskListCommand): string => {
   ].filter((filter): filter is string => filter !== undefined);
   return `Run \`by task list ${[...filters, "--limit all"].join(" ")}\` to retrieve all matching Tasks.`;
 };
-
-const taskSummaryRows = (
-  tasks: readonly TaskSummary[],
-  changeProjection: (
-    taskId: TaskSummary["id"],
-  ) => Effect.Effect<StructuredValue, RepositoryStorageError>,
-): Effect.Effect<readonly StructuredValue[], RepositoryStorageError> =>
-  Effect.forEach(tasks, (task) =>
-    Effect.map(changeProjection(task.id), (change) => ({
-      id: task.id,
-      title: task.title,
-      state: task.state,
-      blockedBy: task.blockedBy,
-      change,
-    })),
-  );
 
 const createTaskHelp = 'Run `by task create --title "..." --file <path|->` to create a task.';

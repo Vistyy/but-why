@@ -11,7 +11,6 @@ import {
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskNotFound,
-  taskRepositoryInput,
   withTaskReviewInspection,
   withTasks,
 } from "../taskCliSupport.js";
@@ -22,14 +21,14 @@ export const runTaskShowCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (context) => {
-    const taskId = resolveTaskId(context, parsed.taskId);
+  return withTasks(environment, (runtime) => {
+    const taskId = resolveTaskId(runtime, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.gen(function* () {
-      const task = yield* inspectTask(environment.cwd, taskId.taskId);
+      const task = yield* inspectTask(runtime, taskId.taskId);
       if (task === undefined) return taskNotFound(taskId.taskId);
-      const change = loadTaskChangeProjection(taskRepositoryInput(environment));
-      if (!change.ok) return stateStoreUnavailable(context.idPrefix);
+      const change = loadTaskChangeProjection(runtime);
+      if (!change.ok) return stateStoreUnavailable(runtime.context.idPrefix);
       const projection = yield* change.operation(taskId.taskId);
       return yield* withTaskReviewInspection(environment, (reviews) =>
         Effect.gen(function* () {

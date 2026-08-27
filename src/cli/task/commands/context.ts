@@ -20,10 +20,10 @@ export const runContextCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (context) => {
-    const taskId = resolveTaskId(context, parsed.taskId);
+  return withTasks(environment, (runtime) => {
+    const taskId = resolveTaskId(runtime, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.map(getTaskContext(environment.cwd, taskId.taskId), (task) =>
+    return Effect.map(getTaskContext(runtime, taskId.taskId), (task) =>
       task === undefined ? taskNotFound(taskId.taskId) : success({ task }),
     );
   });

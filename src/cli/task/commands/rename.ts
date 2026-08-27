@@ -29,11 +29,11 @@ export const runRenameCommand = (
   if (!title.ok) return Effect.succeed(taskTitleInputError(title));
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (context) => {
-    const taskId = resolveTaskId(context, parsed.taskId);
+  return withTasks(environment, (runtime) => {
+    const taskId = resolveTaskId(runtime, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.map(
-      renameTask(environment.cwd, { taskId: taskId.taskId, title: title.title }),
+      renameTask(runtime, { taskId: taskId.taskId, title: title.title }),
       (result) => renameResult(taskId.taskId, result),
     );
   });

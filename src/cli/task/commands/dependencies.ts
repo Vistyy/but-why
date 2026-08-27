@@ -42,19 +42,19 @@ export const runDependenciesCommand = (
   const parsedDependent = parseCliTaskIdValue(command.taskId);
   if (!parsedDependent.ok) return Effect.succeed(parsedDependent.result);
 
-  return withTasks(environment, (context) => {
-    const dependent = resolveTaskId(context, parsedDependent.taskId);
+  return withTasks(environment, (runtime) => {
+    const dependent = resolveTaskId(runtime, parsedDependent.taskId);
     if (!dependent.ok) return Effect.succeed(dependent.result);
     const prerequisiteTaskIds: PublicTaskId[] = [];
     for (const value of command.dependsOn) {
       const parsedPrerequisite = parseCliTaskIdValue(value);
       if (!parsedPrerequisite.ok) return Effect.succeed(parsedPrerequisite.result);
-      const prerequisite = resolveTaskId(context, parsedPrerequisite.taskId);
+      const prerequisite = resolveTaskId(runtime, parsedPrerequisite.taskId);
       if (!prerequisite.ok) return Effect.succeed(prerequisite.result);
       prerequisiteTaskIds.push(prerequisite.taskId);
     }
     return Effect.map(
-      editTaskDependencies(environment.cwd, {
+      editTaskDependencies(runtime, {
         taskId: dependent.taskId,
         operation: command.operation,
         prerequisiteTaskIds,

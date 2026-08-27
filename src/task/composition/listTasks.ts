@@ -1,12 +1,16 @@
 import type { Effect } from "effect";
+import {
+  type RepositoryOperationError,
+  type RepositoryOperationRuntime,
+  runRepositoryOperation,
+} from "../../repositoryRuntime/repositoryOperation.js";
 import { listTasksSqlite } from "../adapters/sqlite/sqliteTaskPersistence.js";
 import type { ListTasksInput, ListTasksResult } from "../taskStore.js";
-import { runTaskOperation, type TaskOperationError } from "./taskOperation.js";
 
 export const listTasks = (
-  cwd: string,
+  runtime: RepositoryOperationRuntime,
   input: ListTasksInput,
-): Effect.Effect<ListTasksResult, TaskOperationError> =>
-  runTaskOperation(cwd, (_context, repository) =>
+): Effect.Effect<ListTasksResult, RepositoryOperationError> =>
+  runRepositoryOperation(runtime, (_context, repository) =>
     repository.transaction("list Tasks", (sql) => listTasksSqlite(sql, repository.idPrefix, input)),
   );

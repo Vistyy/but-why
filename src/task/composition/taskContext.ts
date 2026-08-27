@@ -1,6 +1,11 @@
 import { Effect } from "effect";
 import { RepositoryStateUnavailable } from "../../contracts/repositoryStorageError.js";
 import {
+  type RepositoryOperationError,
+  type RepositoryOperationRuntime,
+  runRepositoryOperation,
+} from "../../repositoryRuntime/repositoryOperation.js";
+import {
   getTaskContextById as getTaskContextByIdInSqlite,
   updateTaskContext,
 } from "../adapters/sqlite/sqliteTaskPersistence.js";
@@ -14,7 +19,6 @@ import type { TaskState } from "../lifecycle.js";
 import type { TaskContext, TaskRecord } from "../task.js";
 import type { PublicTaskId } from "../taskId.js";
 import type { UpdateTaskContextInput } from "../taskStore.js";
-import { runTaskOperation, type TaskOperationError } from "./taskOperation.js";
 
 export type TaskContextDraft = { readonly path: string; readonly content: string };
 
@@ -40,20 +44,20 @@ export type ApplyTaskContextDraftResult =
     };
 
 export const getTaskContext = (
-  cwd: string,
+  runtime: RepositoryOperationRuntime,
   taskId: PublicTaskId,
-): Effect.Effect<TaskContext | undefined, TaskOperationError> =>
-  runTaskOperation(cwd, (_context, repository) =>
+): Effect.Effect<TaskContext | undefined, RepositoryOperationError> =>
+  runRepositoryOperation(runtime, (_context, repository) =>
     repository.transaction("read Task Context", (sql) =>
       getTaskContextByIdInSqlite(sql, taskId, repository.idPrefix),
     ),
   );
 
 export const createTaskContextDraft = (
-  cwd: string,
+  runtime: RepositoryOperationRuntime,
   taskId: PublicTaskId,
-): Effect.Effect<TaskContextDraft | undefined, TaskOperationError> =>
-  runTaskOperation(cwd, (context, repository) =>
+): Effect.Effect<TaskContextDraft | undefined, RepositoryOperationError> =>
+  runRepositoryOperation(runtime, (context, repository) =>
     Effect.flatMap(
       repository.transaction("read Task Context", (sql) =>
         getTaskContextByIdInSqlite(sql, taskId, repository.idPrefix),
@@ -75,10 +79,10 @@ export const createTaskContextDraft = (
   );
 
 export const applyTaskContextDraft = (
-  cwd: string,
+  runtime: RepositoryOperationRuntime,
   input: ApplyTaskContextDraftInput,
-): Effect.Effect<ApplyTaskContextDraftResult, TaskOperationError> =>
-  runTaskOperation(cwd, (context, repository) => {
+): Effect.Effect<ApplyTaskContextDraftResult, RepositoryOperationError> =>
+  runRepositoryOperation(runtime, (context, repository) => {
     const draft = readTaskContextDraft(context.paths.taskContextDraftsPath, input.taskId);
     if (!draft.ok) return Effect.succeed({ ok: false, error: draft.error });
     return Effect.map(

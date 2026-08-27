@@ -9,12 +9,11 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import {
-  openRepositoryRuntime,
-  type RepositoryRuntimeLoadError,
-  resolveRepositoryIdPrefix,
-} from "../../repositoryRuntime/repositoryRuntime.js";
+  openRepositoryOperation,
+  type RepositoryOperationRuntime,
+} from "../../repositoryRuntime/repositoryOperation.js";
+import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
@@ -53,27 +52,21 @@ export type TaskCommandEnvironment = {
 
 export const withTasks = (
   environment: TaskCommandEnvironment,
-  use: (
-    context: LocalRepositoryContext,
-  ) => Effect.Effect<CliResult, RepositoryStorageError | RepositoryRuntimeLoadError>,
+  use: (runtime: RepositoryOperationRuntime) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => withRepository(environment, use);
 
 const withRepository = (
   environment: TaskCommandEnvironment,
-  use: (
-    context: LocalRepositoryContext,
-  ) => Effect.Effect<CliResult, RepositoryStorageError | RepositoryRuntimeLoadError>,
+  use: (runtime: RepositoryOperationRuntime) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => {
-  const loaded = openRepositoryRuntime(environment.cwd);
+  const loaded = openRepositoryOperation(environment.cwd);
   const program = loaded.ok
-    ? use(loaded.runtime.context)
+    ? use(loaded.runtime)
     : Effect.succeed(repoStateLoadError(loaded.error));
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        "code" in error
-          ? repoStateLoadError(error)
-          : repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -163,7 +156,7 @@ const catchTaskReviewStorageError = (
     ),
   );
 
-export const taskRepositoryInput = (environment: TaskCommandEnvironment) => ({
+const taskRepositoryInput = (environment: TaskCommandEnvironment) => ({
   cwd: environment.cwd,
 });
 
@@ -181,10 +174,10 @@ export type ResolvedTaskIdResult =
   | { readonly ok: false; readonly result: CliResult };
 
 export const resolveTaskId = (
-  context: LocalRepositoryContext,
+  runtime: RepositoryOperationRuntime,
   taskId: PublicTaskId,
 ): ResolvedTaskIdResult => {
-  const resolvedTaskId = resolveRepoTaskId(context, taskId);
+  const resolvedTaskId = resolveRepoTaskId(runtime.context, taskId);
   if (!resolvedTaskId.ok) {
     return { ok: false, result: taskIdResolutionError(resolvedTaskId) };
   }

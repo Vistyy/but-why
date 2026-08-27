@@ -3,41 +3,55 @@ import { openSqliteActiveValidationRunPort } from "../../change/adapters/sqlite/
 import { openSqliteChangeAuthorityPort } from "../../change/adapters/sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteChangeReadPort } from "../../change/adapters/sqlite/sqliteChangeInspectionPersistence.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
-import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import { RepositorySql } from "../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import type { RepositoryOperationRuntime } from "../../repositoryRuntime/repositoryOperation.js";
+import { listTaskChangeProjectionsSqlite } from "../adapters/sqlite/sqliteTaskChangeInspectionPersistence.js";
 import { openSqliteTaskChangeLinkPort } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
 import { queryTaskChangeProjection, type TaskChangeProjection } from "../inspectTaskChange.js";
 
-export type LoadTaskChangeInspectionError = ResolveLocalRepositoryError;
+export type LoadedTaskChangeInspection<A> = {
+  readonly ok: true;
+  readonly commonDirectory: string;
+  readonly operation: A;
+};
 
-export type LoadedTaskChangeInspection<A> =
-  | { readonly ok: true; readonly commonDirectory: string; readonly operation: A }
-  | { readonly ok: false; readonly error: LoadTaskChangeInspectionError };
-
-type LoadInput = { readonly cwd: string };
-
-export const loadTaskChangeProjection = (
-  input: LoadInput,
+export const loadTaskChangeProjections = (
+  runtime: RepositoryOperationRuntime,
 ): LoadedTaskChangeInspection<
-  (taskId: string) => Effect.Effect<TaskChangeProjection | null, RepositoryStorageError>
-> => {
-  const loaded = openRepositoryRuntime(input.cwd);
-  if (!loaded.ok) return loaded;
-  return {
-    ok: true,
-    commonDirectory: loaded.runtime.context.commonDirectory,
-    operation: (taskId) =>
-      loaded.runtime.provide(
-        Effect.all({
-          links: openSqliteTaskChangeLinkPort(),
-          changes: openSqliteChangeReadPort(),
-          authority: openSqliteChangeAuthorityPort(),
-          activeValidation: openSqliteActiveValidationRunPort(),
-        }).pipe(
-          Effect.flatMap(({ links, changes, authority, activeValidation }) =>
-            queryTaskChangeProjection({ links, changes, authority, activeValidation }, taskId),
-          ),
+  (
+    taskIds: readonly string[],
+  ) => Effect.Effect<ReadonlyMap<string, TaskChangeProjection | null>, RepositoryStorageError>
+> => ({
+  ok: true,
+  commonDirectory: runtime.context.commonDirectory,
+  operation: (taskIds) =>
+    runtime.provide(
+      Effect.flatMap(RepositorySql, (repository) =>
+        repository.transaction("list Task Change projections", (sql) =>
+          listTaskChangeProjectionsSqlite(sql, taskIds, repository.idPrefix),
         ),
       ),
-  };
-};
+    ),
+});
+
+export const loadTaskChangeProjection = (
+  runtime: RepositoryOperationRuntime,
+): LoadedTaskChangeInspection<
+  (taskId: string) => Effect.Effect<TaskChangeProjection | null, RepositoryStorageError>
+> => ({
+  ok: true,
+  commonDirectory: runtime.context.commonDirectory,
+  operation: (taskId) =>
+    runtime.provide(
+      Effect.all({
+        links: openSqliteTaskChangeLinkPort(),
+        changes: openSqliteChangeReadPort(),
+        authority: openSqliteChangeAuthorityPort(),
+        activeValidation: openSqliteActiveValidationRunPort(),
+      }).pipe(
+        Effect.flatMap(({ links, changes, authority, activeValidation }) =>
+          queryTaskChangeProjection({ links, changes, authority, activeValidation }, taskId),
+        ),
+      ),
+    ),
+});
