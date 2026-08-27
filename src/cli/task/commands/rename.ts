@@ -12,7 +12,7 @@ import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
-  withTaskChangeTasks,
+  withTasks,
 } from "../taskCliSupport.js";
 import { taskTitleInputError } from "../taskTitle.js";
 
@@ -29,7 +29,7 @@ export const runRenameCommand = (
   if (!title.ok) return Effect.succeed(taskTitleInputError(title));
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTaskChangeTasks(environment, (context) => {
+  return withTasks(environment, (context) => {
     const taskId = resolveTaskId(context, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.map(

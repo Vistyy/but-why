@@ -58,13 +58,6 @@ export const withTasks = (
   ) => Effect.Effect<CliResult, RepositoryStorageError | RepositoryRuntimeLoadError>,
 ): Effect.Effect<CliResult> => withRepository(environment, use);
 
-export const withTaskChangeTasks = (
-  environment: TaskCommandEnvironment,
-  use: (
-    context: LocalRepositoryContext,
-  ) => Effect.Effect<CliResult, RepositoryStorageError | RepositoryRuntimeLoadError>,
-): Effect.Effect<CliResult> => withRepository(environment, use);
-
 const withRepository = (
   environment: TaskCommandEnvironment,
   use: (

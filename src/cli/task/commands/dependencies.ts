@@ -16,7 +16,7 @@ import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
-  withTaskChangeTasks,
+  withTasks,
 } from "../taskCliSupport.js";
 
 export type TaskDependenciesCommand = {
@@ -42,7 +42,7 @@ export const runDependenciesCommand = (
   const parsedDependent = parseCliTaskIdValue(command.taskId);
   if (!parsedDependent.ok) return Effect.succeed(parsedDependent.result);
 
-  return withTaskChangeTasks(environment, (context) => {
+  return withTasks(environment, (context) => {
     const dependent = resolveTaskId(context, parsedDependent.taskId);
     if (!dependent.ok) return Effect.succeed(dependent.result);
     const prerequisiteTaskIds: PublicTaskId[] = [];
