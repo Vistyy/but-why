@@ -56,9 +56,7 @@ export const withTasks = (
       Effect.succeed(
         "code" in error
           ? repoStateLoadError(error)
-          : error._tag === "RepositoryOperationStorageError"
-            ? repositoryStorageErrorResult(error.error, error.idPrefix)
-            : repositoryStorageErrorResult(error),
+          : repositoryStorageErrorResult(error.error, error.idPrefix),
       ),
     ),
   );

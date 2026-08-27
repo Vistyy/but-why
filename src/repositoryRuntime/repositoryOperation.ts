@@ -14,10 +14,7 @@ export type RepositoryOperationStorageError = {
   readonly error: RepositoryStorageError;
   readonly idPrefix: string;
 };
-export type RepositoryOperationError =
-  | RepositoryOperationStorageError
-  | RepositoryStorageError
-  | RepositoryRuntimeLoadError;
+export type RepositoryOperationError = RepositoryOperationStorageError | RepositoryRuntimeLoadError;
 
 const openRepositoryOperation = (
   cwd: string,
@@ -32,23 +29,25 @@ export const runRepositoryOperationAt = <A, E, R>(
     context: LocalRepositoryContext,
     repository: RepositorySqlService,
   ) => Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | RepositoryOperationError, R> =>
-  Effect.suspend((): Effect.Effect<A, E | RepositoryOperationError, R> => {
-    const loaded = openRepositoryOperation(cwd);
-    return loaded.ok
-      ? runRepositoryOperation(loaded.runtime, use).pipe(
-          Effect.mapError((error) =>
-            isRepositoryStorageError(error)
-              ? {
-                  _tag: "RepositoryOperationStorageError" as const,
-                  error,
-                  idPrefix: loaded.runtime.context.idPrefix,
-                }
-              : error,
-          ),
-        )
-      : Effect.fail<RepositoryRuntimeLoadError>(loaded.error);
-  });
+): Effect.Effect<A, Exclude<E, RepositoryStorageError> | RepositoryOperationError, R> =>
+  Effect.suspend(
+    (): Effect.Effect<A, Exclude<E, RepositoryStorageError> | RepositoryOperationError, R> => {
+      const loaded = openRepositoryOperation(cwd);
+      return loaded.ok
+        ? runRepositoryOperation(loaded.runtime, use).pipe(
+            Effect.mapError((error) =>
+              isRepositoryStorageError(error)
+                ? {
+                    _tag: "RepositoryOperationStorageError" as const,
+                    error,
+                    idPrefix: loaded.runtime.context.idPrefix,
+                  }
+                : (error as Exclude<E, RepositoryStorageError> | RepositoryOperationError),
+            ),
+          )
+        : Effect.fail<RepositoryRuntimeLoadError>(loaded.error);
+    },
+  );
 
 export const isRepositoryOperationStorageError = (
   error: unknown,
