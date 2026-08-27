@@ -3,13 +3,10 @@ import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repos
 import {
   cancelTask,
   createTaskSqlite,
-  editTaskDependenciesSqlite,
   getTaskById,
   getTaskContextById,
   listActionableTasksSqlite,
   listTasksSqlite,
-  renameTaskSqlite,
-  reviseTaskSqlite,
   updateTaskContext,
 } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import type { PublicTaskId } from "../../src/task/taskId.js";
@@ -17,7 +14,6 @@ import type {
   CancelTaskInput,
   CreateTaskInput,
   ListTasksInput,
-  ReviseTaskInput,
   UpdateTaskContextInput,
 } from "../../src/task/taskStore.js";
 
@@ -25,15 +21,6 @@ export const createTaskInSqlite = (input: CreateTaskInput) =>
   Effect.flatMap(RepositorySql, (repository) =>
     repository.transactionImmediate("create Task", (sql) =>
       createTaskSqlite(sql, repository.idPrefix, input),
-    ),
-  );
-
-export const editTaskDependenciesInSqlite = (
-  input: Parameters<typeof editTaskDependenciesSqlite>[1],
-) =>
-  Effect.flatMap(RepositorySql, (repository) =>
-    repository.transactionImmediate("edit Task dependencies", (sql) =>
-      editTaskDependenciesSqlite(sql, input, repository.idPrefix),
     ),
   );
 
@@ -68,23 +55,9 @@ export const updateTaskContextInSqlite = (input: UpdateTaskContextInput) =>
     ),
   );
 
-export const reviseTaskInSqlite = (input: ReviseTaskInput) =>
-  Effect.flatMap(RepositorySql, (repository) =>
-    repository.transactionImmediate("revise Task", (sql) =>
-      reviseTaskSqlite(sql, input, repository.idPrefix),
-    ),
-  );
-
 export const cancelTaskInSqlite = (input: CancelTaskInput) =>
   Effect.flatMap(RepositorySql, (repository) =>
     repository.transactionImmediate("cancel Task", (sql) =>
       cancelTask(sql, input, repository.idPrefix),
-    ),
-  );
-
-export const renameTaskInSqlite = (input: Parameters<typeof renameTaskSqlite>[1]) =>
-  Effect.flatMap(RepositorySql, (repository) =>
-    repository.transactionImmediate("rename Task", (sql) =>
-      renameTaskSqlite(sql, input, repository.idPrefix),
     ),
   );

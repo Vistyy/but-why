@@ -3,10 +3,9 @@ import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { internalTaskId, publicTaskId } from "../../src/task/taskId.js";
 import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
-import { editTaskDependenciesForTaskChange } from "../support/taskChangeOperations.js";
+import { editTaskDependenciesForTaskChange as editTaskDependenciesInSqlite } from "../support/taskChangeOperations.js";
 import {
   createTaskInSqlite,
-  editTaskDependenciesInSqlite,
   getTaskInSqlite,
   listTasksInSqlite,
 } from "../support/taskOperations.js";
@@ -145,7 +144,7 @@ it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", (
       );
 
       expect(
-        yield* editTaskDependenciesForTaskChange({
+        yield* editTaskDependenciesInSqlite({
           taskId: publicTaskId("BY-1"),
           operation: "add",
           prerequisiteTaskIds: [publicTaskId("BY-2")],

@@ -12,13 +12,12 @@ import {
 } from "../support/repository.js";
 import {
   renameTaskForTaskChange,
-  reviseTaskForTaskChange,
+  reviseTaskForTaskChange as reviseTaskInSqlite,
 } from "../support/taskChangeOperations.js";
 import {
   createTaskInSqlite,
   getTaskContextInSqlite,
   getTaskInSqlite,
-  reviseTaskInSqlite,
 } from "../support/taskOperations.js";
 
 const now = "2026-08-12T10:00:00.000Z";
@@ -232,9 +231,7 @@ it.scoped(
         yield* setTerminalTaskStateFixture(publicTaskId("BY-3"), "done", now);
         yield* setTerminalTaskStateFixture(publicTaskId("BY-4"), "cancelled", now);
 
-        expect(
-          yield* reviseTaskForTaskChange({ taskId: publicTaskId("BY-1"), now: later }),
-        ).toEqual({
+        expect(yield* reviseTaskInSqlite({ taskId: publicTaskId("BY-1"), now: later })).toEqual({
           ok: false,
           code: "task_change_linked",
           changeId: "BY-C1",

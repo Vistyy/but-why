@@ -33,7 +33,6 @@ import type {
   ReviseTaskResult,
   UpdateTaskContextInput,
 } from "../../taskStore.js";
-import { normalizeTaskTitle } from "../../taskTitle.js";
 import {
   type DecodedStoredTaskRecordRow,
   type DecodedTaskSummaryRow,
@@ -106,17 +105,6 @@ export const createTaskSqlite = (
   });
 
 type ValidatedTask = { readonly ok: true; readonly task: TaskRecord };
-
-export const editTaskDependenciesSqlite = (
-  sql: SqlClient.SqlClient,
-  input: EditTaskDependenciesInput,
-  idPrefix: string,
-): Effect.Effect<EditTaskDependenciesResult, SqlError | RepositoryPersistedDataInvalid> =>
-  Effect.flatMap(validateTaskDependencyEditTarget(sql, input.taskId, idPrefix), (target) =>
-    target.ok
-      ? editTaskDependenciesAfterValidationSqlite(sql, input, target, idPrefix)
-      : Effect.succeed(target),
-  );
 
 export const editTaskDependenciesAfterValidationSqlite = (
   sql: SqlClient.SqlClient,
@@ -410,19 +398,6 @@ export const updateTaskContext = (
     return { ok: true as const, task: updated, context };
   });
 
-export const renameTaskSqlite = (
-  sql: SqlClient.SqlClient,
-  input: RenameTaskInput,
-  idPrefix: string,
-): Effect.Effect<RenameTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
-  Effect.gen(function* () {
-    const title = normalizeTaskTitle(input.title);
-    if (!title.ok) return title;
-    const current = yield* getTaskById(sql, input.taskId, idPrefix);
-    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    return yield* renameTaskAfterValidationSqlite(sql, input, title.title, current, idPrefix);
-  });
-
 export const renameTaskAfterValidationSqlite = (
   sql: SqlClient.SqlClient,
   input: RenameTaskInput,
@@ -445,17 +420,6 @@ export const renameTaskAfterValidationSqlite = (
     if (updated === undefined) return yield* invalidData("rename Task", "Task disappeared");
     return { ok: true as const, noOp: false, task: updated };
   });
-
-export const reviseTaskSqlite = (
-  sql: SqlClient.SqlClient,
-  input: ReviseTaskInput,
-  idPrefix: string,
-): Effect.Effect<ReviseTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
-  Effect.flatMap(validateTaskRevisionTarget(sql, input.taskId, idPrefix), (validated) =>
-    validated.ok
-      ? reviseTaskAfterValidationSqlite(sql, input, validated, idPrefix)
-      : Effect.succeed(validated),
-  );
 
 export const reviseTaskAfterValidationSqlite = (
   sql: SqlClient.SqlClient,
