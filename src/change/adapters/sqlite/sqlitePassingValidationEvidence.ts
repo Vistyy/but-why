@@ -14,7 +14,7 @@ import {
 import { readImplementationBlockerHistory } from "./sqliteChangeAuthorityHistory.js";
 import {
   requireCoherentValidationCompletion,
-  requireCompletePassingValidationEvidence,
+  validateCurrentPassingEvidence,
 } from "./sqliteValidationCompletion.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
@@ -24,7 +24,7 @@ const currentPassingEvidenceBatchSize = 500;
 
 type CurrentChangeActivityEvidence = {
   readonly hasActiveValidation: boolean;
-  readonly hasCurrentPassingEvidence: boolean;
+  readonly currentPassingEvidence?: ChangePublicationEvidence;
 };
 
 type StoredCurrentCandidateRow = StoredCandidateRow & {
@@ -59,39 +59,21 @@ export const readCurrentPassingValidationEvidence = (
     if (!(yield* isOpenChange(sql, changeId, currentPassingEvidenceOperation, idPrefix))) {
       return undefined;
     }
-    const candidateRows = yield* sql.unsafe<StoredCandidateRow>(
-      `SELECT ${candidateReadColumns}
-       FROM candidates AS candidate
-       WHERE candidate.change_id = ?
-       ORDER BY candidate.id DESC LIMIT 1`,
-      [internalChangeId(changeId, idPrefix)],
-    );
-    const candidate = yield* decodeSelectedCandidate(
-      candidateRows[0],
-      changeId,
-      currentPassingEvidenceOperation,
-      idPrefix,
-    );
-    if (
-      candidate === undefined ||
-      (query?.candidateId !== undefined && candidate.id !== query.candidateId) ||
-      (query?.changeBaseSha !== undefined && candidate.changeBaseSha !== query.changeBaseSha)
-    ) {
-      return undefined;
-    }
-    return yield* readPassingEvidenceForCandidate(
+    const evidence = yield* readCurrentPassingValidationEvidenceForChanges(
       sql,
-      candidate,
-      query,
-      currentPassingEvidenceOperation,
+      [changeId],
       idPrefix,
+      query,
     );
+    return evidence.get(changeId)?.currentPassingEvidence;
   });
 
 export const readCurrentPassingValidationEvidenceForChanges = (
   sql: SqlClient.SqlClient,
   changeIds: readonly string[],
   idPrefix: string,
+  query?: CurrentChangeEvidenceQuery,
+  options: { readonly excludeActiveValidation?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const requestedChangeIds = [...new Set(changeIds)];
@@ -118,13 +100,13 @@ export const readCurrentPassingValidationEvidenceForChanges = (
         }
         activity.set(changeId, {
           hasActiveValidation: row.activeValidations === 1,
-          hasCurrentPassingEvidence: false,
         });
       }
     });
 
     const passingChangeIds = requestedChangeIds.filter(
-      (changeId) => !activity.get(changeId)?.hasActiveValidation,
+      (changeId) =>
+        options.excludeActiveValidation !== true || !activity.get(changeId)?.hasActiveValidation,
     );
     const candidateRows = yield* readBatchedRows<StoredCurrentCandidateRow>(
       sql,
@@ -150,14 +132,27 @@ export const readCurrentPassingValidationEvidenceForChanges = (
         ORDER BY candidate.id DESC`,
       idPrefix,
     );
-    yield* validateSelectedPassingEvidence(sql, candidateRows);
-    const candidates = yield* decodePersisted(currentPassingEvidenceOperation, () =>
-      candidateRows.map((row) => decodeCandidate(row, idPrefix)),
+    const selectedCandidateRows = candidateRows.filter(
+      (row) =>
+        (query?.candidateId === undefined || row.id === query.candidateId) &&
+        (query?.changeBaseSha === undefined || row.changeBaseSha === query.changeBaseSha) &&
+        (query?.validationRunId === undefined || row.validationRunId === query.validationRunId),
     );
-    for (const candidate of candidates) {
+    yield* validateSelectedPassingEvidence(sql, selectedCandidateRows);
+    const candidates = yield* decodePersisted(currentPassingEvidenceOperation, () =>
+      selectedCandidateRows.map((row) => decodeCandidate(row, idPrefix)),
+    );
+    for (const [index, candidate] of candidates.entries()) {
+      const row = selectedCandidateRows[index];
+      if (row === undefined) throw new Error("Passing Candidate row was not selected");
       activity.set(candidate.changeId, {
-        hasActiveValidation: false,
-        hasCurrentPassingEvidence: true,
+        hasActiveValidation: activity.get(candidate.changeId)?.hasActiveValidation ?? false,
+        currentPassingEvidence: {
+          candidateId: candidate.id,
+          validationRunId: row.validationRunId,
+          changeBaseSha: candidate.changeBaseSha,
+          headSha: candidate.headSha,
+        },
       });
     }
     return activity;
@@ -195,12 +190,6 @@ const validateSelectedPassingEvidence = (
       const completionByRun = new Map(completionRows.map((row) => [row.id, row]));
       for (const row of rows) {
         const current = rowsByRun.get(row.validationRunId) ?? [];
-        const findings: unknown = JSON.parse(row.findings) as unknown;
-        const artifacts: unknown = JSON.parse(row.artifacts) as unknown;
-        if (!Array.isArray(findings) || !Array.isArray(artifacts)) {
-          throw new Error("Stored validation evidence is not an array");
-        }
-        if (row.toolingFailure !== null) JSON.parse(row.toolingFailure) as unknown;
         current.push(row);
         rowsByRun.set(row.validationRunId, current);
       }
@@ -210,7 +199,7 @@ const validateSelectedPassingEvidence = (
         if (evidence === undefined || completion === undefined) {
           throw new Error("Passing Validation Run has no evidence");
         }
-        requireCompletePassingValidationEvidence(
+        validateCurrentPassingEvidence(
           decodeSqliteChangePolicy(candidate),
           evidence,
           completion.runToolingFailure,

@@ -254,12 +254,15 @@ const isPreDispatchReviewerIntegrityFailure = (
   );
 };
 
-export const requireCompletePassingValidationEvidence = (
+export const validateCurrentPassingEvidence = (
   changePolicy: ChangePolicy,
   results: readonly {
     readonly phase: string;
     readonly producer: string;
     readonly outcome: string;
+    readonly findings: string;
+    readonly artifacts: string;
+    readonly toolingFailure: string | null;
   }[],
   runToolingFailure: string | null,
 ): void => {
@@ -269,6 +272,14 @@ export const requireCompletePassingValidationEvidence = (
     const phase = decodeValidationPhase(result.phase);
     if (result.outcome !== "passed" && result.outcome !== "failed") {
       throw new Error("Validation Phase Result outcome is unsupported");
+    }
+    const findings: unknown = JSON.parse(result.findings) as unknown;
+    const artifacts: unknown = JSON.parse(result.artifacts) as unknown;
+    if (!Array.isArray(findings) || !Array.isArray(artifacts)) {
+      throw new Error("Stored validation evidence is not an array");
+    }
+    if (findings.length > 0 || result.toolingFailure !== null) {
+      throw new Error("A passed Validation Run contains failure evidence");
     }
     const key = positionKey(phase, result.producer);
     if (resultByPosition.has(key)) {

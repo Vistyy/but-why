@@ -70,13 +70,15 @@ export const listTaskChangeProjectionsSqlite = (
         ];
       }),
     );
-    const openChangeIds = decoded
-      .filter((row) => row.closeReason === null)
+    const activityChangeIds = decoded
+      .filter((row) => row.closeReason === null && row.activeBlockers === 0)
       .map((row) => row.changeId);
     const currentPassingEvidence = yield* readCurrentPassingValidationEvidenceForChanges(
       sql,
-      openChangeIds,
+      activityChangeIds,
       idPrefix,
+      undefined,
+      { excludeActiveValidation: true },
     );
 
     return yield* decodePersisted("list Task Change projections", () => {
@@ -94,7 +96,7 @@ export const listTaskChangeProjectionsSqlite = (
               ? "blocked"
               : evidence?.hasActiveValidation === true
                 ? "validating"
-                : evidence?.hasCurrentPassingEvidence === true
+                : evidence?.currentPassingEvidence !== undefined
                   ? "ready"
                   : "implementing";
         projections.set(publicTaskIdFromInternal(row.taskId, idPrefix), {
