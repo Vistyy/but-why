@@ -827,4 +827,71 @@ describe("Change inspection CLI", { timeout: 120_000 }, () => {
       ).toEqual({ id: changeId });
     }),
   );
+
+  it.effect("rejects malformed selected passing evidence in Task projections", () =>
+    Effect.gen(function* () {
+      const root = createInspectionRepository();
+      yield* createTaskFixture(root, {
+        id: "BY-1",
+        numericId: 1,
+        title: "Change linked to a Task",
+        description: "Inspect malformed evidence",
+        state: "todo",
+        createdAt: firstNow,
+        updatedAt: secondNow,
+      });
+      const change = yield* createChangeFixture(root, "refs/heads/projection", firstNow, {
+        taskId: "BY-1",
+      });
+      const candidate = yield* captureCandidateFixture(
+        root,
+        change.id,
+        "projection-head",
+        firstNow,
+      );
+      const validation = yield* createValidationRunFixture(root, {
+        changeId: change.id,
+        candidateId: candidate.id,
+        state: "complete",
+        outcome: "passed",
+        createdAt: commandNow,
+        updatedAt: commandNow,
+      });
+      const ready = yield* runInspectionCommand(root, ["task", "list", "--all"]);
+      expect(ready.status).toBe(0);
+      expect(JSON.parse(ready.stdout).tasks[0].change).toEqual({
+        id: change.id,
+        activity: "ready",
+      });
+
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "malform selected passing evidence fixture",
+            (sql) =>
+              sql`
+                UPDATE validation_phase_results
+                SET findings = 'not-json'
+                WHERE validation_run_id = ${validation.validationRunId}
+              `,
+          );
+        }),
+      );
+
+      const [listed, shown] = yield* Effect.all([
+        runInspectionCommand(root, ["task", "list", "--all"]),
+        runInspectionCommand(root, ["task", "show", "BY-1"]),
+      ]);
+      expect(listed.status).toBe(1);
+      expect(shown.status).toBe(1);
+      expect(JSON.parse(listed.stdout)).toMatchObject({
+        error: { code: "persisted_data_invalid" },
+      });
+      expect(JSON.parse(shown.stdout)).toMatchObject({
+        error: { code: "persisted_data_invalid" },
+      });
+    }),
+  );
 });

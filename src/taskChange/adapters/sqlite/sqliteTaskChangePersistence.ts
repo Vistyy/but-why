@@ -4,12 +4,10 @@ import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { CompleteMergedChangeInput } from "../../../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import type { TaskRecord } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
-import type { TaskChangeLinkPort } from "../../taskChangePorts.js";
 
 export type TaskReadOperation = {
   readonly getTaskById: (
@@ -40,21 +38,6 @@ export type TaskChangeCompletionOperations = {
     idPrefix: string,
   ) => Effect.Effect<readonly unknown[], SqlError>;
 };
-
-export const openSqliteTaskChangeLinkPort = () =>
-  Effect.map(
-    RepositorySql,
-    (repository): TaskChangeLinkPort => ({
-      getByTaskId: (taskId) =>
-        repository.transaction("read Change link by Task", (sql) =>
-          readTaskChangeLinkByTaskId(sql, taskId, repository.idPrefix),
-        ),
-      getByChangeId: (changeId) =>
-        repository.transaction("read Task link by Change", (sql) =>
-          readTaskChangeLinkByChangeId(sql, changeId, repository.idPrefix),
-        ),
-    }),
-  );
 
 export const completeLinkedChange = (
   sql: SqlClient.SqlClient,

@@ -16,6 +16,12 @@ import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 const currentPassingEvidenceOperation = "read current passing Change evidence";
 const completedPublicationEvidenceOperation = "read completed Candidate Publication evidence";
+const currentPassingEvidenceBatchSize = 500;
+
+type CurrentChangeActivityEvidence = {
+  readonly hasActiveValidation: boolean;
+  readonly hasCurrentPassingEvidence: boolean;
+};
 
 export const readCurrentPassingValidationEvidence = (
   sql: SqlClient.SqlClient,
@@ -54,6 +60,100 @@ export const readCurrentPassingValidationEvidence = (
       currentPassingEvidenceOperation,
       idPrefix,
     );
+  });
+
+export const readCurrentPassingValidationEvidenceForChanges = (
+  sql: SqlClient.SqlClient,
+  changeIds: readonly string[],
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const requestedChangeIds = [...new Set(changeIds)];
+    const activity = new Map<string, CurrentChangeActivityEvidence>();
+    const activeValidationRows = yield* readBatchedRows<{
+      readonly changeId: number;
+      readonly activeValidations: number;
+    }>(
+      sql,
+      requestedChangeIds,
+      (placeholders) => `
+        SELECT candidate.change_id AS changeId, COUNT(*) AS activeValidations
+        FROM validation_runs AS run
+        JOIN candidates AS candidate ON candidate.id = run.candidate_id
+        WHERE candidate.change_id IN (${placeholders}) AND run.outcome IS NULL
+        GROUP BY candidate.change_id`,
+      idPrefix,
+    );
+    yield* decodePersisted(currentPassingEvidenceOperation, () => {
+      for (const row of activeValidationRows) {
+        const changeId = publicChangeId(idPrefix, row.changeId);
+        if (row.activeValidations > 1) {
+          throw new Error("Change has more than one active Validation Run");
+        }
+        activity.set(changeId, {
+          hasActiveValidation: row.activeValidations === 1,
+          hasCurrentPassingEvidence: false,
+        });
+      }
+    });
+
+    const passingChangeIds = requestedChangeIds.filter(
+      (changeId) => !activity.get(changeId)?.hasActiveValidation,
+    );
+    const candidateRows = yield* readBatchedRows<StoredCandidateRow>(
+      sql,
+      passingChangeIds,
+      (placeholders) => `
+        SELECT ${candidateReadColumns}
+        FROM candidates AS candidate
+        WHERE candidate.change_id IN (${placeholders})
+          AND candidate.id = (
+            SELECT MAX(latest.id) FROM candidates AS latest
+            WHERE latest.change_id = candidate.change_id
+          )
+        ORDER BY candidate.id DESC`,
+      idPrefix,
+    );
+    const candidates = yield* decodePersisted(currentPassingEvidenceOperation, () =>
+      candidateRows.map((row) => decodeCandidate(row, idPrefix)),
+    );
+    for (const candidate of candidates) {
+      const current = yield* readPassingEvidenceForCandidate(
+        sql,
+        candidate,
+        undefined,
+        currentPassingEvidenceOperation,
+        idPrefix,
+      );
+      if (current !== undefined) {
+        activity.set(candidate.changeId, {
+          hasActiveValidation: false,
+          hasCurrentPassingEvidence: true,
+        });
+      }
+    }
+    return activity;
+  });
+
+const readBatchedRows = <A extends object>(
+  sql: SqlClient.SqlClient,
+  changeIds: readonly string[],
+  query: (placeholders: string) => string,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const rows: A[] = [];
+    for (let start = 0; start < changeIds.length; start += currentPassingEvidenceBatchSize) {
+      const batch = changeIds.slice(start, start + currentPassingEvidenceBatchSize);
+      const placeholders = batch.map(() => "?").join(", ");
+      rows.push(
+        ...(yield* sql.unsafe<A>(
+          query(placeholders),
+          batch.map((id) => internalChangeId(id, idPrefix)),
+        )),
+      );
+    }
+    return rows;
   });
 
 export const readCompletedCandidatePublicationEvidence = (
