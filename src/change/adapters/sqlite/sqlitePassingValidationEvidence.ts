@@ -163,9 +163,11 @@ export const readCurrentPassingValidationEvidenceForChanges = (
           AND passing.id = (
             SELECT MAX(latestPassing.id) FROM validation_runs AS latestPassing
             WHERE latestPassing.candidate_id = candidate.id AND latestPassing.outcome = 'passed'
+              ${query?.validationRunId === undefined ? "" : "AND latestPassing.id = ?"}
           )
         ORDER BY candidate.id DESC`,
       idPrefix,
+      query?.validationRunId === undefined ? [] : [query.validationRunId],
     );
     const candidateRowsMatchingQuery = candidateRows.filter(
       (row) =>
@@ -377,6 +379,7 @@ const readBatchedRows = <A extends object>(
   changeIds: readonly string[],
   query: (placeholders: string) => string,
   idPrefix: string,
+  additionalParameters: readonly unknown[] = [],
 ) =>
   Effect.gen(function* () {
     const rows: A[] = [];
@@ -384,10 +387,10 @@ const readBatchedRows = <A extends object>(
       const batch = changeIds.slice(start, start + currentPassingEvidenceBatchSize);
       const placeholders = batch.map(() => "?").join(", ");
       rows.push(
-        ...(yield* sql.unsafe<A>(
-          query(placeholders),
-          batch.map((id) => internalChangeId(id, idPrefix)),
-        )),
+        ...(yield* sql.unsafe<A>(query(placeholders), [
+          ...batch.map((id) => internalChangeId(id, idPrefix)),
+          ...additionalParameters,
+        ])),
       );
     }
     return rows;
