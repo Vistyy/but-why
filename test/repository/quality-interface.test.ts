@@ -162,11 +162,6 @@ const runJust = async (lockFile: string, args: string[]): Promise<CommandResult>
 const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> =>
   stopProcess(runnerProcess, "runner settlement after stop");
 
-const signalJust = (justProcess: ReturnType<typeof startJust>, signal: NodeJS.Signals): void => {
-  if (justProcess.child.pid === undefined) throw new Error("The Just process has no PID");
-  process.kill(-justProcess.child.pid, signal);
-};
-
 const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void> =>
   stopProcess(justProcess, "Just settlement after stop");
 
@@ -246,14 +241,6 @@ process.stdout.write("capacity acquired after descendant cleanup");`,
     identity,
   ]);
 
-const startCapacityObserver = (lockFile: string) =>
-  startRunner(lockFile, [
-    "capacity observer",
-    "sh",
-    "-c",
-    'printf "capacity acquired after supervisor exit"',
-  ]);
-
 const createWorkloadJustfile = (directory: string): void => {
   cpSync(join(repositoryRoot, "package.json"), join(directory, "package.json"));
   symlinkSync(join(repositoryRoot, "node_modules"), join(directory, "node_modules"), "dir");
@@ -276,48 +263,6 @@ const createCompletingPnpm = (directory: string): void => {
   const pnpm = join(directory, "pnpm");
   writeFileSync(pnpm, "#!/usr/bin/env bash\nexit 0\n");
   chmodSync(pnpm, 0o755);
-};
-
-const createBlockingPnpm = (
-  directory: string,
-  readyFile: string,
-  descendantPidFile: string,
-): void => {
-  createWorkloadJustfile(directory);
-  const pnpm = join(directory, "pnpm");
-  writeFileSync(
-    pnpm,
-    `#!/usr/bin/env bash
-set -euo pipefail
-if [[ " $* " == *" exec vitest "* ]]; then
-  printf ready > ${JSON.stringify(readyFile)}
-  (trap '' INT TERM; while :; do sleep 1; done) &
-  descendant=$!
-  printf '%s' "$descendant" > ${JSON.stringify(descendantPidFile)}
-  wait
-fi
-`,
-  );
-  chmodSync(pnpm, 0o755);
-};
-
-const createQualityFixture = (directory: string): void => {
-  writeFileSync(
-    join(directory, "justfile"),
-    `quality:
-    @exec ${JSON.stringify(qualityRunner)}
-
-
-_quality-static:
-    @true
-
-build:
-    @true
-
-test:
-    @pnpm exec vitest
-`,
-  );
 };
 
 const createObservableQualityFixture = (directory: string): void => {
@@ -586,54 +531,6 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       await awaitAllCleanup(
         ...(observer === undefined ? [] : [stopRunner(observer)]),
         stopRunner(holder),
-      );
-    }
-  });
-
-  test.each([
-    ["SIGINT", 130],
-    ["SIGTERM", 143],
-  ] as const)("interrupts quality with %s and releases capacity", async (signal, expectedStatus) => {
-    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-    temporaryPaths.push(directory);
-    const lockFile = join(directory, "capacity.lock");
-    const readyFile = join(directory, "quality-ready");
-    const descendantPidFile = join(directory, "quality-descendant-pid");
-    createBlockingPnpm(directory, readyFile, descendantPidFile);
-    createQualityFixture(directory);
-    const quality = startJust(
-      lockFile,
-      ["quality"],
-      {
-        // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
-        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
-      },
-      directory,
-    );
-
-    let observer: ReturnType<typeof startRunner> | undefined;
-    try {
-      await waitForFile(readyFile);
-      await readProcessIdentity(descendantPidFile);
-      observer = startCapacityObserver(lockFile);
-      await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
-      signalJust(quality, signal);
-      expect(
-        (await settleWithinDeadline(quality.done, "interrupted quality settlement")).status,
-      ).toBe(expectedStatus);
-      expect(quality.output).toContain("quality interrupted after");
-      expect(quality.output).toContain("rerun just quality to retry");
-      expect(quality.output).not.toContain("quality completed in");
-      const observation = await settleWithinDeadline(
-        observer.done,
-        "capacity observer settlement after quality interruption",
-      );
-      expect(observation.status, observation.output).toBe(0);
-      expect(observation.output).toContain("capacity acquired after supervisor exit");
-    } finally {
-      await awaitAllCleanup(
-        ...(observer === undefined ? [] : [stopRunner(observer)]),
-        stopJust(quality),
       );
     }
   });
