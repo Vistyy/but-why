@@ -570,7 +570,10 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
     }
   });
 
-  test("stops quality phase descendants before releasing capacity", async () => {
+  test.each([
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ] as const)("stops quality phase descendants before releasing capacity with %s", async (signal, expectedStatus) => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
@@ -594,10 +597,10 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       observer = startCleanupObserver(lockFile, descendantIdentity);
       await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
       if (quality.child.pid === undefined) throw new Error("The quality process has no PID");
-      process.kill(-quality.child.pid, "SIGTERM");
+      process.kill(-quality.child.pid, signal);
       expect(
         (await settleWithinDeadline(quality.done, "interrupted quality settlement")).status,
-      ).toBe(143);
+      ).toBe(expectedStatus);
       const observation = await settleWithinDeadline(
         observer.done,
         "capacity observer settlement after quality descendant cleanup",
