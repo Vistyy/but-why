@@ -11,7 +11,7 @@ import {
 import type { CandidateValidationOutcome } from "../../candidateValidation/candidateValidationRunStore.js";
 import type { ChangePolicy } from "../../changePolicy.js";
 import { type ValidationPhase, validationPhase } from "../../validationRun/validationRun.js";
-import { decodeValidationPhase } from "./sqliteValidationPosition.js";
+import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 type PhaseResultEvidenceRow = {
@@ -136,12 +136,16 @@ export const validateValidationCompletion = (
   validationRunId: number,
 ): void => {
   const expected = expectedPhases(changePolicy);
-  const results = evidenceRows.map((row) => ({
-    validationRunId: row.validationRunId,
-    phase: decodeValidationPhase(row.phase),
-    producer: row.producer,
-    outcome: decodeOutcome(row.outcome),
-  }));
+  const results = evidenceRows.map((row) => {
+    const phase = decodeValidationPhase(row.phase);
+    configuredValidationPosition(phase, row.producer, changePolicy);
+    return {
+      validationRunId: row.validationRunId,
+      phase,
+      producer: row.producer,
+      outcome: decodeOutcome(row.outcome),
+    };
+  });
   const artifactRefs = new Set<string>();
   const findingsByPosition = new Map<string, number>();
   const toolingPositions = new Set<string>();
