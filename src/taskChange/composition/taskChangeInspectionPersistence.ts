@@ -1,17 +1,29 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { publicChangeId } from "../../../change/changeId.js";
-import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
-import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
-import type { TaskChangeProjection } from "../../inspectTaskChange.js";
+import {
+  type ChangeWithoutAuthorityHistory,
+  changeReadColumns,
+  decodeChangeRow,
+  type StoredChangeRow,
+  validateChangePublicationRelationships,
+} from "../../change/adapters/sqlite/sqliteChangeReadModel.js";
+import { decodePersisted } from "../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import { internalTaskId, publicTaskIdFromInternal } from "../../task/taskId.js";
+import type { TaskChangeProjection } from "../inspectTaskChange.js";
 
 const projectionBatchSize = 500;
 
-type StoredProjectionRow = {
+type StoredProjectionRow = Omit<StoredChangeRow, "id"> & {
   readonly taskId: number;
-  readonly changeId: number | null;
-  readonly acceptanceContext: string | null;
-  readonly closeReason: string | null;
+  readonly id: number | null;
+  readonly activeBlockers: number;
+  readonly activeValidations: number;
+  readonly passingEvidence: number;
+};
+
+type DecodedProjectionRow = {
+  readonly taskId: number;
+  readonly change: ChangeWithoutAuthorityHistory;
   readonly activeBlockers: number;
   readonly activeValidations: number;
   readonly passingEvidence: number;
@@ -30,14 +42,12 @@ export const listTaskChangeProjectionsSqlite = (
       rows.push(
         ...(yield* sql.unsafe<StoredProjectionRow>(
           `SELECT link.task_id AS taskId,
-            change.id AS changeId,
-            change.initial_acceptance_context AS acceptanceContext,
-            change.close_reason AS closeReason,
+            ${changeReadColumns},
             COALESCE(blocker.activeBlockers, 0) AS activeBlockers,
             COALESCE(validation.activeValidations, 0) AS activeValidations,
             COALESCE(passing.passingEvidence, 0) AS passingEvidence
            FROM task_change_links AS link
-           LEFT JOIN changes AS change ON change.id = link.change_id
+           LEFT JOIN changes ON changes.id = link.change_id
            LEFT JOIN (
              SELECT change_id, COUNT(*) AS activeBlockers
              FROM implementation_blockers
@@ -69,22 +79,41 @@ export const listTaskChangeProjectionsSqlite = (
       );
     }
 
+    const decoded = yield* decodePersisted("list Task Change projections", () =>
+      rows.flatMap((row) => {
+        if (row.id === null) return [];
+        return [
+          {
+            taskId: row.taskId,
+            change: decodeChangeRow(row as StoredChangeRow, idPrefix),
+            activeBlockers: row.activeBlockers,
+            activeValidations: row.activeValidations,
+            passingEvidence: row.passingEvidence,
+          },
+        ];
+      }),
+    );
+    yield* Effect.forEach(decoded, (row) =>
+      validateChangePublicationRelationships(
+        sql,
+        row.change.id,
+        row.change.publication,
+        "list Task Change projections",
+        idPrefix,
+      ),
+    );
+
     return yield* decodePersisted("list Task Change projections", () => {
-      const projections = new Map<string, TaskChangeProjection | null>();
-      for (const row of rows) {
-        if (row.changeId === null) {
-          projections.set(publicTaskIdFromInternal(row.taskId, idPrefix), null);
-          continue;
-        }
-        const changeId = publicChangeId(idPrefix, row.changeId);
-        if (row.acceptanceContext === null) {
+      const projections = new Map<string, TaskChangeProjection>();
+      for (const row of decoded as readonly DecodedProjectionRow[]) {
+        if (row.change.acceptanceContext === null) {
           throw new Error("Linked Change has no Acceptance Context");
         }
         if (row.activeValidations > 1) {
           throw new Error("Change has more than one active Validation Run");
         }
         const activity =
-          row.closeReason !== null
+          row.change.state === "closed"
             ? undefined
             : row.activeBlockers > 0
               ? "blocked"
@@ -94,7 +123,7 @@ export const listTaskChangeProjectionsSqlite = (
                   ? "ready"
                   : "implementing";
         projections.set(publicTaskIdFromInternal(row.taskId, idPrefix), {
-          id: changeId,
+          id: row.change.id,
           ...(activity === undefined ? {} : { activity }),
         });
       }

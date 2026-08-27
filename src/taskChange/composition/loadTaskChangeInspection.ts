@@ -5,9 +5,9 @@ import { openSqliteChangeReadPort } from "../../change/adapters/sqlite/sqliteCha
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import type { RepositoryOperationRuntime } from "../../repositoryRuntime/repositoryOperation.js";
-import { listTaskChangeProjectionsSqlite } from "../adapters/sqlite/sqliteTaskChangeInspectionPersistence.js";
 import { openSqliteTaskChangeLinkPort } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
 import { queryTaskChangeProjection, type TaskChangeProjection } from "../inspectTaskChange.js";
+import { listTaskChangeProjectionsSqlite } from "./taskChangeInspectionPersistence.js";
 
 export type LoadedTaskChangeInspection<A> = {
   readonly ok: true;
