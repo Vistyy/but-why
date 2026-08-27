@@ -65,7 +65,7 @@ export const runInspectionCommand = (
     runByWithEnv(
       root,
       {
-        PATH: `${join(root, ".inspection-bin")}:${process.env["PATH"] ?? ""}`,
+        PATH: `${join(root, ".inspection-bin")}:${process.env.PATH ?? ""}`,
         BUT_WHY_NOW: _now,
       },
       ...args,

@@ -65,11 +65,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const textMessages = (messages: readonly unknown[]): readonly string[] =>
   messages.flatMap((message) => {
     if (!isRecord(message)) return [];
-    const content = message["content"];
+    const content = message.content;
     if (!Array.isArray(content)) return [];
     return content.flatMap((part) => {
-      if (!isRecord(part) || part["type"] !== "text") return [];
-      const text = part["text"];
+      if (!isRecord(part) || part.type !== "text") return [];
+      const text = part.text;
       return typeof text === "string" ? [text] : [];
     });
   });
@@ -91,7 +91,7 @@ const runRuntimeCase = (blocked: boolean): RuntimeCase => {
       ],
       {
         cwd: directory,
-        env: { PATH: `${byDirectory}:${process.env["PATH"] ?? ""}` },
+        env: { PATH: `${byDirectory}:${process.env.PATH ?? ""}` },
         timeout: helperProcessTimeoutMs,
       },
     );

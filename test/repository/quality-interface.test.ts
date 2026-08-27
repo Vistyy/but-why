@@ -149,7 +149,7 @@ const startJust = (
 
 const runJust = async (lockFile: string, args: string[]): Promise<CommandResult> => {
   const justProcess = startJust(lockFile, args, {
-    PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
+    PATH: `${dirname(lockFile)}:${process.env.PATH ?? ""}`,
   });
   try {
     return await settleWithinDeadline(justProcess.done, "Just workload settlement");
@@ -470,7 +470,7 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
     try {
       await waitForFile(readyFile);
       unselected = startJust(lockFile, ["test", "--reporter=dot"], {
-        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
+        PATH: `${directory}:${process.env.PATH ?? ""}`,
       });
       await waitForOutput(unselected, "waiting: test is waiting for capacity");
       expect(unselected.child.exitCode).toBeNull();
@@ -603,7 +603,7 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       lockFile,
       ["quality"],
       {
-        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
+        PATH: `${directory}:${process.env.PATH ?? ""}`,
       },
       directory,
     );
