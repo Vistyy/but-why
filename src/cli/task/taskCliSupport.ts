@@ -9,6 +9,7 @@ import {
 } from "../../cliResults.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { RepositoryOperationError } from "../../repositoryRuntime/repositoryOperation.js";
+import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
@@ -73,7 +74,7 @@ export const withTaskReviewInspection = (
           ),
         )
       : use(injected);
-  return catchTaskReviewStorageError(program);
+  return catchTaskReviewStorageError(environment, program);
 };
 
 export const withTaskReviewRecovery = (
@@ -89,7 +90,7 @@ export const withTaskReviewRecovery = (
           ),
         )
       : use(injected);
-  return catchTaskReviewStorageError(program);
+  return catchTaskReviewStorageError(environment, program);
 };
 
 export const withTaskReviewSubmission = (
@@ -124,14 +125,25 @@ export const withTaskReviewSubmission = (
         )
       : environment.taskReviewSubmissionUseCases.submit(taskId, now).pipe(Effect.flatMap(use));
   return program.pipe(
-    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+      ),
+    ),
   );
 };
 
 const catchTaskReviewStorageError = (
+  environment: TaskCommandEnvironment,
   program: Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> =>
-  program.pipe(Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))));
+  program.pipe(
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+      ),
+    ),
+  );
 
 const taskRepositoryInput = (environment: TaskCommandEnvironment) => ({
   cwd: environment.cwd,
