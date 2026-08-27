@@ -67,6 +67,32 @@ type PiProbe = {
 
 type HerdrWorkspace = Readonly<Record<string, unknown>> & { readonly workspace_id: unknown };
 
+type PackageProcessResult = {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+const runPackageProcess = (
+  command: string,
+  args: readonly string[],
+  cwd: string,
+): Promise<PackageProcessResult> => {
+  const child = startTestProcess(command, args, { cwd, timeout: packageProcessTimeoutMs });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (status) => resolve({ status, stdout, stderr }));
+  });
+};
+
 const executeRealHerdrCommand = (
   command: string,
   args: readonly string[],
@@ -155,7 +181,7 @@ describe("release package boundary", () => {
   let fixtureRoot: string | undefined;
   let prepared: PreparedPackage;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const root = acquireTestWorkspace();
     fixtureRoot = root;
     createPackageFixture(root);
@@ -167,17 +193,9 @@ describe("release package boundary", () => {
     writeFileSync(join(root, "justfile"), "default:\n");
     symlinkSync(join(repoRoot, "node_modules"), join(root, "node_modules"));
 
-    const build = runTestProcess("pnpm", ["run", "build"], {
-      cwd: root,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(build.error).toBeUndefined();
+    const build = await runPackageProcess("pnpm", ["run", "build"], root);
     expect(build.status, build.stderr || build.stdout).toBe(0);
-    const pack = runTestProcess("npm", ["pack", "--ignore-scripts", "--json"], {
-      cwd: root,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(pack.error).toBeUndefined();
+    const pack = await runPackageProcess("npm", ["pack", "--ignore-scripts", "--json"], root);
     expect(pack.status, pack.stderr || pack.stdout).toBe(0);
     const [metadata] = JSON.parse(pack.stdout) as readonly PackedPackageMetadata[];
     if (metadata === undefined) throw new Error("npm pack did not return a package");
@@ -185,7 +203,7 @@ describe("release package boundary", () => {
     rmSync(join(root, "node_modules"), { recursive: true, force: true });
     const installedRoot = join(root, "installed");
     const tarball = join(root, metadata.filename);
-    const install = runTestProcess(
+    const install = await runPackageProcess(
       "npm",
       [
         "install",
@@ -196,7 +214,7 @@ describe("release package boundary", () => {
         installedRoot,
         tarball,
       ],
-      { cwd: root, timeout: packageProcessTimeoutMs },
+      root,
     );
     expect(install.status, install.stderr || install.stdout).toBe(0);
     const installedPackage = join(installedRoot, "node_modules", "but-why");

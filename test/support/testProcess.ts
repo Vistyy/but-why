@@ -15,13 +15,6 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const testProcessMaxBufferBytes = 50 * 1024 * 1024;
 const testWorkspaceCommandTimeoutMs = 30_000;
 
-const positiveFinite = (value: number, label: string): number => {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${label} must be finite and positive.`);
-  }
-  return value;
-};
-
 const positiveInteger = (value: number, label: string): number => {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${label} must be a finite positive integer.`);
@@ -64,7 +57,6 @@ type TestProcessOptions = {
   readonly env?: NodeJS.ProcessEnv;
   readonly isolatedHome?: string;
   readonly input?: string | Buffer;
-  readonly maxBuffer?: number;
   readonly timeout?: number;
   readonly detached?: boolean;
 };
@@ -180,10 +172,7 @@ export const runTestProcess = (
       ...prepared.options,
       ...(options.input === undefined ? {} : { input: options.input }),
       encoding: "utf8",
-      maxBuffer:
-        options.maxBuffer === undefined
-          ? testProcessMaxBufferBytes
-          : positiveFinite(options.maxBuffer, "Test process maxBuffer"),
+      maxBuffer: testProcessMaxBufferBytes,
     });
     return {
       ...result,

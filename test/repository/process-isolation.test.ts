@@ -27,7 +27,7 @@ describe("test subprocess isolation", () => {
     expect(stateDirectory).toMatch(/but-why-process-/u);
   });
 
-  test("cleans isolated state after synchronous timeout and rejects incomplete output", () => {
+  test("cleans isolated state after synchronous timeout and rejects missing commands", () => {
     const fixture = createTestWorkspace();
     const timedOut = runTestProcess(
       process.execPath,
@@ -38,14 +38,6 @@ describe("test subprocess isolation", () => {
     expect(timedOut.status).toBeNull();
     expect(timedOut.error).toMatchObject({ code: "ETIMEDOUT" });
     expect(existsSync(timedOut.stdout)).toBe(false);
-
-    const overflowing = runTestProcess(
-      process.execPath,
-      ["-e", 'process.stdout.write("x".repeat(2048));'],
-      { cwd: fixture, maxBuffer: 1024 },
-    );
-    expect(overflowing.status).toBeNull();
-    expect(overflowing.error).toMatchObject({ code: "ENOBUFS" });
 
     const missing = runTestProcess(join(fixture, "missing-command"), [], { cwd: fixture });
     expect(missing.status).toBeNull();

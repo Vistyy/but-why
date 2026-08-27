@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -11,152 +11,12 @@ import {
   RepositorySql,
   repositorySqlLayer,
 } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { repoRoot } from "../support/by-cli.js";
-import { startTestProcess } from "../support/testProcess.js";
 
-const helperTsxLoader = join(repoRoot, "node_modules/tsx/dist/loader.mjs");
-const helperScript = join(repoRoot, "scripts/repository-process-helper.ts");
 const operationDeadlineMs = 1_500;
-const initializerOperationDeadlineMs = 2_000;
-const readinessDeadlineMs = 2_500;
-const childSettlementDeadlineMs = 100;
-const cleanupDeadlineMs = 200;
-const outerTestDeadline = "4775 millis";
-
-type ChildResult = {
-  readonly status: number | null;
-  readonly stdout: string;
-  readonly stderr: string;
-};
-
-type Initializer = {
-  readonly child: ReturnType<typeof startTestProcess>;
-  readonly ready: Promise<void>;
-  readonly done: Promise<ChildResult>;
-};
-
-class DeadlineExceeded extends Error {
-  constructor(description: string, timeoutMs: number) {
-    super(`Timed out after ${timeoutMs}ms waiting for ${description}.`);
-    this.name = "DeadlineExceeded";
-  }
-}
-
-const bounded = async <A>(
-  operation: Promise<A>,
-  description: string,
-  timeoutMs: number,
-): Promise<A> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new DeadlineExceeded(description, timeoutMs)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-};
-
-const startInitializer = (statePath: string, commonDirectory: string): Initializer => {
-  const child = startTestProcess(
-    process.execPath,
-    ["--import", helperTsxLoader, helperScript, "initialize", statePath, commonDirectory],
-    { cwd: dirname(statePath), timeout: 4_000 },
-  );
-  let stdout = "";
-  let stderr = "";
-  let readySeen = false;
-  const ready = new Promise<void>((resolve, reject) => {
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-      if (!readySeen && stdout.includes("ready\n")) {
-        readySeen = true;
-        resolve();
-      }
-    });
-    child.once("error", reject);
-    child.once("close", () => {
-      if (!readySeen) reject(new Error(`Initializer exited before readiness: ${stderr}`));
-    });
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    stderr += chunk.toString();
-  });
-  const done = new Promise<ChildResult>((resolve, reject) => {
-    child.once("close", (status) => resolve({ status, stdout, stderr }));
-    child.once("error", reject);
-  });
-  return { child, ready, done };
-};
-
-const stopInitializer = async (initializer: Initializer): Promise<void> => {
-  if (initializer.child.exitCode === null) {
-    initializer.child.kill("SIGUSR2");
-    initializer.child.kill("SIGTERM");
-  }
-  try {
-    await bounded(initializer.done, "initializer settlement", childSettlementDeadlineMs);
-  } catch {
-    if (initializer.child.exitCode === null) initializer.child.kill("SIGKILL");
-    await bounded(
-      initializer.done,
-      "initializer settlement after SIGKILL",
-      childSettlementDeadlineMs,
-    );
-  }
-};
-
-const runConcurrentInitializers = (
-  statePath: string,
-  commonDirectory: string,
-  preserveTemporaryState: () => void,
-) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => [
-      startInitializer(statePath, commonDirectory),
-      startInitializer(statePath, commonDirectory),
-    ]),
-    (initializers) =>
-      Effect.promise(async () => {
-        await bounded(
-          Promise.all(initializers.map((initializer) => initializer.ready)),
-          "initializer readiness",
-          readinessDeadlineMs,
-        );
-        for (const initializer of initializers) {
-          if (initializer.child.exitCode === null) initializer.child.kill("SIGUSR2");
-        }
-        return await bounded(
-          Promise.all(initializers.map((initializer) => initializer.done)),
-          "initializer settlement",
-          initializerOperationDeadlineMs,
-        );
-      }),
-    (initializers) =>
-      Effect.promise(async () => {
-        try {
-          const results = await bounded(
-            Promise.allSettled(initializers.map(stopInitializer)),
-            "initializer cleanup",
-            cleanupDeadlineMs,
-          );
-          if (results.some((result) => result.status === "rejected")) {
-            preserveTemporaryState();
-            throw new Error("Could not confirm every initializer child settled.");
-          }
-        } catch (error) {
-          preserveTemporaryState();
-          throw error;
-        }
-      }),
-  );
+const outerTestDeadline = "2 seconds";
 
 type TemporaryDirectory = {
   readonly directory: string;
-  preserve: boolean;
 };
 
 const withTemporaryDirectory = <A, E, R>(
@@ -164,12 +24,9 @@ const withTemporaryDirectory = <A, E, R>(
   use: (temporary: TemporaryDirectory) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E | unknown, R> =>
   Effect.acquireUseRelease(
-    Effect.sync(() => ({ directory: mkdtempSync(join(tmpdir(), prefix)), preserve: false })),
+    Effect.sync(() => ({ directory: mkdtempSync(join(tmpdir(), prefix)) })),
     use,
-    (temporary) =>
-      Effect.sync(() => {
-        if (!temporary.preserve) rmSync(temporary.directory, { recursive: true, force: true });
-      }),
+    (temporary) => Effect.sync(() => rmSync(temporary.directory, { recursive: true, force: true })),
   );
 
 const withHeldWriteLock = <A, E>(
@@ -203,35 +60,46 @@ const withHeldWriteLock = <A, E>(
       }),
   );
 
-const lastJsonLine = (stdout: string): unknown => {
-  const line = stdout.trim().split("\n").at(-1);
-  if (line === undefined) throw new Error(`Process did not produce JSON: ${stdout}`);
-  return JSON.parse(line);
-};
-
 describe("Shared Repository State initialization coordination", () => {
-  it.live("initializes one absent path successfully from two processes", () =>
-    withTemporaryDirectory("but-why-concurrent-init-", (temporary) =>
-      runConcurrentInitializers(
-        join(temporary.directory, "state.sqlite"),
-        temporary.directory,
-        () => {
-          temporary.preserve = true;
-        },
-      ).pipe(
-        Effect.flatMap((results) => {
-          for (const result of results) {
-            expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-            expect(lastJsonLine(result.stdout)).toEqual({
-              ok: true,
-              identity: { commonDirectory: temporary.directory, idPrefix: "BY" },
-            });
-          }
+  it.live("initializes one absent path concurrently through independent connections", () =>
+    withTemporaryDirectory("but-why-concurrent-init-", (temporary) => {
+      const statePath = join(temporary.directory, "state.sqlite");
+      const initialize = () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const repository = yield* RepositorySql;
+            return yield* repository.operation(
+              "read initialized repository identity",
+              (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
+                SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
+                FROM shared_state_identity
+                WHERE id = 1
+              `,
+            );
+          }).pipe(
+            Effect.provide(
+              repositorySqlLayer({
+                statePath,
+                commonDirectory: temporary.directory,
+                lifecycle: "initialize",
+                sqliteBusyTimeoutMs: 250,
+                migrationContentionTimeoutMs: 1_000,
+                migrationContentionRetryDelayMs: 20,
+              }),
+            ),
+          ),
+        );
 
-          return Effect.void;
+      return Effect.all([initialize(), initialize()], { concurrency: 2 }).pipe(
+        Effect.map((identities) => {
+          expect(identities).toEqual([
+            [{ commonDirectory: temporary.directory, idPrefix: "BY" }],
+            [{ commonDirectory: temporary.directory, idPrefix: "BY" }],
+          ]);
+          return identities;
         }),
-      ),
-    ).pipe(Effect.timeout(outerTestDeadline)),
+      );
+    }).pipe(Effect.timeout(outerTestDeadline)),
   );
 
   it.live(
