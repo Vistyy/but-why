@@ -18,7 +18,10 @@ import type {
   CandidateValidationPhaseResult,
   CandidateValidationToolingFailure,
 } from "../../candidateValidation/candidateValidationRunStore.js";
+import { internalChangeId } from "../../changeId.js";
+import type { ChangePolicy } from "../../changePolicy.js";
 import { validationPhase } from "../../validationRun/validationRun.js";
+import { readCandidateById } from "./sqliteCandidateStorage.js";
 import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
@@ -116,57 +119,51 @@ export const listValidationFindings = (
       "list Candidate validation Findings",
       idPrefix,
     );
-    const artifacts = yield* listValidationArtifacts(sql, validationRunId, idPrefix);
-    const availableArtifactRefs = new Set(artifacts.map((artifact) => artifact.ref));
-    return yield* decodePersisted("list Candidate validation Findings", () =>
-      rows.flatMap((row) =>
-        parseFindings(row.findings, availableArtifactRefs).map((finding) => ({
-          ...finding,
-          validationRunId: assertRunId(row.validationRunId, validationRunId),
-          phase: decodePhase(row.phase),
-          producer: row.producer,
-        })),
-      ),
-    );
+    return yield* decodePersisted("list Candidate validation Findings", () => {
+      const artifacts = decodeArtifacts(rows, validationRunId);
+      return decodeFindings(rows, artifacts, validationRunId);
+    });
   });
 
 export const listValidationFindingsForRuns = (
   sql: SqlClient.SqlClient,
+  changeId: string,
   validationRunIds: readonly number[],
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    if (validationRunIds.length === 0) return [];
+    const firstValidationRunId = validationRunIds[0];
+    if (firstValidationRunId === undefined) return [];
+    const operationName = "list Stall Detection Findings";
+    const authority = yield* requireValidationExecutionAuthority(
+      sql,
+      firstValidationRunId,
+      operationName,
+      idPrefix,
+    );
+    const candidate = yield* readCandidateById(
+      sql,
+      authority.run.candidateId,
+      operationName,
+      idPrefix,
+    );
+    if (candidate?.changeId !== changeId) {
+      return yield* invalidData(operationName, "Validation Run history belongs to another Change");
+    }
     const rows = yield* sql<StoredPhaseResultRow>`
-      SELECT validation_run_id AS validationRunId, phase, producer, outcome,
-        findings, artifacts, tooling_failure AS toolingFailure
-      FROM validation_phase_results
-      WHERE ${sql.in("validation_run_id", validationRunIds)}
+      SELECT result.validation_run_id AS validationRunId, result.phase, result.producer,
+        result.outcome, result.findings, result.artifacts,
+        result.tooling_failure AS toolingFailure
+      FROM validation_phase_results AS result
+      JOIN validation_runs AS run ON run.id = result.validation_run_id
+      JOIN candidates AS candidate ON candidate.id = run.candidate_id
+      WHERE ${sql.in("result.validation_run_id", validationRunIds)}
+        AND candidate.change_id = ${internalChangeId(changeId, idPrefix)}
     `;
-    return yield* decodePersisted("list Stall Detection Findings", () => {
-      const artifactRefsByRun = new Map<number, Set<string>>();
-      for (const row of rows) {
-        const refs = artifactRefsByRun.get(row.validationRunId) ?? new Set<string>();
-        for (const artifact of parseArtifacts(row.artifacts)) refs.add(`artifact:${artifact.path}`);
-        artifactRefsByRun.set(row.validationRunId, refs);
-      }
-      return rows
-        .flatMap((row) =>
-          parseFindings(
-            row.findings,
-            artifactRefsByRun.get(row.validationRunId) ?? new Set<string>(),
-          ).map((finding) => ({
-            ...finding,
-            validationRunId: row.validationRunId,
-            phase: decodePhase(row.phase),
-            producer: row.producer,
-          })),
-        )
-        .sort(
-          (left, right) =>
-            left.validationRunId - right.validationRunId ||
-            phasePosition(left.phase) - phasePosition(right.phase) ||
-            left.producer.localeCompare(right.producer),
-        );
+    return yield* decodePersisted(operationName, () => {
+      const orderedRows = orderPhaseResultRows(rows, authority.changePolicy);
+      const artifacts = decodeArtifacts(orderedRows);
+      return decodeFindings(orderedRows, artifacts);
     });
   });
 
@@ -214,20 +211,7 @@ export const listValidationArtifacts = (
       idPrefix,
     );
     return yield* decodePersisted("list Candidate validation Artifacts", () =>
-      rows.flatMap((row) =>
-        parseArtifacts(row.artifacts).map((artifact) => {
-          const record = {
-            ...artifact,
-            ref: `artifact:${artifact.path}`,
-            truncated: artifact.storedBytes < artifact.originalBytes,
-            validationRunId: assertRunId(row.validationRunId, validationRunId),
-            phase: decodePhase(row.phase),
-            producer: row.producer,
-          };
-          assertValidationArtifactRecord(record);
-          return record;
-        }),
-      ),
+      decodeArtifacts(rows, validationRunId),
     );
   });
 
@@ -252,24 +236,77 @@ const readOrderedPhaseResults = (
       idPrefix,
     );
     return yield* decodePersisted(operationName, () =>
-      rows
-        .map((row) => ({
-          row,
-          phasePosition: phasePosition(row.phase),
-          producerPosition: configuredValidationPosition(
-            row.phase,
-            row.producer,
-            authority.changePolicy,
-          ),
-        }))
-        .sort(
-          (left, right) =>
-            left.phasePosition - right.phasePosition ||
-            left.producerPosition - right.producerPosition,
-        )
-        .map(({ row }) => row),
+      orderPhaseResultRows(rows, authority.changePolicy),
     );
   });
+
+const orderPhaseResultRows = (
+  rows: readonly StoredPhaseResultRow[],
+  changePolicy: ChangePolicy,
+): readonly StoredPhaseResultRow[] =>
+  rows
+    .map((row) => ({
+      row,
+      phasePosition: phasePosition(row.phase),
+      producerPosition: configuredValidationPosition(row.phase, row.producer, changePolicy),
+    }))
+    .sort(
+      (left, right) =>
+        left.row.validationRunId - right.row.validationRunId ||
+        left.phasePosition - right.phasePosition ||
+        left.producerPosition - right.producerPosition,
+    )
+    .map(({ row }) => row);
+
+const decodeArtifacts = (
+  rows: readonly StoredPhaseResultRow[],
+  expectedRunId?: number,
+): readonly CandidateValidationArtifact[] =>
+  rows.flatMap((row) =>
+    parseArtifacts(row.artifacts).map((artifact) => {
+      const record = {
+        ...artifact,
+        ref: `artifact:${artifact.path}`,
+        truncated: artifact.storedBytes < artifact.originalBytes,
+        validationRunId:
+          expectedRunId === undefined
+            ? row.validationRunId
+            : assertRunId(row.validationRunId, expectedRunId),
+        phase: decodePhase(row.phase),
+        producer: row.producer,
+      };
+      assertValidationArtifactRecord(record);
+      return record;
+    }),
+  );
+
+const decodeFindings = (
+  rows: readonly StoredPhaseResultRow[],
+  artifacts: readonly CandidateValidationArtifact[],
+  expectedRunId?: number,
+): readonly CandidateValidationFinding[] => {
+  const artifactRefsByRun = new Map<number, Set<string>>();
+  for (const artifact of artifacts) {
+    const refs = artifactRefsByRun.get(artifact.validationRunId) ?? new Set<string>();
+    refs.add(artifact.ref);
+    artifactRefsByRun.set(artifact.validationRunId, refs);
+  }
+  return rows.flatMap((row) => {
+    const validationRunId =
+      expectedRunId === undefined
+        ? row.validationRunId
+        : assertRunId(row.validationRunId, expectedRunId);
+    return parseFindings(
+      row.findings,
+      artifactRefsByRun.get(validationRunId) ?? new Set<string>(),
+    ).map((finding) => ({
+      ...finding,
+      validationRunId,
+      phase: decodePhase(row.phase),
+      producer: row.producer,
+    }));
+  });
+};
 
 const parseFindings = (
   source: string,

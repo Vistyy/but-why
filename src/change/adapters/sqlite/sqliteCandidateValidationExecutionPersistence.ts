@@ -205,9 +205,14 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         repository.transaction("list Candidate validation Findings", (sql) =>
           listValidationFindings(sql, validationRunId, repository.idPrefix),
         ),
-      listFindingsForRuns: (validationRunIds) =>
+      listFindingsForRuns: (input) =>
         repository.transaction("list Stall Detection Findings", (sql) =>
-          listValidationFindingsForRuns(sql, validationRunIds),
+          listValidationFindingsForRuns(
+            sql,
+            input.changeId,
+            input.validationRunIds,
+            repository.idPrefix,
+          ),
         ),
       listPreviousCandidateReviewerFindings: (input) =>
         repository.transaction("list previous Candidate reviewer Findings", (sql) =>

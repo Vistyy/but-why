@@ -367,7 +367,10 @@ const evaluateStallDetection = (
 
     const qualifyingRunIds = qualifying.map((run) => run.id);
     const findingsByRun = Map.groupBy(
-      yield* dependencies.persistence.listFindingsForRuns(qualifyingRunIds),
+      yield* dependencies.persistence.listFindingsForRuns({
+        changeId: input.changeId,
+        validationRunIds: qualifyingRunIds,
+      }),
       (finding) => finding.validationRunId,
     );
     const groups: StallDetectionRunGroup[] = qualifying.map((run) => ({
