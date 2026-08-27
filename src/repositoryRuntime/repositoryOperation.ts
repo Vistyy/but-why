@@ -8,10 +8,10 @@ import {
   type RepositoryRuntimeLoadError,
 } from "./repositoryRuntime.js";
 
-export type RepositoryOperationRuntime = RepositoryRuntime<LocalRepositoryContext>;
+type RepositoryOperationRuntime = RepositoryRuntime<LocalRepositoryContext>;
 export type RepositoryOperationError = RepositoryStorageError | RepositoryRuntimeLoadError;
 
-export const openRepositoryOperation = (
+const openRepositoryOperation = (
   cwd: string,
 ):
   | { readonly ok: true; readonly runtime: RepositoryOperationRuntime }

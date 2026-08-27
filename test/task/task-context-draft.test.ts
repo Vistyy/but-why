@@ -2,8 +2,7 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openRepositoryOperation } from "../../src/repositoryRuntime/repositoryOperation.js";
+import { runRepositoryOperationAt } from "../../src/repositoryRuntime/repositoryOperation.js";
 import { createTask } from "../../src/task/composition/createTask.js";
 import {
   type ApplyTaskContextDraftResult,
@@ -29,21 +28,16 @@ const createTestTask = (root: string, description = "Original description") =>
     return result.task;
   });
 
-const setTaskState = (root: string, taskId: string, state: "todo" | "done" | "cancelled") => {
-  const loaded = openRepositoryOperation(root);
-  if (!loaded.ok) throw new Error(loaded.error.code);
-  return loaded.runtime.provide(
-    Effect.flatMap(RepositorySql, (repository) =>
-      repository.operation(
-        "set Task Context draft fixture state",
-        (sql) => sql`
-          UPDATE tasks SET state = ${state}, cancel_reason = ${state === "cancelled" ? "fixture" : null}
-          WHERE id = ${internalTaskId(publicTaskId(taskId), repository.idPrefix)}
-        `,
-      ),
+const setTaskState = (root: string, taskId: string, state: "todo" | "done" | "cancelled") =>
+  runRepositoryOperationAt(root, (_context, repository) =>
+    repository.operation(
+      "set Task Context draft fixture state",
+      (sql) => sql`
+        UPDATE tasks SET state = ${state}, cancel_reason = ${state === "cancelled" ? "fixture" : null}
+        WHERE id = ${internalTaskId(publicTaskId(taskId), repository.idPrefix)}
+      `,
     ),
   );
-};
 
 it.effect("creates and replaces Task Context drafts from current intent", () =>
   withRepository((root) =>
