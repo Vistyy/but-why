@@ -11,6 +11,7 @@ import {
   listValidationPhaseResults,
   listValidationToolingFailures,
 } from "./sqliteValidationEvidenceStorage.js";
+import { decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 type PhaseResultEvidenceRow = {
@@ -251,6 +252,38 @@ const isPreDispatchReviewerIntegrityFailure = (
           ? "verify_acceptance_candidate"
           : "verify_specialist_candidate"))
   );
+};
+
+export const requireCompletePassingValidationEvidence = (
+  changePolicy: ChangePolicy,
+  results: readonly {
+    readonly phase: string;
+    readonly producer: string;
+    readonly outcome: string;
+  }[],
+  runToolingFailure: string | null,
+): void => {
+  const expected = expectedPhases(changePolicy);
+  const resultByPosition = new Map<string, { readonly outcome: "passed" | "failed" }>();
+  for (const result of results) {
+    const phase = decodeValidationPhase(result.phase);
+    if (result.outcome !== "passed" && result.outcome !== "failed") {
+      throw new Error("Validation Phase Result outcome is unsupported");
+    }
+    const key = positionKey(phase, result.producer);
+    if (resultByPosition.has(key)) {
+      throw new Error("Validation Phase Result position is duplicated");
+    }
+    resultByPosition.set(key, { outcome: result.outcome });
+  }
+  if (runToolingFailure !== null) {
+    throw new Error("A passed Validation Run contains Tooling Failure evidence");
+  }
+  for (const group of expected) requireCompletePassingGroup(group, resultByPosition);
+  const expectedResultCount = expected.reduce((count, group) => count + group.producers.length, 0);
+  if (resultByPosition.size !== expectedResultCount) {
+    throw new Error("A passed Validation Run contains unexpected phase evidence");
+  }
 };
 
 const expectedPhases = (changePolicy: ChangePolicy): readonly ExpectedPhase[] => [
