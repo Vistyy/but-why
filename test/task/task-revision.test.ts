@@ -2,7 +2,10 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskReviewPersistence } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
+import {
+  listTaskReviewsSqlite,
+  openSqliteTaskReviewPersistence,
+} from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { isTaskState, taskStates } from "../../src/task/lifecycle.js";
 import { parsePublicTaskId, publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import {
@@ -19,6 +22,13 @@ import {
   getTaskContextInSqlite,
   getTaskInSqlite,
 } from "../support/taskOperations.js";
+
+const listReviewsInSqlite = (taskId: string) =>
+  Effect.flatMap(RepositorySql, (repository) =>
+    repository.transaction("list Task Reviews", (sql) =>
+      listTaskReviewsSqlite(sql, taskId, repository.idPrefix, repository.commonDirectory),
+    ),
+  );
 
 const now = "2026-08-12T10:00:00.000Z";
 const later = "2026-08-12T10:05:00.000Z";
@@ -105,7 +115,8 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
         title: "Approved proposal",
         description: "Approved intent",
       });
-      expect(yield* reviews.listForTask(publicTaskId("BY-2"))).toMatchObject([
+      const listed = yield* listReviewsInSqlite(publicTaskId("BY-2"));
+      expect(listed).toMatchObject([
         { id: completed.review.id, state: "complete", outcome: "passed" },
       ]);
       expect(before).toMatchObject({ state: "todo" });
@@ -160,7 +171,7 @@ it.scoped("requires revision before renaming a Todo Task", () =>
       const reviews = yield* openSqliteTaskReviewPersistence();
       yield* createTaskInSqlite({ title: "Approved title", description: "Intent", now });
       yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), now);
-      const reviewBefore = yield* reviews.listForTask(publicTaskId("BY-1"));
+      const reviewBefore = yield* listReviewsInSqlite(publicTaskId("BY-1"));
 
       expect(
         yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-1"), title: "Changed title" }),
@@ -169,7 +180,7 @@ it.scoped("requires revision before renaming a Todo Task", () =>
       expect(
         yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-1"), title: "Changed title" }),
       ).toMatchObject({ ok: true, noOp: false, task: { title: "Changed title", state: "new" } });
-      expect(yield* reviews.listForTask(publicTaskId("BY-1"))).toEqual(reviewBefore);
+      expect(yield* listReviewsInSqlite(publicTaskId("BY-1"))).toEqual(reviewBefore);
       expect(yield* reviews.reuseJudgment(publicTaskId("BY-1"), later)).toBeUndefined();
     }),
   ),

@@ -168,10 +168,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transaction("read Task Review", (sql) =>
         getReview(sql, reviewId, repository.idPrefix, repository.commonDirectory),
       ),
-    listForTask: (taskId) =>
-      repository.transaction("list Task Reviews", (sql) =>
-        listTaskReviewsSqlite(sql, taskId, repository.idPrefix, repository.commonDirectory),
-      ),
     getReviewerAgentSession: (taskId) =>
       repository.transaction("read Task Agent Session", (sql) =>
         Effect.map(
@@ -198,19 +194,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             WHERE id = ${reviewId} AND outcome IS NULL
           `;
         }).pipe(Effect.asVoid),
-      ),
-    getLatestForTask: (taskId) =>
-      repository.transaction("read current Task Review", (sql) =>
-        Effect.gen(function* () {
-          const rows = yield* sql.unsafe<ReviewRow>(
-            `SELECT ${reviewColumns} FROM task_reviews WHERE task_id = ? ORDER BY id DESC LIMIT 1`,
-            [internalTaskId(taskId, repository.idPrefix)],
-          );
-          const row = rows[0];
-          return row === undefined
-            ? undefined
-            : yield* decodeReview(sql, row, repository.idPrefix, repository.commonDirectory);
-        }),
       ),
     proposalIsCurrent: (review) =>
       repository.transaction("compare Task Review proposal", (sql) =>

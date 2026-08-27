@@ -14,6 +14,7 @@ import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repos
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import {
   admitTaskReview,
+  listTaskReviewsSqlite,
   openSqliteTaskReviewPersistence,
   taskReviewAdmissionRejection,
 } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
@@ -27,6 +28,13 @@ import { createGitRepo } from "../support/by-cli.js";
 import { withTemporaryRepositoryState, withTestRepository } from "../support/repository.js";
 import { createTaskInSqlite, getTaskInSqlite } from "../support/taskOperations.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
+
+const listReviewsInSqlite = (taskId: string) =>
+  Effect.flatMap(RepositorySql, (repository) =>
+    repository.transaction("list Task Reviews", (sql) =>
+      listTaskReviewsSqlite(sql, taskId, repository.idPrefix, repository.commonDirectory),
+    ),
+  );
 
 const now = "2026-08-11T12:00:00.000Z";
 const later = "2026-08-11T12:05:00.000Z";
@@ -409,7 +417,7 @@ it.scoped("rejects Task reviewer policy changes after the first Invocation", () 
         ],
       });
       expect(historical?.reviewerConfiguration).toEqual(policy);
-      expect(yield* reviews.listForTask(publicTaskId("BY-1"))).toHaveLength(1);
+      expect(yield* listReviewsInSqlite(publicTaskId("BY-1"))).toHaveLength(1);
     }),
   ),
 );
@@ -818,13 +826,9 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
       });
       expect(passed).toMatchObject({ ok: true, outcome: "passed" });
 
-      expect((yield* reviews.listForTask(publicTaskId("BY-1"))).map((review) => review.id)).toEqual(
-        [1, 2],
-      );
-      expect(yield* reviews.getLatestForTask(publicTaskId("BY-1"))).toMatchObject({
-        id: 2,
-        outcome: "passed",
-      });
+      const listed = yield* listReviewsInSqlite(publicTaskId("BY-1"));
+      expect(listed.map((review) => review.id)).toEqual([1, 2]);
+      expect(listed.at(-1)).toMatchObject({ id: 2, outcome: "passed" });
     }),
   ),
 );

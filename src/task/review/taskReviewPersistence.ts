@@ -166,12 +166,6 @@ export type TaskReviewPersistence = {
   readonly getById: (
     reviewId: number,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
-  readonly getLatestForTask: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
-  readonly listForTask: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<readonly TaskReviewRecord[], RepositoryStorageError>;
   readonly getReviewerAgentSession: (
     taskId: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
