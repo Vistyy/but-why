@@ -291,7 +291,7 @@ test:
     `#!/usr/bin/env bash
 set -euo pipefail
 printf ready > ${JSON.stringify(readyFile)}
-sleep 100 &
+(trap '' INT TERM; while :; do sleep 1; done) &
 descendant=$!
 printf '%s' "$descendant" > ${JSON.stringify(descendantPidFile)}
 wait
