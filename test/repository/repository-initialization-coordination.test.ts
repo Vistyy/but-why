@@ -13,6 +13,7 @@ import {
 } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 
 const operationDeadlineMs = 1_500;
+const temporaryContentionMs = 100;
 const outerTestDeadline = "2 seconds";
 
 type TemporaryDirectory = {
@@ -29,46 +30,73 @@ const withTemporaryDirectory = <A, E, R>(
     (temporary) => Effect.sync(() => rmSync(temporary.directory, { recursive: true, force: true })),
   );
 
+type HeldWriteLock = {
+  readonly release: () => void;
+};
+
+const acquireWriteLock = (statePath: string, createMigrationLedger = false): HeldWriteLock => {
+  const database = new DatabaseSync(statePath, { timeout: 0 });
+  if (createMigrationLedger) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS effect_sql_migrations (
+        migration_id INTEGER PRIMARY KEY NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        name VARCHAR(255) NOT NULL
+      )
+    `);
+  }
+  database.exec("BEGIN IMMEDIATE");
+  let released = false;
+  return {
+    release: () => {
+      if (released) return;
+      released = true;
+      try {
+        database.exec("ROLLBACK");
+      } finally {
+        database.close();
+      }
+    },
+  };
+};
+
 const withHeldWriteLock = <A, E>(
   statePath: string,
   use: () => Effect.Effect<A, E>,
   createMigrationLedger = false,
 ): Effect.Effect<A, E | unknown> =>
   Effect.acquireUseRelease(
+    Effect.sync(() => acquireWriteLock(statePath, createMigrationLedger)),
+    use,
+    (lock) => Effect.sync(lock.release),
+  );
+
+const withTemporarilyHeldWriteLock = <A, E>(
+  statePath: string,
+  use: () => Effect.Effect<A, E>,
+): Effect.Effect<A, E | unknown> =>
+  Effect.acquireUseRelease(
     Effect.sync(() => {
-      const database = new DatabaseSync(statePath, { timeout: 0 });
-      if (createMigrationLedger) {
-        database.exec(`
-            CREATE TABLE IF NOT EXISTS effect_sql_migrations (
-              migration_id INTEGER PRIMARY KEY NOT NULL,
-              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              name VARCHAR(255) NOT NULL
-            )
-          `);
-      }
-      database.exec("BEGIN IMMEDIATE");
-      return database;
+      const lock = acquireWriteLock(statePath);
+      return { lock, timer: setTimeout(lock.release, temporaryContentionMs) };
     }),
     use,
-    (database) =>
+    ({ lock, timer }) =>
       Effect.sync(() => {
-        try {
-          database.exec("ROLLBACK");
-        } finally {
-          database.close();
-        }
+        clearTimeout(timer);
+        lock.release();
       }),
   );
 
 describe("Shared Repository State initialization coordination", () => {
-  it.live("initializes one absent path concurrently through independent connections", () =>
+  it.live("initializes absent state after migration contention clears", () =>
     withTemporaryDirectory("but-why-concurrent-init-", (temporary) => {
       const statePath = join(temporary.directory, "state.sqlite");
-      const initialize = () =>
+      return withTemporarilyHeldWriteLock(statePath, () =>
         Effect.scoped(
           Effect.gen(function* () {
             const repository = yield* RepositorySql;
-            return yield* repository.operation(
+            const identities = yield* repository.operation(
               "read initialized repository identity",
               (sql) => sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
                 SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
@@ -76,28 +104,20 @@ describe("Shared Repository State initialization coordination", () => {
                 WHERE id = 1
               `,
             );
+            expect(identities).toEqual([{ commonDirectory: temporary.directory, idPrefix: "BY" }]);
           }).pipe(
             Effect.provide(
               repositorySqlLayer({
                 statePath,
                 commonDirectory: temporary.directory,
                 lifecycle: "initialize",
-                sqliteBusyTimeoutMs: 250,
+                sqliteBusyTimeoutMs: 0,
                 migrationContentionTimeoutMs: 1_000,
                 migrationContentionRetryDelayMs: 20,
               }),
             ),
           ),
-        );
-
-      return Effect.all([initialize(), initialize()], { concurrency: 2 }).pipe(
-        Effect.map((identities) => {
-          expect(identities).toEqual([
-            [{ commonDirectory: temporary.directory, idPrefix: "BY" }],
-            [{ commonDirectory: temporary.directory, idPrefix: "BY" }],
-          ]);
-          return identities;
-        }),
+        ),
       );
     }).pipe(Effect.timeout(outerTestDeadline)),
   );
