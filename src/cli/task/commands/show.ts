@@ -3,11 +3,9 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { success } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
-import { inspectTask } from "../../../task/composition/inspectTask.js";
-import { listTaskChangeProjections } from "../../../taskChange/composition/loadTaskChangeInspection.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
+import { inspectTaskForInspection } from "../../../taskChange/composition/taskInspection.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskNotFound,
@@ -21,19 +19,16 @@ export const runTaskShowCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (cwd) => {
-    const taskId = resolveTaskId(cwd, parsed.taskId);
-    if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.gen(function* () {
-      const task = yield* inspectTask(cwd, taskId.taskId);
-      if (task === undefined) return taskNotFound(taskId.taskId);
-      const projections = yield* listTaskChangeProjections(cwd, [taskId.taskId]);
-      const projection = projections.get(taskId.taskId) ?? null;
-      return yield* withTaskReviewInspection(environment, (reviews) =>
+  return withTasks(environment, (cwd) =>
+    Effect.flatMap(inspectTaskForInspection(cwd, parsed.taskId), (inspection) => {
+      if (!inspection.ok) return Effect.succeed(taskIdResolutionError(inspection.error));
+      const { task, change: projection } = inspection.value;
+      if (task === undefined) return Effect.succeed(taskNotFound(parsed.taskId));
+      return withTaskReviewInspection(environment, (reviews) =>
         Effect.gen(function* () {
-          const review = yield* reviews.getLatestForTask(taskId.taskId);
+          const review = yield* reviews.getLatestForTask(parsed.taskId);
           const simplificationAdvice = yield* reviews.getCompletedSimplificationAdvice(
-            taskId.taskId,
+            parsed.taskId,
           );
           const proposalCurrent =
             review === undefined ? undefined : yield* reviews.proposalIsCurrent(review);
@@ -91,6 +86,6 @@ export const runTaskShowCommand = (
           });
         }),
       );
-    });
-  });
+    }),
+  );
 };

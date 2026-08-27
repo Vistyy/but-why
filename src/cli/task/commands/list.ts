@@ -3,10 +3,9 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { success, usageError } from "../../../cliResults.js";
-import { listTasks } from "../../../task/composition/listTasks.js";
 import type { TaskState } from "../../../task/lifecycle.js";
 import type { TaskListLimit } from "../../../task/taskStore.js";
-import { listTaskChangeProjections } from "../../../taskChange/composition/loadTaskChangeInspection.js";
+import { listTasksForInspection } from "../../../taskChange/composition/taskInspection.js";
 import { type TaskCommandEnvironment, withTasks } from "../taskCliSupport.js";
 
 export type TaskListCommand = {
@@ -25,36 +24,29 @@ export const runListCommand = (
   if (!limit.ok) return Effect.succeed(limit.result);
 
   return withTasks(environment, (cwd) =>
-    Effect.flatMap(
-      listTasks(cwd, {
+    Effect.map(
+      listTasksForInspection(cwd, {
         includeDone: command.all || command.state !== undefined,
         ...(command.state === undefined ? {} : { state: command.state }),
         limit: limit.value,
       }),
       (result) =>
-        Effect.map(
-          listTaskChangeProjections(
-            cwd,
-            result.tasks.map((task) => task.id),
-          ),
-          (projections) =>
-            success({
-              count: result.tasks.length,
-              total: result.total,
-              tasks: result.tasks.map((task) => ({
-                id: task.id,
-                title: task.title,
-                state: task.state,
-                blockedBy: task.blockedBy,
-                change: projections.get(task.id) ?? null,
-              })),
-              ...(result.tasks.length === 0
-                ? { help: [createTaskHelp] }
-                : result.tasks.length < result.total
-                  ? { help: [listMoreTasksHelp(command)] }
-                  : {}),
-            }),
-        ),
+        success({
+          count: result.tasks.length,
+          total: result.total,
+          tasks: result.tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            state: task.state,
+            blockedBy: task.blockedBy,
+            change: result.changeProjections.get(task.id) ?? null,
+          })),
+          ...(result.tasks.length === 0
+            ? { help: [createTaskHelp] }
+            : result.tasks.length < result.total
+              ? { help: [listMoreTasksHelp(command)] }
+              : {}),
+        }),
     ),
   );
 };
