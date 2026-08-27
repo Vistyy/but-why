@@ -60,6 +60,20 @@ const parseHelpOutput = (stdout: string): { readonly help?: unknown } =>
   JSON.parse(stdout) as { readonly help?: unknown };
 
 describe("by CLI", () => {
+  it.effect.each(["A".repeat(257), "BY-9007199254740992"])(
+    "rejects an invalid Task ID at the CLI boundary",
+    (taskId) =>
+      Effect.gen(function* () {
+        const result = yield* runByInProcessEffect(createTestWorkspace(), ["task", "show", taskId]);
+
+        expect(result.status).toBe(2);
+        expect(result.stderr).toBe("");
+        expect(parseOutput(result.stdout)).toMatchObject({
+          error: { code: "invalid_task_id" },
+        });
+      }),
+  );
+
   it.effect("runs Task Intent and Task/Change operations through the CLI seam", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => createInitializedRepo()),

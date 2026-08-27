@@ -3,7 +3,8 @@ import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
-import { publicTaskId } from "../../src/task/taskId.js";
+import { isTaskState, taskStates } from "../../src/task/lifecycle.js";
+import { parsePublicTaskId, publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import {
   passTaskReviewFixture,
   setTerminalTaskStateFixture,
@@ -34,6 +35,45 @@ const policy = {
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,
 };
+
+it.effect("preserves Task identity and lifecycle boundaries", () =>
+  Effect.sync(() => {
+    expect(parsePublicTaskId("BY-1")).toEqual({ ok: true, taskId: publicTaskId("BY-1") });
+    expect(parsePublicTaskId("linear/ENG-123:acceptance")).toEqual({
+      ok: false,
+      code: "task_id_invalid_shape",
+    });
+    expect(parsePublicTaskId("BY-9007199254740992")).toEqual({
+      ok: false,
+      code: "task_id_invalid_shape",
+    });
+    expect(parsePublicTaskId("")).toEqual({ ok: false, code: "empty_task_id" });
+    expect(parsePublicTaskId(" BY-1")).toEqual({ ok: false, code: "task_id_has_whitespace" });
+    expect(parsePublicTaskId("BY-1\n")).toEqual({
+      ok: false,
+      code: "task_id_has_whitespace",
+    });
+    expect(parsePublicTaskId("BY-\u00001")).toEqual({ ok: false, code: "task_id_has_control" });
+    expect(parsePublicTaskId("BY-\u00851")).toEqual({ ok: false, code: "task_id_has_control" });
+    expect(parsePublicTaskId("A".repeat(257))).toEqual({
+      ok: false,
+      code: "task_id_too_long",
+      maxLength: 256,
+    });
+
+    const first = taskSlugForId(publicTaskId("BY-1"));
+    const second = taskSlugForId(publicTaskId("BY-2"));
+    expect(first).toMatch(/^by-1-[0-9a-f]{12}$/u);
+    expect(second).toMatch(/^by-2-[0-9a-f]{12}$/u);
+    expect(first).not.toBe(second);
+    expect(taskSlugForId(publicTaskId("BY-1"))).toBe(first);
+
+    expect(taskStates).toEqual(["new", "todo", "done", "cancelled"]);
+    for (const state of taskStates) expect(isTaskState(state)).toBe(true);
+    for (const state of ["implementing", "blocked", "validating", "ready", "unknown"])
+      expect(isTaskState(state)).toBe(false);
+  }),
+);
 
 it.scoped("revises an unlinked Todo Task while preserving its intent and Review evidence", () =>
   withTemporaryRepositoryState(({ repositoryRoot }) =>

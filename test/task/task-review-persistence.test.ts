@@ -20,6 +20,7 @@ import {
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import type { TaskSimplificationAdvice } from "../../src/task/review/taskSimplificationAdvice.js";
+import { decodeTaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { createGitRepo } from "../support/by-cli.js";
@@ -50,6 +51,46 @@ const simplificationAdviceConfiguration = {
 
 const simplificationAdvice: TaskSimplificationAdvice =
   "No safe simplification is supported by this test advice because the requested result is already the smallest supported outcome.";
+
+const finding = {
+  title: "Intent gap",
+  description: "The proposal omits a required outcome.",
+  evidence: "The proposal does not state the required result.",
+  files: ["docs/spec.md"],
+};
+
+it.effect("preserves the consumed Task Reviewer output contract", () =>
+  Effect.gen(function* () {
+    const output = yield* decodeTaskReviewerOutput({
+      attempts: 1,
+      output: { findings: [finding] },
+    });
+    expect(output).toEqual({ findings: [finding] });
+
+    for (const [outputValue, path] of [
+      [{ findings: [{ ...finding, artifactRefs: [] }] }, "findings.0.artifactRefs"],
+      [{ findings: [{ ...finding, confidence: 1 }] }, "findings.0.confidence"],
+      [{ findings: [], summary: "done" }, "summary"],
+      [{ findings: [{ ...finding, evidence: undefined }] }, "findings.0.evidence"],
+    ] as const) {
+      const error = yield* Effect.flip(
+        decodeTaskReviewerOutput({ attempts: 2, output: outputValue }),
+      );
+      expect(error).toMatchObject({
+        _tag: "TaskReviewerOutputContractFailed",
+        operationName: "decode_task_reviewer_output",
+        reviewer: "task",
+        attempts: 2,
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ path: path.split(".").map(pathPart) }),
+        ]),
+      });
+    }
+  }),
+);
+
+const pathPart = (value: string): string | number =>
+  /^\d+$/u.test(value) ? Number.parseInt(value, 10) : value;
 
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
   withTemporaryRepositoryState(() =>
