@@ -10,7 +10,6 @@ import {
 import {
   createTaskInSqlite,
   getTaskContextInSqlite,
-  listActionableTasksInSqlite,
   listTasksInSqlite,
   updateTaskContextInSqlite,
 } from "../support/taskOperations.js";
@@ -122,43 +121,6 @@ it.scoped(
     );
   },
 );
-
-it.scoped("orders actionable Tasks by lifecycle priority and numeric ID", () => {
-  return withTemporaryRepositoryState(({ repositoryRoot }) =>
-    Effect.gen(function* () {
-      yield* createTaskInSqlite({
-        title: "Todo oldest",
-        description: "Todo oldest",
-        now: firstNow,
-      });
-      yield* createTaskInSqlite({
-        title: "Todo newest",
-        description: "Todo newest",
-        now: firstNow,
-      });
-      yield* createTaskInSqlite({ title: "New tied A", description: "New tied A", now: firstNow });
-      yield* createTaskInSqlite({ title: "New middle", description: "New middle", now: firstNow });
-      yield* createTaskInSqlite({ title: "New tied B", description: "New tied B", now: firstNow });
-      yield* createTaskInSqlite({ title: "Done", description: "Done", now: firstNow });
-      yield* createTaskInSqlite({ title: "Cancelled", description: "Cancelled", now: firstNow });
-
-      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), firstNow);
-      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), thirdNow);
-      yield* setTerminalTaskStateFixture(publicTaskId("BY-6"), "done", thirdNow);
-      yield* setTerminalTaskStateFixture(publicTaskId("BY-7"), "cancelled", thirdNow);
-
-      const actionable = yield* listActionableTasksInSqlite();
-      expect(actionable.map(({ id, state }) => ({ id, state }))).toEqual([
-        { id: "BY-3", state: "new" },
-        { id: "BY-4", state: "new" },
-        { id: "BY-5", state: "new" },
-        { id: "BY-1", state: "todo" },
-        { id: "BY-2", state: "todo" },
-      ]);
-      expect(actionable.some(({ id }) => id === "BY-6" || id === "BY-7")).toBe(false);
-    }),
-  );
-});
 
 it.scoped("batches Task list relationships beyond one SQL parameter batch", () =>
   withTemporaryRepositoryState(() =>

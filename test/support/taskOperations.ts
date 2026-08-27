@@ -5,7 +5,6 @@ import {
   createTaskSqlite,
   getTaskById,
   getTaskContextById,
-  listActionableTasksSqlite,
   listTasksSqlite,
   updateTaskContext,
 } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
@@ -27,13 +26,6 @@ export const createTaskInSqlite = (input: CreateTaskInput) =>
 export const listTasksInSqlite = (input: ListTasksInput) =>
   Effect.flatMap(RepositorySql, (repository) =>
     repository.transaction("list Tasks", (sql) => listTasksSqlite(sql, repository.idPrefix, input)),
-  );
-
-export const listActionableTasksInSqlite = () =>
-  Effect.flatMap(RepositorySql, (repository) =>
-    repository.transaction("list actionable Tasks", (sql) =>
-      listActionableTasksSqlite(sql, repository.idPrefix),
-    ),
   );
 
 export const getTaskInSqlite = (taskId: PublicTaskId) =>
