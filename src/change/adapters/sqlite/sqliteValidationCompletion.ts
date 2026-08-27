@@ -1,28 +1,31 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import { validationArtifactRef } from "../../../contracts/validationArtifact.js";
 import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
+import {
+  assertValidationArtifactRecord,
+  assertValidationToolingFailureEvidence,
+  decodeValidationFindingEvidence,
+} from "../../candidateValidation/candidateValidationEvidence.js";
 import type { CandidateValidationOutcome } from "../../candidateValidation/candidateValidationRunStore.js";
 import type { ChangePolicy } from "../../changePolicy.js";
 import { type ValidationPhase, validationPhase } from "../../validationRun/validationRun.js";
-import {
-  listValidationArtifacts,
-  listValidationFindings,
-  listValidationPhaseResults,
-  listValidationToolingFailures,
-} from "./sqliteValidationEvidenceStorage.js";
 import { decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 type PhaseResultEvidenceRow = {
+  readonly validationRunId: number;
   readonly phase: string;
   readonly producer: string;
+  readonly outcome: string;
   readonly findings: string;
   readonly artifacts: string;
   readonly toolingFailure: string | null;
 };
 
 type ReviewerInvocationEvidenceRow = {
+  readonly validationRunId: number;
   readonly phase: string;
   readonly producer: string;
   readonly invocationId: number;
@@ -53,17 +56,15 @@ export const requireCoherentValidationCompletion = (
     if (authority === undefined) {
       return yield* invalid(operationName, "Validation Run does not exist");
     }
-    const results = yield* listValidationPhaseResults(sql, validationRunId, idPrefix);
-    const findings = yield* listValidationFindings(sql, validationRunId, idPrefix);
-    yield* listValidationArtifacts(sql, validationRunId, idPrefix);
-    const toolingFailures = yield* listValidationToolingFailures(sql, validationRunId, idPrefix);
     const evidenceRows = yield* sql<PhaseResultEvidenceRow>`
-      SELECT phase, producer, findings, artifacts, tooling_failure AS toolingFailure
+      SELECT validation_run_id AS validationRunId, phase, producer, outcome,
+        findings, artifacts, tooling_failure AS toolingFailure
       FROM validation_phase_results
       WHERE validation_run_id = ${validationRunId}
     `;
     const reviewerInvocationRows = yield* sql<ReviewerInvocationEvidenceRow>`
-      SELECT link.phase, link.producer, link.agent_invocation_id AS invocationId,
+      SELECT link.validation_run_id AS validationRunId, link.phase, link.producer,
+        link.agent_invocation_id AS invocationId,
         invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
         CASE WHEN change_session.agent_session_id IS NULL THEN 0 ELSE 1 END AS changeOwned
       FROM validation_phase_agent_invocations AS link
@@ -84,144 +85,16 @@ export const requireCoherentValidationCompletion = (
     `;
     const runToolingFailure = runRows[0]?.toolingFailure ?? null;
 
-    yield* decodePersisted(operationName, () => {
-      const expected = expectedPhases(authority.changePolicy);
-      const resultByPosition = new Map(
-        results.map((result) => [positionKey(result.phase, result.producer), result]),
-      );
-      const findingPositions = new Set(
-        findings.map((finding) => positionKey(finding.phase, finding.producer)),
-      );
-      const toolingPositions = new Set(
-        evidenceRows
-          .filter((row) => row.toolingFailure !== null)
-          .map((row) => positionKey(row.phase as ValidationPhase, row.producer)),
-      );
-      const evidenceByPosition = new Map(
-        evidenceRows.map((row) => [positionKey(row.phase as ValidationPhase, row.producer), row]),
-      );
-      const reviewerInvocations = new Map<string, ReviewerInvocationEvidenceRow[]>();
-      for (const row of reviewerInvocationRows) {
-        const key = positionKey(row.phase as ValidationPhase, row.producer);
-        const positionRows = reviewerInvocations.get(key) ?? [];
-        positionRows.push(row);
-        reviewerInvocations.set(key, positionRows);
-        if (
-          row.phase === validationPhase.acceptanceReview ||
-          row.phase === validationPhase.specialistReview
-        ) {
-          if (!resultByPosition.has(key)) {
-            throw new Error("Every linked reviewer position requires its final Phase Result");
-          }
-          if (row.changeOwned !== 1 || row.settledAt === null || row.settlementKind === null) {
-            throw new Error(
-              "Every linked reviewer Invocation must be Change-owned and settled before completion",
-            );
-          }
-        }
-      }
-      if (toolingFailures.length !== toolingPositions.size + (runToolingFailure === null ? 0 : 1)) {
-        throw new Error("Validation Tooling Failure evidence is inconsistent");
-      }
-
-      for (const result of results) {
-        const key = positionKey(result.phase, result.producer);
-        const hasFinding = findingPositions.has(key);
-        const hasToolingFailure = toolingPositions.has(key);
-        if (result.outcome === "passed" && (hasFinding || hasToolingFailure)) {
-          throw new Error("A passing Validation Phase Result contains failure evidence");
-        }
-        if (
-          result.outcome === "failed" &&
-          (result.phase === validationPhase.acceptanceReview ||
-            result.phase === validationPhase.specialistReview) &&
-          hasFinding === hasToolingFailure
-        ) {
-          throw new Error("A failed reviewer Result requires either Findings or a Tooling Failure");
-        }
-        if (result.outcome === "failed" && !hasFinding && !hasToolingFailure) {
-          throw new Error("A failed Validation Phase Result has no failure evidence");
-        }
-        if (
-          result.phase === validationPhase.acceptanceReview ||
-          result.phase === validationPhase.specialistReview
-        ) {
-          const invocations = reviewerInvocations.get(key) ?? [];
-          const terminal = invocations.at(-1);
-          if (
-            (result.outcome === "passed" || hasFinding) &&
-            terminal?.settlementKind !== "returned"
-          ) {
-            throw new Error(
-              "A passing reviewer Result or reviewer Finding requires a returned terminal Invocation",
-            );
-          }
-          if (
-            result.outcome === "failed" &&
-            terminal === undefined &&
-            !isPreDispatchReviewerIntegrityFailure(result.phase, evidenceByPosition.get(key))
-          ) {
-            throw new Error("A failed reviewer Result has no Agent Invocation evidence");
-          }
-        }
-      }
-
-      const reached = expected
-        .map((group, index) => ({ group, index, count: countResults(group, resultByPosition) }))
-        .filter(({ count }) => count > 0);
-      const lastReached = reached.at(-1);
-      let phaseOutcome: CandidateValidationOutcome;
-
-      if (lastReached === undefined) {
-        if (expected.length > 0 && runToolingFailure === null) {
-          throw new Error("Validation Run has no result for its first configured phase");
-        }
-        phaseOutcome = "passed";
-      } else {
-        if (reached.length !== lastReached.index + 1) {
-          throw new Error("Validation Phase Results skip a configured phase");
-        }
-        for (let index = 0; index < lastReached.index; index += 1) {
-          const group = expected[index];
-          if (group === undefined) throw new Error("Configured Validation phase is missing");
-          requireCompletePassingGroup(group, resultByPosition);
-        }
-
-        const finalGroup = lastReached.group;
-        const finalResults = resultsForGroup(finalGroup, resultByPosition);
-        requireConfiguredPrefix(finalGroup, resultByPosition);
-        validateSpecialistFailureBoundary(finalGroup, finalResults);
-        const failed = finalResults.filter((result) => result.outcome === "failed");
-        if (failed.length === 0) {
-          if (finalResults.length !== finalGroup.producers.length) {
-            throw new Error("A passing Validation phase is incomplete");
-          }
-          if (lastReached.index !== expected.length - 1) {
-            throw new Error("Validation Run stopped after a passing phase");
-          }
-          phaseOutcome = "passed";
-        } else {
-          const hasPhaseToolingFailure = failed.some((result) =>
-            toolingPositions.has(positionKey(result.phase, result.producer)),
-          );
-          phaseOutcome = hasPhaseToolingFailure ? "tooling_failed" : "blocked";
-          if (
-            finalGroup.phase !== validationPhase.specialistReview &&
-            (phaseOutcome === "blocked" || finalGroup.phase !== validationPhase.checks) &&
-            finalResults.length !== finalGroup.producers.length
-          ) {
-            throw new Error("Terminal Validation phase evidence is incomplete");
-          }
-        }
-      }
-
-      const evidencedOutcome = runToolingFailure === null ? phaseOutcome : "tooling_failed";
-      if (evidencedOutcome !== outcome) {
-        throw new Error(
-          `Validation completion outcome ${outcome} does not match evidence ${evidencedOutcome}`,
-        );
-      }
-    });
+    yield* decodePersisted(operationName, () =>
+      validateValidationCompletion(
+        authority.changePolicy,
+        outcome,
+        evidenceRows,
+        reviewerInvocationRows,
+        runToolingFailure,
+        validationRunId,
+      ),
+    );
   }).pipe(Effect.asVoid);
 
 const isPreDispatchReviewerIntegrityFailure = (
@@ -254,47 +127,263 @@ const isPreDispatchReviewerIntegrityFailure = (
   );
 };
 
-export const validateCurrentPassingEvidence = (
+export const validateValidationCompletion = (
   changePolicy: ChangePolicy,
-  results: readonly {
-    readonly phase: string;
-    readonly producer: string;
-    readonly outcome: string;
-    readonly findings: string;
-    readonly artifacts: string;
-    readonly toolingFailure: string | null;
-  }[],
+  outcome: CandidateValidationOutcome,
+  evidenceRows: readonly PhaseResultEvidenceRow[],
+  reviewerInvocationRows: readonly ReviewerInvocationEvidenceRow[],
   runToolingFailure: string | null,
+  validationRunId: number,
 ): void => {
   const expected = expectedPhases(changePolicy);
-  const resultByPosition = new Map<string, { readonly outcome: "passed" | "failed" }>();
-  for (const result of results) {
-    const phase = decodeValidationPhase(result.phase);
-    if (result.outcome !== "passed" && result.outcome !== "failed") {
-      throw new Error("Validation Phase Result outcome is unsupported");
+  const results = evidenceRows.map((row) => ({
+    validationRunId: row.validationRunId,
+    phase: decodeValidationPhase(row.phase),
+    producer: row.producer,
+    outcome: decodeOutcome(row.outcome),
+  }));
+  const artifactRefs = new Set<string>();
+  const findingsByPosition = new Map<string, number>();
+  const toolingPositions = new Set<string>();
+  const evidenceByPosition = new Map<string, PhaseResultEvidenceRow>();
+
+  for (const [index, row] of evidenceRows.entries()) {
+    if (row.validationRunId !== validationRunId) {
+      throw new Error("Validation evidence belongs to another Run");
     }
-    const findings: unknown = JSON.parse(result.findings) as unknown;
-    const artifacts: unknown = JSON.parse(result.artifacts) as unknown;
-    if (!Array.isArray(findings) || !Array.isArray(artifacts)) {
-      throw new Error("Stored validation evidence is not an array");
-    }
-    if (findings.length > 0 || result.toolingFailure !== null) {
-      throw new Error("A passed Validation Run contains failure evidence");
-    }
-    const key = positionKey(phase, result.producer);
-    if (resultByPosition.has(key)) {
+    const result = results[index];
+    if (result === undefined) throw new Error("Validation Phase Result was not decoded");
+    const key = positionKey(result.phase, result.producer);
+    if (evidenceByPosition.has(key)) {
       throw new Error("Validation Phase Result position is duplicated");
     }
-    resultByPosition.set(key, { outcome: result.outcome });
+    evidenceByPosition.set(key, row);
+    const artifacts: unknown = JSON.parse(row.artifacts) as unknown;
+    if (!Array.isArray(artifacts)) throw new Error("Stored evidence is not an array");
+    for (const value of artifacts) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        throw new Error("Artifact is not an object");
+      }
+      const artifact = value as {
+        readonly path?: unknown;
+        readonly originalBytes?: unknown;
+        readonly storedBytes?: unknown;
+      };
+      if (
+        typeof artifact.path !== "string" ||
+        typeof artifact.originalBytes !== "number" ||
+        typeof artifact.storedBytes !== "number"
+      ) {
+        throw new Error("Artifact fields are invalid");
+      }
+      const identity = {
+        validationRunId: row.validationRunId,
+        phase: result.phase,
+        producer: result.producer,
+        fileName: artifact.path.split("/").at(-1) ?? "",
+      } as const;
+      const record = {
+        ref: validationArtifactRef(identity),
+        path: artifact.path,
+        originalBytes: artifact.originalBytes,
+        storedBytes: artifact.storedBytes,
+        truncated: artifact.storedBytes < artifact.originalBytes,
+        validationRunId: row.validationRunId,
+        phase: result.phase,
+        producer: result.producer,
+      };
+      assertValidationArtifactRecord(record);
+      artifactRefs.add(record.ref);
+    }
   }
+  for (const [index, row] of evidenceRows.entries()) {
+    if (row.validationRunId !== validationRunId) {
+      throw new Error("Validation evidence belongs to another Run");
+    }
+    const result = results[index];
+    if (result === undefined) throw new Error("Validation Phase Result was not decoded");
+    const key = positionKey(result.phase, result.producer);
+    const findings: unknown = JSON.parse(row.findings) as unknown;
+    if (!Array.isArray(findings)) throw new Error("Stored evidence is not an array");
+    for (const finding of findings) decodeValidationFindingEvidence(finding, artifactRefs);
+    if (findings.length > 0) findingsByPosition.set(key, findings.length);
+    if (row.toolingFailure !== null) {
+      const failure: unknown = JSON.parse(row.toolingFailure) as unknown;
+      if (typeof failure !== "object" || failure === null || Array.isArray(failure)) {
+        throw new Error("Tooling Failure is not an object");
+      }
+      const value = failure as {
+        readonly errorKind?: unknown;
+        readonly operationName?: unknown;
+        readonly errorMessage?: unknown;
+      };
+      if (
+        typeof value.errorKind !== "string" ||
+        typeof value.operationName !== "string" ||
+        typeof value.errorMessage !== "string"
+      ) {
+        throw new Error("Tooling Failure fields are invalid");
+      }
+      assertValidationToolingFailureEvidence({
+        errorKind: value.errorKind,
+        operationName: value.operationName,
+        errorMessage: value.errorMessage,
+      });
+      toolingPositions.add(key);
+    }
+  }
+
+  const resultByPosition = new Map(
+    results.map((result) => [positionKey(result.phase, result.producer), result]),
+  );
+  const reviewerInvocations = new Map<string, ReviewerInvocationEvidenceRow[]>();
+  for (const row of reviewerInvocationRows) {
+    if (row.validationRunId !== validationRunId) {
+      throw new Error("Reviewer Invocation belongs to another Run");
+    }
+    const phase = decodeValidationPhase(row.phase);
+    const key = positionKey(phase, row.producer);
+    const positionRows = reviewerInvocations.get(key) ?? [];
+    positionRows.push(row);
+    reviewerInvocations.set(key, positionRows);
+    if (phase === validationPhase.acceptanceReview || phase === validationPhase.specialistReview) {
+      if (!resultByPosition.has(key)) {
+        throw new Error("Every linked reviewer position requires its final Phase Result");
+      }
+      if (row.changeOwned !== 1 || row.settledAt === null || row.settlementKind === null) {
+        throw new Error(
+          "Every linked reviewer Invocation must be Change-owned and settled before completion",
+        );
+      }
+    }
+  }
+
+  const phaseToolingFailureCount = toolingPositions.size;
   if (runToolingFailure !== null) {
-    throw new Error("A passed Validation Run contains Tooling Failure evidence");
+    const failure: unknown = JSON.parse(runToolingFailure) as unknown;
+    if (typeof failure !== "object" || failure === null || Array.isArray(failure)) {
+      throw new Error("Tooling Failure is not an object");
+    }
+    const value = failure as {
+      readonly errorKind?: unknown;
+      readonly operationName?: unknown;
+      readonly errorMessage?: unknown;
+    };
+    if (
+      typeof value.errorKind !== "string" ||
+      typeof value.operationName !== "string" ||
+      typeof value.errorMessage !== "string"
+    ) {
+      throw new Error("Tooling Failure fields are invalid");
+    }
+    assertValidationToolingFailureEvidence({
+      errorKind: value.errorKind,
+      operationName: value.operationName,
+      errorMessage: value.errorMessage,
+    });
   }
-  for (const group of expected) requireCompletePassingGroup(group, resultByPosition);
-  const expectedResultCount = expected.reduce((count, group) => count + group.producers.length, 0);
-  if (resultByPosition.size !== expectedResultCount) {
-    throw new Error("A passed Validation Run contains unexpected phase evidence");
+  if (
+    phaseToolingFailureCount !== evidenceRows.filter((row) => row.toolingFailure !== null).length
+  ) {
+    throw new Error("Validation Tooling Failure evidence is inconsistent");
   }
+
+  for (const result of results) {
+    const key = positionKey(result.phase, result.producer);
+    const hasFinding = findingsByPosition.has(key);
+    const hasToolingFailure = toolingPositions.has(key);
+    if (result.outcome === "passed" && (hasFinding || hasToolingFailure)) {
+      throw new Error("A passing Validation Phase Result contains failure evidence");
+    }
+    if (
+      result.outcome === "failed" &&
+      (result.phase === validationPhase.acceptanceReview ||
+        result.phase === validationPhase.specialistReview) &&
+      hasFinding === hasToolingFailure
+    ) {
+      throw new Error("A failed reviewer Result requires either Findings or a Tooling Failure");
+    }
+    if (result.outcome === "failed" && !hasFinding && !hasToolingFailure) {
+      throw new Error("A failed Validation Phase Result has no failure evidence");
+    }
+    if (
+      result.phase === validationPhase.acceptanceReview ||
+      result.phase === validationPhase.specialistReview
+    ) {
+      const invocations = reviewerInvocations.get(key) ?? [];
+      const terminal = invocations.at(-1);
+      if ((result.outcome === "passed" || hasFinding) && terminal?.settlementKind !== "returned") {
+        throw new Error(
+          "A passing reviewer Result or reviewer Finding requires a returned terminal Invocation",
+        );
+      }
+      if (
+        result.outcome === "failed" &&
+        terminal === undefined &&
+        !isPreDispatchReviewerIntegrityFailure(result.phase, evidenceByPosition.get(key))
+      ) {
+        throw new Error("A failed reviewer Result has no Agent Invocation evidence");
+      }
+    }
+  }
+
+  const reached = expected
+    .map((group, index) => ({ group, index, count: countResults(group, resultByPosition) }))
+    .filter(({ count }) => count > 0);
+  const lastReached = reached.at(-1);
+  let phaseOutcome: CandidateValidationOutcome;
+  if (lastReached === undefined) {
+    if (expected.length > 0 && runToolingFailure === null) {
+      throw new Error("Validation Run has no result for its first configured phase");
+    }
+    phaseOutcome = "passed";
+  } else {
+    if (reached.length !== lastReached.index + 1) {
+      throw new Error("Validation Phase Results skip a configured phase");
+    }
+    for (let index = 0; index < lastReached.index; index += 1) {
+      const group = expected[index];
+      if (group === undefined) throw new Error("Configured Validation phase is missing");
+      requireCompletePassingGroup(group, resultByPosition);
+    }
+    const finalGroup = lastReached.group;
+    const finalResults = resultsForGroup(finalGroup, resultByPosition);
+    requireConfiguredPrefix(finalGroup, resultByPosition);
+    validateSpecialistFailureBoundary(finalGroup, finalResults);
+    const failed = finalResults.filter((result) => result.outcome === "failed");
+    if (failed.length === 0) {
+      if (finalResults.length !== finalGroup.producers.length) {
+        throw new Error("A passing Validation phase is incomplete");
+      }
+      if (lastReached.index !== expected.length - 1) {
+        throw new Error("Validation Run stopped after a passing phase");
+      }
+      phaseOutcome = "passed";
+    } else {
+      const hasPhaseToolingFailure = failed.some((result) =>
+        toolingPositions.has(positionKey(result.phase, result.producer)),
+      );
+      phaseOutcome = hasPhaseToolingFailure ? "tooling_failed" : "blocked";
+      if (
+        finalGroup.phase !== validationPhase.specialistReview &&
+        (phaseOutcome === "blocked" || finalGroup.phase !== validationPhase.checks) &&
+        finalResults.length !== finalGroup.producers.length
+      ) {
+        throw new Error("Terminal Validation phase evidence is incomplete");
+      }
+    }
+  }
+  const evidencedOutcome = runToolingFailure === null ? phaseOutcome : "tooling_failed";
+  if (evidencedOutcome !== outcome) {
+    throw new Error(
+      `Validation completion outcome ${outcome} does not match evidence ${evidencedOutcome}`,
+    );
+  }
+};
+
+const decodeOutcome = (value: string): "passed" | "failed" => {
+  if (value === "passed" || value === "failed") return value;
+  throw new Error("Validation Phase Result outcome is unsupported");
 };
 
 const expectedPhases = (changePolicy: ChangePolicy): readonly ExpectedPhase[] => [
