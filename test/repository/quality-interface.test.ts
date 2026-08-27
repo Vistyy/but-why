@@ -265,6 +265,41 @@ const createCompletingPnpm = (directory: string): void => {
   chmodSync(pnpm, 0o755);
 };
 
+const createBlockingQualityFixture = (
+  directory: string,
+  readyFile: string,
+  descendantPidFile: string,
+): void => {
+  writeFileSync(
+    join(directory, "justfile"),
+    `quality:
+    @exec ${JSON.stringify(qualityRunner)}
+
+_quality-static:
+    @true
+
+build:
+    @true
+
+test:
+    @pnpm exec vitest
+`,
+  );
+  const pnpm = join(directory, "pnpm");
+  writeFileSync(
+    pnpm,
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf ready > ${JSON.stringify(readyFile)}
+(trap '' INT TERM; while :; do sleep 1; done) &
+descendant=$!
+printf '%s' "$descendant" > ${JSON.stringify(descendantPidFile)}
+wait
+`,
+  );
+  chmodSync(pnpm, 0o755);
+};
+
 const createObservableQualityFixture = (directory: string): void => {
   writeFileSync(
     join(directory, "justfile"),
@@ -531,6 +566,48 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       await awaitAllCleanup(
         ...(observer === undefined ? [] : [stopRunner(observer)]),
         stopRunner(holder),
+      );
+    }
+  });
+
+  test("stops quality phase descendants before releasing capacity", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const readyFile = join(directory, "quality-ready");
+    const descendantPidFile = join(directory, "quality-descendant-pid");
+    createBlockingQualityFixture(directory, readyFile, descendantPidFile);
+    const quality = startJust(
+      lockFile,
+      ["quality"],
+      {
+        // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
+        PATH: `${directory}:${process.env["PATH"] ?? ""}`,
+      },
+      directory,
+    );
+
+    let observer: ReturnType<typeof startRunner> | undefined;
+    try {
+      await waitForFile(readyFile);
+      const descendantIdentity = await readProcessIdentity(descendantPidFile);
+      observer = startCleanupObserver(lockFile, descendantIdentity);
+      await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
+      if (quality.child.pid === undefined) throw new Error("The quality process has no PID");
+      process.kill(-quality.child.pid, "SIGTERM");
+      expect(
+        (await settleWithinDeadline(quality.done, "interrupted quality settlement")).status,
+      ).toBe(143);
+      const observation = await settleWithinDeadline(
+        observer.done,
+        "capacity observer settlement after quality descendant cleanup",
+      );
+      expect(observation.status, observation.output).toBe(0);
+      expect(observation.output).toContain("capacity acquired after descendant cleanup");
+    } finally {
+      await awaitAllCleanup(
+        ...(observer === undefined ? [] : [stopRunner(observer)]),
+        stopJust(quality),
       );
     }
   });
