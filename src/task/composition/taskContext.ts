@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { RepositoryStateUnavailable } from "../../contracts/repositoryStorageError.js";
+import {
+  RepositoryStateUnavailable,
+  type RepositoryStorageError,
+} from "../../contracts/repositoryStorageError.js";
 import {
   type RepositoryOperationError,
   runRepositoryOperationAt,
@@ -15,11 +18,36 @@ import {
   writeTaskContextDraft,
 } from "../files/contextDraft.js";
 import type { TaskState } from "../lifecycle.js";
+import { resolveRepoTaskId } from "../repoTaskIds.js";
 import type { TaskContext, TaskRecord } from "../task.js";
 import type { PublicTaskId } from "../taskId.js";
 import type { UpdateTaskContextInput } from "../taskStore.js";
 
 export type TaskContextDraft = { readonly path: string; readonly content: string };
+
+type TaskContextIdResolutionFailure = {
+  readonly ok: false;
+  readonly error: Exclude<ReturnType<typeof resolveRepoTaskId>, { readonly ok: true }>;
+};
+
+type TaskContextResult = TaskContextIdResolutionFailure | TaskContext | undefined;
+
+export const getTaskContext = (
+  cwd: string,
+  taskId: PublicTaskId,
+): Effect.Effect<TaskContextResult, RepositoryOperationError> =>
+  runRepositoryOperationAt<TaskContextResult, RepositoryStorageError, never>(
+    cwd,
+    (context, repository) => {
+      const resolved = resolveRepoTaskId(context, taskId);
+      if (!resolved.ok) {
+        return Effect.succeed<TaskContextIdResolutionFailure>({ ok: false, error: resolved });
+      }
+      return repository.transaction("read Task Context", (sql) =>
+        getTaskContextByIdInSqlite(sql, resolved.taskId, repository.idPrefix),
+      );
+    },
+  );
 
 export type ApplyTaskContextDraftInput = {
   readonly taskId: PublicTaskId;
@@ -41,16 +69,6 @@ export type ApplyTaskContextDraftResult =
       readonly task: TaskRecord;
       readonly path: string;
     };
-
-export const getTaskContext = (
-  cwd: string,
-  taskId: PublicTaskId,
-): Effect.Effect<TaskContext | undefined, RepositoryOperationError> =>
-  runRepositoryOperationAt(cwd, (_context, repository) =>
-    repository.transaction("read Task Context", (sql) =>
-      getTaskContextByIdInSqlite(sql, taskId, repository.idPrefix),
-    ),
-  );
 
 export const createTaskContextDraft = (
   cwd: string,

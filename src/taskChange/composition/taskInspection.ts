@@ -4,7 +4,10 @@ import {
   runRepositoryOperationAt,
 } from "../../repositoryRuntime/repositoryOperation.js";
 import { getTaskById, listTasksSqlite } from "../../task/adapters/sqlite/sqliteTaskPersistence.js";
+import { readTaskReviewInspection } from "../../task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { type RepoTaskIdResolution, resolveRepoTaskId } from "../../task/repoTaskIds.js";
+import type { TaskReviewRecord } from "../../task/review/taskReview.js";
+import type { TaskSimplificationAdvice } from "../../task/review/taskSimplificationAdvice.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { ListTasksInput, ListTasksResult } from "../../task/taskStore.js";
@@ -33,9 +36,12 @@ export const listTasksForInspection = (
     ),
   );
 
-type TaskInspection = {
+export type TaskInspection = {
   readonly task: TaskRecord | undefined;
   readonly change: TaskChangeProjection | null;
+  readonly review: TaskReviewRecord | undefined;
+  readonly simplificationAdvice: TaskSimplificationAdvice | undefined;
+  readonly proposalCurrent: boolean | undefined;
 };
 
 export type TaskInspectionResult =
@@ -55,16 +61,35 @@ export const inspectTaskForInspection = (
       Effect.gen(function* () {
         const task = yield* getTaskById(sql, resolved.taskId, repository.idPrefix);
         if (task === undefined) {
-          return { ok: true as const, value: { task, change: null } };
+          return {
+            ok: true as const,
+            value: {
+              task,
+              change: null,
+              review: undefined,
+              simplificationAdvice: undefined,
+              proposalCurrent: undefined,
+            },
+          };
         }
         const projections = yield* listTaskChangeProjectionsSqlite(
           sql,
           [resolved.taskId],
           repository.idPrefix,
         );
+        const reviewInspection = yield* readTaskReviewInspection(
+          sql,
+          resolved.taskId,
+          repository.idPrefix,
+          repository.commonDirectory,
+        );
         return {
           ok: true as const,
-          value: { task, change: projections.get(resolved.taskId) ?? null },
+          value: {
+            task,
+            change: projections.get(resolved.taskId) ?? null,
+            ...reviewInspection,
+          },
         };
       }),
     );

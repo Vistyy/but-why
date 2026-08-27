@@ -7,17 +7,12 @@ import {
 } from "../../../cli/input/recordingText.js";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
-import { createTask } from "../../../task/composition/createTask.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { normalizeTaskTitle } from "../../../task/taskTitle.js";
-import {
-  resolveTaskId,
-  type TaskCommandEnvironment,
-  taskMutationView,
-  withTasks,
-} from "../taskCliSupport.js";
+import { createTaskCommand } from "../../../taskChange/composition/taskCommandOperations.js";
+import { type TaskCommandEnvironment, taskMutationView, withTasks } from "../taskCliSupport.js";
 import { taskTitleInputError } from "../taskTitle.js";
 
 export type TaskCreateCommand = {
@@ -35,17 +30,18 @@ export const runCreateCommand = (
   const description = readRecordingText(environment.cwd, command.file, environment.stdin);
   if (!description.ok) return Effect.succeed(descriptionInputError(description.error));
 
-  return withTasks(environment, (cwd) => {
-    const dependencies = resolveDependencies(command.dependsOn, cwd);
-    if (!dependencies.ok) return Effect.succeed(dependencies.result);
-    return Effect.map(
-      createTask(cwd, {
+  const dependencies = resolveDependencies(command.dependsOn);
+  if (!dependencies.ok) return Effect.succeed(dependencies.result);
+  return withTasks(environment, (cwd) =>
+    Effect.map(
+      createTaskCommand(cwd, {
         title: title.title,
         description: description.content,
         now: environment.now().toISOString(),
         dependsOn: dependencies.taskIds,
       }),
       (result) => {
+        if ("error" in result) return taskIdResolutionError(result.error);
         if (!result.ok) return dependencyError(result);
         const task = result.task;
         return success({
@@ -54,25 +50,20 @@ export const runCreateCommand = (
           help: ["Run `by task list` to see open tasks."],
         });
       },
-    );
-  });
+    ),
+  );
 };
 
 type ResolveDependenciesResult =
   | { readonly ok: true; readonly taskIds: readonly PublicTaskId[] }
   | { readonly ok: false; readonly result: CliResult };
 
-const resolveDependencies = (
-  dependencies: readonly string[],
-  cwd: string,
-): ResolveDependenciesResult => {
+const resolveDependencies = (dependencies: readonly string[]): ResolveDependenciesResult => {
   const taskIds: PublicTaskId[] = [];
   for (const dependency of dependencies) {
     const parsed = parseCliTaskIdValue(dependency);
     if (!parsed.ok) return parsed;
-    const resolved = resolveTaskId(cwd, parsed.taskId);
-    if (!resolved.ok) return resolved;
-    taskIds.push(resolved.taskId);
+    taskIds.push(parsed.taskId);
   }
   return { ok: true, taskIds };
 };

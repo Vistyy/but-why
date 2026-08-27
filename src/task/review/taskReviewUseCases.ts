@@ -43,6 +43,7 @@ import {
   type SubmitProgressProfile,
   startSubmitProgress,
 } from "../../submission/submissionProgress.js";
+import type { RepoTaskIdResolution } from "../repoTaskIds.js";
 import type { PublicTaskId } from "../taskId.js";
 import type {
   TaskReviewBase,
@@ -123,6 +124,7 @@ export type TaskReviewIdentityInspection =
   | { readonly verified: false; readonly message: string };
 
 export type TaskReviewInspectionUseCases = {
+  readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly getCompletedSimplificationAdvice: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
@@ -177,6 +179,7 @@ type WorkspaceExecution =
 
 export const openTaskReviewUseCases = (input: {
   readonly repositoryRoot: string;
+  readonly resolveTaskId?: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly repositoryCommonDirectory: string;
   readonly loadRepoConfig: (
     commit: string,
@@ -222,6 +225,7 @@ export const openTaskReviewUseCases = (input: {
   ) => Effect.Effect<DisposableWorktreeInspection>;
   readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
+  resolveTaskId: input.resolveTaskId ?? ((taskId) => ({ ok: true as const, taskId })),
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
   getCompletedSimplificationAdvice: (taskId) =>

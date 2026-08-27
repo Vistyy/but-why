@@ -3,11 +3,10 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import type { ReviseTaskResult } from "../../../task/taskStore.js";
-import { reviseTask } from "../../../taskChange/composition/reviseTask.js";
+import { reviseTaskCommand } from "../../../taskChange/composition/taskCommandOperations.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskMutationView,
@@ -21,17 +20,18 @@ export const runReviseCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (cwd) => {
-    const taskId = resolveTaskId(cwd, parsed.taskId);
-    if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.map(
-      reviseTask(cwd, {
-        taskId: taskId.taskId,
+  return withTasks(environment, (cwd) =>
+    Effect.map(
+      reviseTaskCommand(cwd, {
+        taskId: parsed.taskId,
         now: environment.now().toISOString(),
       }),
-      (result) => reviseResult(taskId.taskId, result),
-    );
-  });
+      (result) =>
+        "error" in result
+          ? taskIdResolutionError(result.error)
+          : reviseResult(parsed.taskId, result),
+    ),
+  );
 };
 
 const reviseResult = (taskId: string, result: ReviseTaskResult): CliResult => {

@@ -1,13 +1,11 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   withTaskReviewInspection,
   withTaskReviewRecovery,
-  withTasks,
 } from "../taskCliSupport.js";
 import { taskReviewHistoryView, taskReviewView } from "./taskReviewView.js";
 
@@ -23,21 +21,19 @@ export const runTaskReviewCommand = (
   if (command.action === "list") {
     const parsed = parseCliTaskIdValue(command.taskId);
     if (!parsed.ok) return Effect.succeed(parsed.result);
-    return withTasks(environment, (cwd) => {
-      const resolved = resolveTaskId(cwd, parsed.taskId);
-      if (!resolved.ok) return Effect.succeed(resolved.result);
-      return withTaskReviewInspection(environment, (reviews) =>
-        Effect.map(reviews.listForTask(resolved.taskId), (history) =>
-          success({
-            taskId: resolved.taskId,
-            reviews: history.map(taskReviewHistoryView),
-            reviewCount: history.length,
-            help:
-              history.length === 0
-                ? ["Run `by task submit <task-id>` to start a Task Review for a New Task."]
-                : [`Run \`by task-review show <review-id>\` to inspect one Review.`],
-          }),
-        ),
+    return withTaskReviewInspection(environment, (reviews) => {
+      const resolved = reviews.resolveTaskId(parsed.taskId);
+      if (!resolved.ok) return Effect.succeed(taskIdResolutionError(resolved));
+      return Effect.map(reviews.listForTask(resolved.taskId), (history) =>
+        success({
+          taskId: resolved.taskId,
+          reviews: history.map(taskReviewHistoryView),
+          reviewCount: history.length,
+          help:
+            history.length === 0
+              ? ["Run `by task submit <task-id>` to start a Task Review for a New Task."]
+              : [`Run \`by task-review show <review-id>\` to inspect one Review.`],
+        }),
       );
     });
   }

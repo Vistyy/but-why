@@ -7,9 +7,7 @@ import {
   repositoryStorageErrorResult,
   runtimeError,
 } from "../../cliResults.js";
-import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { resolveLocalRepository } from "../../repositoryRuntime/repositoryContext.js";
 import type { RepositoryOperationError } from "../../repositoryRuntime/repositoryOperation.js";
 import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
@@ -20,7 +18,6 @@ import {
   withTaskReviewRecoveryUseCases,
   withTaskReviewSubmissionUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
-import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
 import type { TaskReviewerOutput } from "../../task/review/taskReviewerOutput.js";
 import type {
   TaskReviewInspectionUseCases,
@@ -158,20 +155,6 @@ const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
         help: ["Fix the reported Agent Profile configuration, then retry."],
       })
     : repoStateLoadError(error);
-
-export type ResolvedTaskIdResult =
-  | { readonly ok: true; readonly taskId: PublicTaskId }
-  | { readonly ok: false; readonly result: CliResult };
-
-export const resolveTaskId = (cwd: string, taskId: PublicTaskId): ResolvedTaskIdResult => {
-  const resolved = resolveLocalRepository(cwd);
-  if (!resolved.ok) return { ok: false, result: repoStateLoadError(resolved.error) };
-  const resolvedTaskId = resolveRepoTaskId(resolved.context, taskId);
-  if (!resolvedTaskId.ok) {
-    return { ok: false, result: taskIdResolutionError(resolvedTaskId) };
-  }
-  return { ok: true, taskId: resolvedTaskId.taskId };
-};
 
 export const taskMutationView = (task: TaskRecord) => ({
   id: task.id,

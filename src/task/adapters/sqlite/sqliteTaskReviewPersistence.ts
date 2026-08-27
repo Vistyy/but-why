@@ -842,6 +842,31 @@ const requireTaskReviewInvocationEvidence = (
     }
   }).pipe(Effect.asVoid);
 
+export const readTaskReviewInspection = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  idPrefix: string,
+  repositoryCommonDirectory: string,
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql.unsafe<ReviewRow>(
+      `SELECT ${reviewColumns} FROM task_reviews WHERE task_id = ? ORDER BY id DESC LIMIT 1`,
+      [internalTaskId(taskId, idPrefix)],
+    );
+    const row = rows[0];
+    if (row === undefined) {
+      return {
+        review: undefined,
+        simplificationAdvice: undefined,
+        proposalCurrent: undefined,
+      } as const;
+    }
+    const review = yield* decodeReview(sql, row, idPrefix, repositoryCommonDirectory);
+    const simplificationAdvice = yield* readCompletedSimplificationAdvice(sql, taskId, idPrefix);
+    const proposalCurrent = yield* currentProposalMatches(sql, review, idPrefix);
+    return { review, simplificationAdvice, proposalCurrent } as const;
+  });
+
 const readCompletedSimplificationAdvice = (
   sql: SqlClient.SqlClient,
   taskId: string,

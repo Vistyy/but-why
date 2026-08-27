@@ -4,20 +4,15 @@ import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type {
   EditTaskDependenciesResult,
   TaskDependencyOperation,
 } from "../../../task/taskStore.js";
-import { editTaskDependencies } from "../../../taskChange/composition/editTaskDependencies.js";
+import { editTaskDependenciesCommand } from "../../../taskChange/composition/taskCommandOperations.js";
 import { dependencyOptionRequiredError } from "../dependencyOptionUsage.js";
-import {
-  resolveTaskId,
-  type TaskCommandEnvironment,
-  taskNotFound,
-  withTasks,
-} from "../taskCliSupport.js";
+import { type TaskCommandEnvironment, taskNotFound, withTasks } from "../taskCliSupport.js";
 
 export type TaskDependenciesCommand = {
   readonly operation: TaskDependencyOperation;
@@ -42,25 +37,22 @@ export const runDependenciesCommand = (
   const parsedDependent = parseCliTaskIdValue(command.taskId);
   if (!parsedDependent.ok) return Effect.succeed(parsedDependent.result);
 
-  return withTasks(environment, (cwd) => {
-    const dependent = resolveTaskId(cwd, parsedDependent.taskId);
-    if (!dependent.ok) return Effect.succeed(dependent.result);
-    const prerequisiteTaskIds: PublicTaskId[] = [];
-    for (const value of command.dependsOn) {
-      const parsedPrerequisite = parseCliTaskIdValue(value);
-      if (!parsedPrerequisite.ok) return Effect.succeed(parsedPrerequisite.result);
-      const prerequisite = resolveTaskId(cwd, parsedPrerequisite.taskId);
-      if (!prerequisite.ok) return Effect.succeed(prerequisite.result);
-      prerequisiteTaskIds.push(prerequisite.taskId);
-    }
-    return Effect.map(
-      editTaskDependencies(cwd, {
-        taskId: dependent.taskId,
+  const prerequisiteTaskIds: PublicTaskId[] = [];
+  for (const value of command.dependsOn) {
+    const parsedPrerequisite = parseCliTaskIdValue(value);
+    if (!parsedPrerequisite.ok) return Effect.succeed(parsedPrerequisite.result);
+    prerequisiteTaskIds.push(parsedPrerequisite.taskId);
+  }
+  return withTasks(environment, (cwd) =>
+    Effect.map(
+      editTaskDependenciesCommand(cwd, {
+        taskId: parsedDependent.taskId,
         operation: command.operation,
         prerequisiteTaskIds,
       }),
-      (result) =>
-        result.ok
+      (result) => {
+        if ("error" in result) return taskIdResolutionError(result.error);
+        return result.ok
           ? success({
               task: { id: result.task.id },
               operation: result.operation,
@@ -69,9 +61,10 @@ export const runDependenciesCommand = (
               unchanged: result.unchanged,
               prerequisites: result.task.prerequisites,
             })
-          : dependencyError(dependent.taskId, result),
-    );
-  });
+          : dependencyError(parsedDependent.taskId, result);
+      },
+    ),
+  );
 };
 
 const dependencyError = (
