@@ -123,18 +123,9 @@ export type TaskReviewIdentityInspection =
   | { readonly verified: false; readonly message: string };
 
 export type TaskReviewInspectionUseCases = {
-  readonly getCompletedSimplificationAdvice: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<TaskSimplificationAdvice | undefined, RepositoryStorageError>;
   readonly getById: (
     reviewId: number,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
-  readonly getLatestForTask: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
-  readonly listForTask: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<readonly TaskReviewRecord[], RepositoryStorageError>;
   readonly proposalIsCurrent: (
     review: TaskReviewRecord,
   ) => Effect.Effect<boolean, RepositoryStorageError>;
@@ -224,11 +215,7 @@ export const openTaskReviewUseCases = (input: {
 }): TaskReviewUseCases => ({
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
-  getCompletedSimplificationAdvice: (taskId) =>
-    input.persistence.getCompletedSimplificationAdvice(taskId),
   getById: input.persistence.getById,
-  getLatestForTask: input.persistence.getLatestForTask,
-  listForTask: input.persistence.listForTask,
   proposalIsCurrent: input.persistence.proposalIsCurrent,
   inspectIdentity: (review) => inspectTaskReviewIdentity(input, review),
 });

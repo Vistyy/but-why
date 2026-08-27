@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
+import { listTaskReviews } from "../../../task/composition/listTaskReviews.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   withTaskReviewInspection,
   withTaskReviewRecovery,
@@ -23,23 +23,21 @@ export const runTaskReviewCommand = (
   if (command.action === "list") {
     const parsed = parseCliTaskIdValue(command.taskId);
     if (!parsed.ok) return Effect.succeed(parsed.result);
-    return withTasks(environment, (tasks) => {
-      const resolved = resolveTaskId(tasks, parsed.taskId);
-      if (!resolved.ok) return Effect.succeed(resolved.result);
-      return withTaskReviewInspection(environment, (reviews) =>
-        Effect.map(reviews.listForTask(resolved.taskId), (history) =>
-          success({
-            taskId: resolved.taskId,
-            reviews: history.map(taskReviewHistoryView),
-            reviewCount: history.length,
-            help:
-              history.length === 0
-                ? ["Run `by task submit <task-id>` to start a Task Review for a New Task."]
-                : [`Run \`by task-review show <review-id>\` to inspect one Review.`],
-          }),
-        ),
-      );
-    });
+    return withTasks(environment, (cwd) =>
+      Effect.map(listTaskReviews(cwd, parsed.taskId), (result) => {
+        if (!result.ok) return taskIdResolutionError(result.error);
+        const history = result.reviews;
+        return success({
+          taskId: result.taskId,
+          reviews: history.map(taskReviewHistoryView),
+          reviewCount: history.length,
+          help:
+            history.length === 0
+              ? ["Run `by task submit <task-id>` to start a Task Review for a New Task."]
+              : [`Run \`by task-review show <review-id>\` to inspect one Review.`],
+        });
+      }),
+    );
   }
   if (command.action === "show") {
     return withTaskReviewInspection(environment, (reviews) =>

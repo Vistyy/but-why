@@ -1,10 +1,12 @@
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
 import { success } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
+import { getTaskContext } from "../../../task/composition/taskContext.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskNotFound,
@@ -17,11 +19,12 @@ export const runContextCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (tasks) => {
-    const taskId = resolveTaskId(tasks, parsed.taskId);
-    if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.map(tasks.getTaskContextById(taskId.taskId), (task) =>
-      task === undefined ? taskNotFound(taskId.taskId) : success({ task }),
-    );
-  });
+  return withTasks(environment, (cwd) =>
+    Effect.map(getTaskContext(cwd, parsed.taskId), (result) => {
+      if (result !== undefined && "error" in result) {
+        return taskIdResolutionError(result.error);
+      }
+      return result === undefined ? taskNotFound(parsed.taskId) : success({ task: result });
+    }),
+  );
 };

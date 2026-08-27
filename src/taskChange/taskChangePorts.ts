@@ -1,5 +1,4 @@
 import type { Effect } from "effect";
-
 import type {
   ChangeCancellationCompletionFailure,
   ChangeCancellationMutationFailure,
@@ -8,20 +7,6 @@ import type {
 import type { CancelChangeInput, CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskRecord } from "../task/task.js";
-
-export type TaskChangeLink = {
-  readonly taskId: string;
-  readonly changeId: string;
-};
-
-export type TaskChangeLinkPort = {
-  readonly getByTaskId: (
-    taskId: string,
-  ) => Effect.Effect<TaskChangeLink | undefined, RepositoryStorageError>;
-  readonly getByChangeId: (
-    changeId: string,
-  ) => Effect.Effect<TaskChangeLink | undefined, RepositoryStorageError>;
-};
 
 export type TaskChangeCancellationChange = ChangeCancellationRecord & {
   readonly taskId: string | null;

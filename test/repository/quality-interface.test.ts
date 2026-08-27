@@ -149,6 +149,7 @@ const startJust = (
 
 const runJust = async (lockFile: string, args: string[]): Promise<CommandResult> => {
   const justProcess = startJust(lockFile, args, {
+    // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
     PATH: `${dirname(lockFile)}:${process.env["PATH"] ?? ""}`,
   });
   try {
@@ -470,6 +471,7 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
     try {
       await waitForFile(readyFile);
       unselected = startJust(lockFile, ["test", "--reporter=dot"], {
+        // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
         PATH: `${directory}:${process.env["PATH"] ?? ""}`,
       });
       await waitForOutput(unselected, "waiting: test is waiting for capacity");
@@ -603,6 +605,7 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       lockFile,
       ["quality"],
       {
+        // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
         PATH: `${directory}:${process.env["PATH"] ?? ""}`,
       },
       directory,

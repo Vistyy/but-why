@@ -7,9 +7,11 @@ import {
   repositoryStorageErrorResult,
   runtimeError,
 } from "../../cliResults.js";
-import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
+import type {
+  RepositoryOperationError,
+  RepositoryOperationStorageError,
+} from "../../repositoryRuntime/repositoryOperation.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
@@ -18,7 +20,6 @@ import {
   withTaskReviewRecoveryUseCases,
   withTaskReviewSubmissionUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
-import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
 import type { TaskReviewerOutput } from "../../task/review/taskReviewerOutput.js";
 import type {
   TaskReviewInspectionUseCases,
@@ -28,12 +29,7 @@ import type {
 import type { TaskSimplificationAdviceOutput } from "../../task/review/taskSimplificationAdviceOutput.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
-import type { TaskUseCases } from "../../task/taskUseCases.js";
 import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js";
-import {
-  type TaskChangeTaskUseCases,
-  withTaskChangeTaskUseCases,
-} from "../../taskChange/composition/loadTaskChangeTaskUseCases.js";
 
 export type TaskIdCommand = { readonly taskId: string };
 
@@ -42,8 +38,6 @@ export type TaskCommandEnvironment = {
   readonly now: () => Date;
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
-  readonly taskUseCases?: TaskUseCases;
-  readonly taskChangeTaskUseCases?: TaskChangeTaskUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
@@ -55,67 +49,17 @@ export type TaskCommandEnvironment = {
 
 export const withTasks = (
   environment: TaskCommandEnvironment,
-  use: (tasks: TaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
-): Effect.Effect<CliResult> => {
-  const program =
-    environment.taskUseCases === undefined
-      ? withTaskUseCases(taskRepositoryInput(environment), use).pipe(
-          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
-        )
-      : use(environment.taskUseCases);
-
-  return program.pipe(
+  use: (cwd: string) => Effect.Effect<CliResult, RepositoryOperationError>,
+): Effect.Effect<CliResult> =>
+  use(environment.cwd).pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        "code" in error
+          ? repoStateLoadError(error)
+          : repositoryStorageErrorResult(error.error, error.idPrefix),
       ),
     ),
   );
-};
-
-export const withTaskChangeTasks = (
-  environment: TaskCommandEnvironment,
-  use: (
-    tasks: Pick<
-      TaskChangeTaskUseCases,
-      "idPrefix" | "resolveTaskId" | "editTaskDependencies" | "reviseTask"
-    >,
-  ) => Effect.Effect<CliResult, RepositoryStorageError>,
-): Effect.Effect<CliResult> => {
-  const injected = environment.taskChangeTaskUseCases;
-  const program =
-    injected === undefined
-      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), (tasks) => use(tasks)).pipe(
-          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
-        )
-      : use(injected);
-  return program.pipe(
-    Effect.catchAll((error) =>
-      Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
-      ),
-    ),
-  );
-};
-
-export const withTaskRename = (
-  environment: TaskCommandEnvironment,
-  use: (tasks: TaskChangeTaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
-): Effect.Effect<CliResult> => {
-  const program =
-    environment.taskChangeTaskUseCases === undefined
-      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), use).pipe(
-          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
-        )
-      : use(environment.taskChangeTaskUseCases);
-  return program.pipe(
-    Effect.catchAll((error) =>
-      Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
-      ),
-    ),
-  );
-};
 
 export const withTaskReviewInspection = (
   environment: TaskCommandEnvironment,
@@ -130,7 +74,7 @@ export const withTaskReviewInspection = (
           ),
         )
       : use(injected);
-  return catchTaskReviewStorageError(environment, program);
+  return catchTaskReviewStorageError(program);
 };
 
 export const withTaskReviewRecovery = (
@@ -146,7 +90,7 @@ export const withTaskReviewRecovery = (
           ),
         )
       : use(injected);
-  return catchTaskReviewStorageError(environment, program);
+  return catchTaskReviewStorageError(program);
 };
 
 export const withTaskReviewSubmission = (
@@ -181,27 +125,23 @@ export const withTaskReviewSubmission = (
         )
       : environment.taskReviewSubmissionUseCases.submit(taskId, now).pipe(Effect.flatMap(use));
   return program.pipe(
-    Effect.catchAll((error) =>
-      Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
-      ),
-    ),
+    Effect.catchAll((error) => Effect.succeed(taskReviewStorageErrorResult(error))),
   );
 };
 
 const catchTaskReviewStorageError = (
-  environment: TaskCommandEnvironment,
-  program: Effect.Effect<CliResult, RepositoryStorageError>,
+  program: Effect.Effect<CliResult, RepositoryStorageError | RepositoryOperationStorageError>,
 ): Effect.Effect<CliResult> =>
-  program.pipe(
-    Effect.catchAll((error) =>
-      Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
-      ),
-    ),
-  );
+  program.pipe(Effect.catchAll((error) => Effect.succeed(taskReviewStorageErrorResult(error))));
 
-export const taskRepositoryInput = (environment: TaskCommandEnvironment) => ({
+const taskReviewStorageErrorResult = (
+  error: RepositoryStorageError | RepositoryOperationStorageError,
+): CliResult =>
+  error._tag === "RepositoryOperationStorageError"
+    ? repositoryStorageErrorResult(error.error, error.idPrefix)
+    : repositoryStorageErrorResult(error);
+
+const taskRepositoryInput = (environment: TaskCommandEnvironment) => ({
   cwd: environment.cwd,
 });
 
@@ -213,28 +153,6 @@ const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
         help: ["Fix the reported Agent Profile configuration, then retry."],
       })
     : repoStateLoadError(error);
-
-export type ResolvedTaskIdResult<T> =
-  | {
-      readonly ok: true;
-      readonly tasks: T;
-      readonly taskId: PublicTaskId;
-    }
-  | {
-      readonly ok: false;
-      readonly result: CliResult;
-    };
-
-export const resolveTaskId = <T extends Pick<TaskUseCases, "resolveTaskId">>(
-  tasks: T,
-  taskId: PublicTaskId,
-): ResolvedTaskIdResult<T> => {
-  const resolvedTaskId = tasks.resolveTaskId(taskId);
-  if (!resolvedTaskId.ok) {
-    return { ok: false, result: taskIdResolutionError(resolvedTaskId) };
-  }
-  return { ok: true, tasks, taskId: resolvedTaskId.taskId };
-};
 
 export const taskMutationView = (task: TaskRecord) => ({
   id: task.id,

@@ -65,6 +65,7 @@ export const runInspectionCommand = (
     runByWithEnv(
       root,
       {
+        // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
         PATH: `${join(root, ".inspection-bin")}:${process.env["PATH"] ?? ""}`,
         BUT_WHY_NOW: _now,
       },

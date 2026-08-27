@@ -10,7 +10,6 @@ import { openSqliteCandidateCapturePersistence } from "../../src/change/adapters
 import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
@@ -18,6 +17,7 @@ import {
   openSqliteChangeValidationTestDependencies,
 } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { createTaskInSqlite } from "../support/taskOperations.js";
 
 const configuration: AgentSessionConfiguration = {
   harness: "pi",
@@ -978,10 +978,9 @@ describe("SQLite Validation ownership", () => {
     withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
         const validation = yield* openSqliteChangeValidationTestDependencies();
-        yield* tasks.createTask({
+        yield* createTaskInSqlite({
           title: "Owner",
           description: "Review owner.",
           now: "2026-10-02T10:02:00.000Z",

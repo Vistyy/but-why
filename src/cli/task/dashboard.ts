@@ -1,8 +1,11 @@
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import type { StructuredValue } from "../../output/structured.js";
+import { listActionableTasks } from "../../task/composition/listActionableTasks.js";
 import type { TaskSummary } from "../../task/task.js";
 import { type TaskCommandEnvironment, withTasks } from "./taskCliSupport.js";
 
@@ -11,8 +14,8 @@ export const dashboard = (
   description: string,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> =>
-  withTasks(environment, (tasks) =>
-    Effect.map(tasks.listActionableTasks(), (actionable) =>
+  withTasks(environment, (cwd) =>
+    Effect.map(listActionableTasks(cwd), (actionable) =>
       success({
         bin,
         description,

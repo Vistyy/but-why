@@ -19,11 +19,25 @@ import {
 import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { TaskRecord } from "../task/task.js";
 import { type PublicTaskId, publicTaskId } from "../task/taskId.js";
-import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   TaskChangeCancellationChange,
   TaskChangeCancellationPort,
 } from "./taskChangePorts.js";
+
+type TaskCancellationOperations = {
+  readonly getTaskById: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskRecord | undefined, RepositoryStorageError>;
+  readonly cancelTask: (input: {
+    readonly taskId: PublicTaskId;
+    readonly reason: string;
+    readonly now: string;
+  }) => Effect.Effect<TaskRecordCancellationResult, RepositoryStorageError>;
+};
+
+type TaskRecordCancellationResult =
+  | { readonly ok: true; readonly changed: boolean; readonly task: TaskRecord }
+  | { readonly ok: false; readonly code: "task_not_found" | "task_already_done" };
 
 export type CancellationUseCases = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
@@ -41,7 +55,7 @@ export type CancellationUseCases = {
 
 export type CancellationDependencies = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
-  readonly tasks: Pick<TaskPersistence, "getTaskById" | "cancelTask">;
+  readonly tasks: TaskCancellationOperations;
   readonly changes: TaskChangeCancellationPort;
   readonly github: GitHubPullRequestCloser;
   readonly validation: ActiveValidationRunPort;

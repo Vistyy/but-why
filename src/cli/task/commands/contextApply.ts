@@ -1,12 +1,14 @@
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
+import { applyTaskContextDraft } from "../../../task/composition/taskContext.js";
 import type { TaskContextDraftReadError } from "../../../task/files/contextDraft.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   taskMutationView,
   taskNotFound,
@@ -19,20 +21,22 @@ export const runContextApplyCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (tasks) => {
-    const taskId = resolveTaskId(tasks, parsed.taskId);
-    if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.map(
-      tasks.applyTaskContextDraft({
-        taskId: taskId.taskId,
+  return withTasks(environment, (cwd) =>
+    Effect.map(
+      applyTaskContextDraft(cwd, {
+        taskId: parsed.taskId,
         now: environment.now().toISOString(),
       }),
       (result) => {
+        if ("error" in result) {
+          return "taskId" in result.error
+            ? taskIdResolutionError(result.error)
+            : taskContextDraftReadError(result.error);
+        }
         if (result.ok) {
           return success({ task: taskMutationView(result.task), context: result.context });
         }
-        if ("error" in result) return taskContextDraftReadError(result.error);
-        if (result.code === "task_not_found") return taskNotFound(taskId.taskId);
+        if (result.code === "task_not_found") return taskNotFound(parsed.taskId);
         if (result.code === "task_context_draft_cleanup_failed") {
           return runtimeError({
             code: result.code,
@@ -41,13 +45,13 @@ export const runContextApplyCommand = (
             help: ["Remove the draft file after confirming the updated Task Context."],
           });
         }
-        return invalidTaskContextDraftState(taskId.taskId, result.state);
+        return invalidTaskContextState(parsed.taskId, result.state);
       },
-    );
-  });
+    ),
+  );
 };
 
-const invalidTaskContextDraftState = (taskId: PublicTaskId, state: string): CliResult => {
+const invalidTaskContextState = (taskId: PublicTaskId, state: string): CliResult => {
   if (state === "todo") {
     return runtimeError({
       code: "task_revision_required",

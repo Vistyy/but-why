@@ -12,9 +12,7 @@ import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRun
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import type { TaskSimplificationAdviceOutput } from "../../src/task/review/taskSimplificationAdviceOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import type { CancellationUseCases } from "../../src/taskChange/cancelTaskChange.js";
-import type { TaskChangeTaskUseCases } from "../../src/taskChange/composition/loadTaskChangeTaskUseCases.js";
 import { passTaskReviewFixture as passStoredTaskReviewFixture } from "./repository.js";
 import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";
@@ -75,8 +73,6 @@ const unavailableUnderengineerAgentRuntime: ReviewerAgentRuntime<TaskSimplificat
 type InProcessCliOptions = {
   readonly globalConfigPath?: string;
   readonly stdin?: TextInputStdin;
-  readonly taskUseCases?: TaskUseCases;
-  readonly taskChangeTaskUseCases?: TaskChangeTaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
@@ -104,10 +100,6 @@ const runByInProcessEffectRaw = (
     now: () => new Date(now),
     platform: "linux",
     stdin: options.stdin ?? { fd: -1, isTerminal: true },
-    ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
-    ...(options.taskChangeTaskUseCases === undefined
-      ? {}
-      : { taskChangeTaskUseCases: options.taskChangeTaskUseCases }),
     ...(options.cancellationUseCases === undefined
       ? {}
       : { cancellationUseCases: options.cancellationUseCases }),

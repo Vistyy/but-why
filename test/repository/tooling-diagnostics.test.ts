@@ -56,14 +56,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const decodeEffectDiagnostics = (source: string): readonly EffectDiagnostic[] => {
   const parsed: unknown = JSON.parse(source);
   if (!isRecord(parsed)) throw new Error("Effect diagnostic output must be an object");
+  // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
   const diagnostics = parsed["diagnostics"];
   if (!Array.isArray(diagnostics)) {
     throw new Error("Effect diagnostic output must contain diagnostics");
   }
   return diagnostics.map((diagnostic: unknown) => {
     if (!isRecord(diagnostic)) throw new Error("Each Effect diagnostic must be an object");
+    // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
     const file = diagnostic["file"];
+    // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
     const name = diagnostic["name"];
+    // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
     const severity = diagnostic["severity"];
     if (typeof file !== "string" || typeof name !== "string" || typeof severity !== "string") {
       throw new Error("Each Effect diagnostic must identify its file, name, and severity");

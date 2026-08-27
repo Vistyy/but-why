@@ -1,9 +1,7 @@
 import type { TaskState } from "./lifecycle.js";
-import type { DependencyValidationCode, TaskContext, TaskRecord, TaskSummary } from "./task.js";
+import type { DependencyValidationCode, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 import type { TaskTitleValidationCode } from "./taskTitle.js";
-
-export type StoredTaskRecord = TaskRecord;
 
 export type CreateTaskInput = {
   readonly title: string;
@@ -26,7 +24,7 @@ export type RenameTaskInput = {
 };
 
 export type RenameTaskResult =
-  | { readonly ok: true; readonly noOp: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: true; readonly noOp: boolean; readonly task: TaskRecord }
   | { readonly ok: false; readonly code: TaskTitleValidationCode }
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
@@ -41,7 +39,7 @@ export type EditTaskDependenciesResult =
   | {
       readonly ok: true;
       readonly operation: TaskDependencyOperation;
-      readonly task: StoredTaskRecord;
+      readonly task: TaskRecord;
       readonly added: readonly PublicTaskId[];
       readonly removed: readonly PublicTaskId[];
       readonly unchanged: readonly PublicTaskId[];
@@ -73,29 +71,13 @@ export type UpdateTaskContextInput = {
   readonly now: string;
 };
 
-export type UpdateTaskContextResult =
-  | {
-      readonly ok: true;
-      readonly task: StoredTaskRecord;
-      readonly context: TaskContext;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "task_not_found";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "task_revision_required" | "invalid_task_state";
-      readonly state: TaskState;
-    };
-
 export type ReviseTaskInput = {
   readonly taskId: PublicTaskId;
   readonly now: string;
 };
 
 export type ReviseTaskResult =
-  | { readonly ok: true; readonly changed: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: true; readonly changed: boolean; readonly task: TaskRecord }
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
   | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: number }
@@ -108,6 +90,6 @@ export type CancelTaskInput = {
 };
 
 export type CancelTaskResult =
-  | { readonly ok: true; readonly changed: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: true; readonly changed: boolean; readonly task: TaskRecord }
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "task_already_done" };
