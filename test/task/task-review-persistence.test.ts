@@ -784,12 +784,13 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         now: later,
       });
       expect(blocked).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-1"), later)).toBeUndefined();
 
       const second = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
         policy,
         baseRef: "refs/heads/main",
-        baseCommit: "b".repeat(40),
+        baseCommit: "a".repeat(40),
         now,
       });
       if (!second.ok) throw new Error(`Task Review admission failed: ${second.code}`);
@@ -807,6 +808,7 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         },
       });
       if (!passedInvocation.ok) throw new Error(passedInvocation.code);
+      expect(passedInvocation.dispatch.resumed).toBe(false);
       yield* reviews.agentSessionJournal.settleInvocation({
         invocationId: passedInvocation.dispatch.invocation.id,
         continuationId: passedInvocation.dispatch.continuation.id,

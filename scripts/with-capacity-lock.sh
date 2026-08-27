@@ -38,8 +38,19 @@ report_interruption() {
     echo "interrupted: $workload_class; rerun the same command to retry" >&2
 }
 
-trap 'terminate_child 130 INT; report_interruption' INT
-trap 'terminate_child 143 TERM; report_interruption' TERM
+handle_interruption() {
+    local status=$1
+    local signal=$2
+    trap '' INT TERM
+    if (( interrupted_status != 0 )); then
+        return
+    fi
+    terminate_child "$status" "$signal"
+    report_interruption
+}
+
+trap 'handle_interruption 130 INT' INT
+trap 'handle_interruption 143 TERM' TERM
 
 lock_owned=0
 cleanup() {

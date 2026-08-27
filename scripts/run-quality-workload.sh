@@ -44,8 +44,19 @@ terminate_children() {
         wait "$pid" 2>/dev/null || true
     done
 }
-trap 'terminate_children 130 INT' INT
-trap 'terminate_children 143 TERM' TERM
+
+handle_interruption() {
+    local status=$1
+    local signal=$2
+    trap '' INT TERM
+    if (( interrupted_status != 0 )); then
+        return
+    fi
+    terminate_children "$status" "$signal"
+}
+
+trap 'handle_interruption 130 INT' INT
+trap 'handle_interruption 143 TERM' TERM
 
 wait_for_child() {
     local pid=$1
