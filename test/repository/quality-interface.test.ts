@@ -291,7 +291,7 @@ test:
     `#!/usr/bin/env bash
 set -euo pipefail
 printf ready > ${JSON.stringify(readyFile)}
-(trap '' INT TERM; while :; do sleep 1; done) &
+sleep 100 &
 descendant=$!
 printf '%s' "$descendant" > ${JSON.stringify(descendantPidFile)}
 wait
@@ -601,6 +601,9 @@ describe("quality interface", { timeout: processTestDeadlineMs }, () => {
       expect(
         (await settleWithinDeadline(quality.done, "interrupted quality settlement")).status,
       ).toBe(expectedStatus);
+      expect(quality.output).toContain("quality interrupted after");
+      expect(quality.output).toContain("rerun just quality to retry");
+      expect(quality.output).not.toContain("quality completed in");
       const observation = await settleWithinDeadline(
         observer.done,
         "capacity observer settlement after quality descendant cleanup",
