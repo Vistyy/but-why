@@ -12,7 +12,6 @@ import {
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import {
   readCurrentWorktreeReviewBase,
@@ -26,6 +25,7 @@ import {
   repoRoot,
   runByInProcessEffect,
 } from "../support/by-cli.js";
+import { createTaskInSqlite } from "../support/taskOperations.js";
 import { runTestProcess } from "../support/testProcess.js";
 
 const now = "2026-08-15T12:00:00.000Z";
@@ -66,9 +66,8 @@ it.effect("submits through the supported Task Review operation with a real Agent
 
     const submitted = yield* loaded.runtime.provide(
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
-        const created = yield* tasks.createTask({
+        const created = yield* createTaskInSqlite({
           title: "Real Agent Session sentinel",
           description: "Exercise the supported Task Review submission boundary.",
           now,

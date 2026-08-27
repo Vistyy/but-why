@@ -1,7 +1,10 @@
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { inspectTask } from "../../../task/composition/inspectTask.js";
 import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import {
   resolveTaskId,
@@ -19,18 +22,15 @@ export const runTaskShowCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (tasks) => {
-    const taskId = resolveTaskId(tasks, parsed.taskId);
+  return withTasks(environment, (context) => {
+    const taskId = resolveTaskId(context, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.gen(function* () {
-      const task = yield* tasks.getTaskForInspection(taskId.taskId);
+      const task = yield* inspectTask(environment.cwd, taskId.taskId);
       if (task === undefined) return taskNotFound(taskId.taskId);
-      const change =
-        environment.taskUseCases === undefined
-          ? loadTaskChangeProjection(taskRepositoryInput(environment))
-          : undefined;
-      if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.idPrefix);
-      const projection = change === undefined ? null : yield* change.operation(taskId.taskId);
+      const change = loadTaskChangeProjection(taskRepositoryInput(environment));
+      if (!change.ok) return stateStoreUnavailable(context.idPrefix);
+      const projection = yield* change.operation(taskId.taskId);
       return yield* withTaskReviewInspection(environment, (reviews) =>
         Effect.gen(function* () {
           const review = yield* reviews.getLatestForTask(taskId.taskId);

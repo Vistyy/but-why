@@ -10,6 +10,7 @@ import { collapseHome } from "../../src/cli/cliPath.js";
 import { mapRuntimeError } from "../../src/cli.js";
 import { runtimeError } from "../../src/cliResults.js";
 import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
+import { createInitializedRepo } from "../support/initializedRepo.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
@@ -59,6 +60,54 @@ const parseHelpOutput = (stdout: string): { readonly help?: unknown } =>
   JSON.parse(stdout) as { readonly help?: unknown };
 
 describe("by CLI", () => {
+  it.effect("runs Task Intent and Task/Change operations through the CLI seam", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => createInitializedRepo()),
+      (root) =>
+        Effect.gen(function* () {
+          writeFileSync(join(root, "task.md"), "Initial intent\n");
+          expect(
+            (yield* runByInProcessEffect(root, [
+              "task",
+              "create",
+              "--title",
+              "Initial",
+              "--file",
+              "task.md",
+            ])).status,
+          ).toBe(0);
+          expect((yield* runByInProcessEffect(root, ["task", "list"])).stdout).toContain(
+            '"id":"BY-1"',
+          );
+          expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
+            '"description":"Initial intent\\n"',
+          );
+          expect(
+            (yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"])).status,
+          ).toBe(0);
+          const draft = readdirSync(join(root, ".git", "but-why", "task-context-drafts"))[0];
+          if (draft === undefined) throw new Error("Task Context draft was not created");
+          writeFileSync(
+            join(root, ".git", "but-why", "task-context-drafts", draft),
+            "Revised intent\n",
+          );
+          expect(
+            (yield* runByInProcessEffect(root, ["task", "context", "apply", "BY-1"])).status,
+          ).toBe(0);
+          expect(readdirSync(join(root, ".git", "but-why", "task-context-drafts"))).toEqual([]);
+          expect(
+            (yield* runByInProcessEffect(root, ["task", "rename", "BY-1", "--title", "Renamed"]))
+              .status,
+          ).toBe(0);
+          expect(
+            (yield* runByInProcessEffect(root, ["task", "dependencies", "clear", "BY-1"])).status,
+          ).toBe(0);
+          expect((yield* runByInProcessEffect(root, ["task", "revise", "BY-1"])).status).toBe(0);
+        }),
+      (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect("routes every generated public command", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--help"]);

@@ -9,7 +9,12 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
+import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
+import {
+  openRepositoryRuntime,
+  type RepositoryRuntimeLoadError,
+  resolveRepositoryIdPrefix,
+} from "../../repositoryRuntime/repositoryRuntime.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
@@ -18,7 +23,7 @@ import {
   withTaskReviewRecoveryUseCases,
   withTaskReviewSubmissionUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
-import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
+import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
 import type { TaskReviewerOutput } from "../../task/review/taskReviewerOutput.js";
 import type {
   TaskReviewInspectionUseCases,
@@ -28,12 +33,7 @@ import type {
 import type { TaskSimplificationAdviceOutput } from "../../task/review/taskSimplificationAdviceOutput.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
-import type { TaskUseCases } from "../../task/taskUseCases.js";
 import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js";
-import {
-  type TaskChangeTaskUseCases,
-  withTaskChangeTaskUseCases,
-} from "../../taskChange/composition/loadTaskChangeTaskUseCases.js";
 
 export type TaskIdCommand = { readonly taskId: string };
 
@@ -42,8 +42,6 @@ export type TaskCommandEnvironment = {
   readonly now: () => Date;
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
-  readonly taskUseCases?: TaskUseCases;
-  readonly taskChangeTaskUseCases?: TaskChangeTaskUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
@@ -55,63 +53,34 @@ export type TaskCommandEnvironment = {
 
 export const withTasks = (
   environment: TaskCommandEnvironment,
-  use: (tasks: TaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
-): Effect.Effect<CliResult> => {
-  const program =
-    environment.taskUseCases === undefined
-      ? withTaskUseCases(taskRepositoryInput(environment), use).pipe(
-          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
-        )
-      : use(environment.taskUseCases);
-
-  return program.pipe(
-    Effect.catchAll((error) =>
-      Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
-      ),
-    ),
-  );
-};
+  use: (
+    context: LocalRepositoryContext,
+  ) => Effect.Effect<CliResult, RepositoryStorageError | RepositoryRuntimeLoadError>,
+): Effect.Effect<CliResult> => withRepository(environment, use);
 
 export const withTaskChangeTasks = (
   environment: TaskCommandEnvironment,
   use: (
-    tasks: Pick<
-      TaskChangeTaskUseCases,
-      "idPrefix" | "resolveTaskId" | "editTaskDependencies" | "reviseTask"
-    >,
-  ) => Effect.Effect<CliResult, RepositoryStorageError>,
-): Effect.Effect<CliResult> => {
-  const injected = environment.taskChangeTaskUseCases;
-  const program =
-    injected === undefined
-      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), (tasks) => use(tasks)).pipe(
-          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
-        )
-      : use(injected);
-  return program.pipe(
-    Effect.catchAll((error) =>
-      Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
-      ),
-    ),
-  );
-};
+    context: LocalRepositoryContext,
+  ) => Effect.Effect<CliResult, RepositoryStorageError | RepositoryRuntimeLoadError>,
+): Effect.Effect<CliResult> => withRepository(environment, use);
 
-export const withTaskRename = (
+const withRepository = (
   environment: TaskCommandEnvironment,
-  use: (tasks: TaskChangeTaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+  use: (
+    context: LocalRepositoryContext,
+  ) => Effect.Effect<CliResult, RepositoryStorageError | RepositoryRuntimeLoadError>,
 ): Effect.Effect<CliResult> => {
-  const program =
-    environment.taskChangeTaskUseCases === undefined
-      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), use).pipe(
-          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
-        )
-      : use(environment.taskChangeTaskUseCases);
+  const loaded = openRepositoryRuntime(environment.cwd);
+  const program = loaded.ok
+    ? loaded.runtime.provide(use(loaded.runtime.context))
+    : Effect.succeed(repoStateLoadError(loaded.error));
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        "code" in error
+          ? repoStateLoadError(error)
+          : repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -214,26 +183,19 @@ const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
       })
     : repoStateLoadError(error);
 
-export type ResolvedTaskIdResult<T> =
-  | {
-      readonly ok: true;
-      readonly tasks: T;
-      readonly taskId: PublicTaskId;
-    }
-  | {
-      readonly ok: false;
-      readonly result: CliResult;
-    };
+export type ResolvedTaskIdResult =
+  | { readonly ok: true; readonly taskId: PublicTaskId }
+  | { readonly ok: false; readonly result: CliResult };
 
-export const resolveTaskId = <T extends Pick<TaskUseCases, "resolveTaskId">>(
-  tasks: T,
+export const resolveTaskId = (
+  context: LocalRepositoryContext,
   taskId: PublicTaskId,
-): ResolvedTaskIdResult<T> => {
-  const resolvedTaskId = tasks.resolveTaskId(taskId);
+): ResolvedTaskIdResult => {
+  const resolvedTaskId = resolveRepoTaskId(context, taskId);
   if (!resolvedTaskId.ok) {
     return { ok: false, result: taskIdResolutionError(resolvedTaskId) };
   }
-  return { ok: true, tasks, taskId: resolvedTaskId.taskId };
+  return { ok: true, taskId: resolvedTaskId.taskId };
 };
 
 export const taskMutationView = (task: TaskRecord) => ({

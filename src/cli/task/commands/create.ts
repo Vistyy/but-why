@@ -8,6 +8,7 @@ import {
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { createTask } from "../../../task/composition/createTask.js";
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { normalizeTaskTitle } from "../../../task/taskTitle.js";
@@ -34,11 +35,11 @@ export const runCreateCommand = (
   const description = readRecordingText(environment.cwd, command.file, environment.stdin);
   if (!description.ok) return Effect.succeed(descriptionInputError(description.error));
 
-  return withTasks(environment, (tasks) => {
-    const dependencies = resolveDependencies(command.dependsOn, tasks);
+  return withTasks(environment, (context) => {
+    const dependencies = resolveDependencies(command.dependsOn, context);
     if (!dependencies.ok) return Effect.succeed(dependencies.result);
     return Effect.map(
-      tasks.createTask({
+      createTask(environment.cwd, {
         title: title.title,
         description: description.content,
         now: environment.now().toISOString(),
@@ -63,13 +64,13 @@ type ResolveDependenciesResult =
 
 const resolveDependencies = (
   dependencies: readonly string[],
-  tasks: Parameters<typeof resolveTaskId>[0],
+  context: Parameters<typeof resolveTaskId>[0],
 ): ResolveDependenciesResult => {
   const taskIds: PublicTaskId[] = [];
   for (const dependency of dependencies) {
     const parsed = parseCliTaskIdValue(dependency);
     if (!parsed.ok) return parsed;
-    const resolved = resolveTaskId(tasks, parsed.taskId);
+    const resolved = resolveTaskId(context, parsed.taskId);
     if (!resolved.ok) return resolved;
     taskIds.push(resolved.taskId);
   }

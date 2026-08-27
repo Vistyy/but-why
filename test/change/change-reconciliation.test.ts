@@ -11,12 +11,12 @@ import { taskChangeStartChangeOperations } from "../../src/change/composition/lo
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { taskChangeStartTaskOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
+import { createTaskInSqlite, getTaskInSqlite } from "../support/taskOperations.js";
 import {
   noOpTerminalCleanupDependencies,
   openTerminalCleanup,
@@ -263,8 +263,7 @@ describe("by change reconcile", () => {
   it.effect("atomically completes a merged Change and its linked Task before cleanup", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence();
-        const createdTask = yield* tasks.createTask({
+        const createdTask = yield* createTaskInSqlite({
           title: "Merged Change",
           description: "Complete me",
           now,
@@ -400,7 +399,7 @@ describe("by change reconcile", () => {
           state: "closed",
           closeReason: "completed",
         });
-        const completedTask = yield* tasks.getTaskById(taskId);
+        const completedTask = yield* getTaskInSqlite(taskId);
         expect(completedTask).toMatchObject({ state: "done" });
       }),
     ),
@@ -505,8 +504,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence();
-          const createdTask = yield* tasks.createTask({
+          const createdTask = yield* createTaskInSqlite({
             title: "Merged blocked Change",
             description: "Exact merge evidence outranks the historical Blocker.",
             now,
@@ -608,7 +606,7 @@ describe("by change reconcile", () => {
             state: "closed",
             closeReason: "completed",
           });
-          expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+          expect(yield* getTaskInSqlite(taskId)).toMatchObject({ state: "done" });
           expect(
             yield* changes.authority.listImplementationBlockers(created.change.id),
           ).toMatchObject({
@@ -625,8 +623,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence();
-          const createdTask = yield* tasks.createTask({
+          const createdTask = yield* createTaskInSqlite({
             title: "Single observation",
             description: "Completion derives the linked Task from durable Change state.",
             now,
@@ -733,7 +730,7 @@ describe("by change reconcile", () => {
             expectedHeadSha: "head",
           });
           expect("taskId" in (capturedInput ?? {})).toBe(false);
-          expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+          expect(yield* getTaskInSqlite(taskId)).toMatchObject({ state: "done" });
         }),
       ),
     15_000,

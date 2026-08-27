@@ -147,19 +147,11 @@ invalid:
 id: task-context-command-stays-in-task-intent
 valid:
   - import { success } from "../../../cliResults.js";
-  - import { TaskUseCases } from "../../../task/taskUseCases.js";
+  - import { getTaskContext } from "../../../task/composition/taskContext.js";
 invalid:
   - import { loadTaskContextInspection } from "../../../taskChange/composition/loadTaskContextInspection.js";
   - import { queryTaskChangeProjection } from "../../../taskChange/inspectTaskChange.js";
   - import { inspectChange } from "../../../change/inspectChange.js";
----
-id: linked-task-mutations-use-coordination
-valid:
-  - environment.taskChangeTaskUseCases.editTaskDependencies
-  - environment.taskChangeTaskUseCases.reviseTask
-invalid:
-  - environment.taskUseCases.editTaskDependencies
-  - environment.taskUseCases.reviseTask
 ---
 id: direct-reflect-get-is-validated
 valid:

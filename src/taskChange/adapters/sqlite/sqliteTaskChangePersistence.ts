@@ -3,24 +3,11 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { CompleteMergedChangeInput } from "../../../change/changeStore.js";
-import {
-  RepositoryPersistedDataInvalid,
-  type RepositoryStorageError,
-} from "../../../contracts/repositoryStorageError.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
-import type { TaskState } from "../../../task/lifecycle.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
-import type {
-  EditTaskDependenciesInput,
-  EditTaskDependenciesResult,
-  RenameTaskInput,
-  RenameTaskResult,
-  ReviseTaskInput,
-  ReviseTaskResult,
-  StoredTaskRecord,
-} from "../../../task/taskStore.js";
-import type { TaskTitleValidationResult } from "../../../task/taskTitle.js";
+import type { StoredTaskRecord } from "../../../task/taskStore.js";
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
 import type { TaskChangeLinkPort } from "../../taskChangePorts.js";
 
@@ -30,46 +17,6 @@ export type TaskReadOperation = {
     taskId: PublicTaskId,
     idPrefix: string,
   ) => Effect.Effect<StoredTaskRecord | undefined, SqlError | RepositoryPersistedDataInvalid>;
-};
-
-export type TaskChangeTaskMutationOperations = {
-  readonly editTaskDependencies: (
-    sql: SqlClient.SqlClient,
-    input: EditTaskDependenciesInput,
-    idPrefix: string,
-  ) => Effect.Effect<EditTaskDependenciesResult, SqlError | RepositoryPersistedDataInvalid>;
-  readonly validateTaskDependencyEditTarget: (
-    sql: SqlClient.SqlClient,
-    taskId: PublicTaskId,
-    idPrefix: string,
-  ) => Effect.Effect<
-    | { readonly ok: true; readonly task: StoredTaskRecord }
-    | { readonly ok: false; readonly code: "task_not_found" }
-    | { readonly ok: false; readonly code: "dependencies_locked"; readonly state: TaskState },
-    SqlError | RepositoryPersistedDataInvalid
-  >;
-  readonly normalizeTaskTitle: (title: string) => TaskTitleValidationResult;
-  readonly getTaskById: TaskReadOperation["getTaskById"];
-  readonly renameTask: (
-    sql: SqlClient.SqlClient,
-    input: RenameTaskInput,
-    idPrefix: string,
-  ) => Effect.Effect<RenameTaskResult, SqlError | RepositoryPersistedDataInvalid>;
-  readonly validateTaskRevisionTarget: (
-    sql: SqlClient.SqlClient,
-    taskId: PublicTaskId,
-    idPrefix: string,
-  ) => Effect.Effect<
-    | { readonly ok: true; readonly task: StoredTaskRecord }
-    | { readonly ok: false; readonly code: "task_not_found" }
-    | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState },
-    SqlError | RepositoryPersistedDataInvalid
-  >;
-  readonly reviseTask: (
-    sql: SqlClient.SqlClient,
-    input: ReviseTaskInput,
-    idPrefix: string,
-  ) => Effect.Effect<ReviseTaskResult, SqlError | RepositoryPersistedDataInvalid>;
 };
 
 export type TaskChangeCompletionOperations = {
@@ -94,18 +41,6 @@ export type TaskChangeCompletionOperations = {
   ) => Effect.Effect<readonly unknown[], SqlError>;
 };
 
-type TaskChangeTaskPersistence = {
-  readonly editTaskDependencies: (
-    input: EditTaskDependenciesInput,
-  ) => Effect.Effect<EditTaskDependenciesResult, RepositoryStorageError>;
-  readonly renameTask: (
-    input: RenameTaskInput,
-  ) => Effect.Effect<RenameTaskResult, RepositoryStorageError>;
-  readonly reviseTask: (
-    input: ReviseTaskInput,
-  ) => Effect.Effect<ReviseTaskResult, RepositoryStorageError>;
-};
-
 export const openSqliteTaskChangeLinkPort = () =>
   Effect.map(
     RepositorySql,
@@ -117,80 +52,6 @@ export const openSqliteTaskChangeLinkPort = () =>
       getByChangeId: (changeId) =>
         repository.transaction("read Task link by Change", (sql) =>
           readTaskChangeLinkByChangeId(sql, changeId, repository.idPrefix),
-        ),
-    }),
-  );
-
-export const openSqliteTaskChangeTaskPersistence = (operations: TaskChangeTaskMutationOperations) =>
-  Effect.map(
-    RepositorySql,
-    (repository): TaskChangeTaskPersistence => ({
-      editTaskDependencies: (input) =>
-        repository.transactionImmediate("edit Task dependencies", (sql) =>
-          Effect.gen(function* () {
-            const target = yield* operations.validateTaskDependencyEditTarget(
-              sql,
-              input.taskId,
-              repository.idPrefix,
-            );
-            if (!target.ok) return target;
-            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix);
-            if (link !== undefined) {
-              return {
-                ok: false as const,
-                code: "dependencies_locked" as const,
-                state: target.task.state,
-              };
-            }
-            return yield* operations.editTaskDependencies(sql, input, repository.idPrefix);
-          }),
-        ),
-      renameTask: (input) =>
-        repository.transactionImmediate("rename Task", (sql) =>
-          Effect.gen(function* () {
-            const title = operations.normalizeTaskTitle(input.title);
-            if (!title.ok) return title;
-            const current = yield* operations.getTaskById(sql, input.taskId, repository.idPrefix);
-            if (current === undefined) {
-              return { ok: false as const, code: "task_not_found" as const };
-            }
-            if (current.title === title.title) {
-              return { ok: true as const, noOp: true, task: current };
-            }
-            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix);
-            if (link !== undefined) {
-              return {
-                ok: false as const,
-                code: "task_change_linked" as const,
-                changeId: link.changeId,
-              };
-            }
-            return yield* operations.renameTask(
-              sql,
-              { ...input, title: title.title },
-              repository.idPrefix,
-            );
-          }),
-        ),
-      reviseTask: (input) =>
-        repository.transactionImmediate("revise Task", (sql) =>
-          Effect.gen(function* () {
-            const current = yield* operations.validateTaskRevisionTarget(
-              sql,
-              input.taskId,
-              repository.idPrefix,
-            );
-            if (!current.ok) return current;
-            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix);
-            if (link !== undefined) {
-              return {
-                ok: false as const,
-                code: "task_change_linked" as const,
-                changeId: link.changeId,
-              };
-            }
-            return yield* operations.reviseTask(sql, input, repository.idPrefix);
-          }),
         ),
     }),
   );

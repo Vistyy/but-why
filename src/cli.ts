@@ -12,9 +12,7 @@ import type {
   TaskReviewSubmissionUseCases,
 } from "./task/review/taskReviewUseCases.js";
 import type { TaskSimplificationAdviceOutput } from "./task/review/taskSimplificationAdviceOutput.js";
-import type { TaskUseCases } from "./task/taskUseCases.js";
 import type { CancellationUseCases } from "./taskChange/cancelTaskChange.js";
-import type { TaskChangeTaskUseCases } from "./taskChange/composition/loadTaskChangeTaskUseCases.js";
 
 export type { CliResult } from "./cliResults.js";
 export type CliEnvironment = {
@@ -25,8 +23,6 @@ export type CliEnvironment = {
   readonly now: () => Date;
   readonly platform: NodeJS.Platform;
   readonly stdin: TextInputStdin;
-  readonly taskUseCases?: TaskUseCases;
-  readonly taskChangeTaskUseCases?: TaskChangeTaskUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;

@@ -5,6 +5,7 @@ import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
 import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
 import type { StructuredValue } from "../../../output/structured.js";
+import { listTasks } from "../../../task/composition/listTasks.js";
 import type { TaskState } from "../../../task/lifecycle.js";
 import type { TaskSummary } from "../../../task/task.js";
 import type { TaskListLimit } from "../../../task/taskStore.js";
@@ -26,39 +27,29 @@ export const runListCommand = (
   const limit = parseTaskListLimit(command.limit);
   if (!limit.ok) return Effect.succeed(limit.result);
 
-  return withTasks(environment, (taskUseCases) =>
+  return withTasks(environment, (context) =>
     Effect.flatMap(
-      taskUseCases.listTasks({
+      listTasks(environment.cwd, {
         includeDone: command.all || command.state !== undefined,
         ...(command.state === undefined ? {} : { state: command.state }),
         limit: limit.value,
       }),
       (result) => {
-        const changeInspection =
-          environment.taskUseCases === undefined
-            ? loadTaskChangeProjection(taskRepositoryInput(environment))
-            : undefined;
-        if (changeInspection !== undefined && !changeInspection.ok) {
-          return Effect.succeed<CliResult>(stateStoreUnavailable(taskUseCases.idPrefix));
+        const changeInspection = loadTaskChangeProjection(taskRepositoryInput(environment));
+        if (!changeInspection.ok) {
+          return Effect.succeed<CliResult>(stateStoreUnavailable(context.idPrefix));
         }
-        return Effect.map(
-          taskSummaryRows(
-            result.tasks,
-            changeInspection === undefined
-              ? () => Effect.succeed(null)
-              : changeInspection.operation,
-          ),
-          (rows) =>
-            success({
-              count: result.tasks.length,
-              total: result.total,
-              tasks: rows,
-              ...(result.tasks.length === 0
-                ? { help: [createTaskHelp] }
-                : result.tasks.length < result.total
-                  ? { help: [listMoreTasksHelp(command)] }
-                  : {}),
-            }),
+        return Effect.map(taskSummaryRows(result.tasks, changeInspection.operation), (rows) =>
+          success({
+            count: result.tasks.length,
+            total: result.total,
+            tasks: rows,
+            ...(result.tasks.length === 0
+              ? { help: [createTaskHelp] }
+              : result.tasks.length < result.total
+                ? { help: [listMoreTasksHelp(command)] }
+                : {}),
+          }),
         );
       },
     ),

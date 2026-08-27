@@ -2,16 +2,23 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { openSqliteTaskChangeTaskPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
-import { taskChangeTaskMutationOperations } from "../../src/taskChange/composition/loadTaskChangePersistence.js";
 import {
   passTaskReviewFixture,
   setTerminalTaskStateFixture,
   withTemporaryRepositoryState,
 } from "../support/repository.js";
+import {
+  renameTaskForTaskChange,
+  reviseTaskForTaskChange,
+} from "../support/taskChangeOperations.js";
+import {
+  createTaskInSqlite,
+  getTaskContextInSqlite,
+  getTaskInSqlite,
+  reviseTaskInSqlite,
+} from "../support/taskOperations.js";
 
 const now = "2026-08-12T10:00:00.000Z";
 const later = "2026-08-12T10:05:00.000Z";
@@ -31,29 +38,30 @@ const policy = {
 it.scoped("revises an unlinked Todo Task while preserving its intent and Review evidence", () =>
   withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      yield* tasks.createTask({ title: "Dependency", description: "Required", now });
-      yield* tasks.createTask({
+      yield* createTaskInSqlite({ title: "Dependency", description: "Required", now });
+      yield* createTaskInSqlite({
         title: "Approved proposal",
         description: "Approved intent",
         dependsOn: [publicTaskId("BY-1")],
         now,
       });
       const completed = yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), now);
-      const before = yield* tasks.getTaskById(publicTaskId("BY-2"));
+      const before = yield* getTaskInSqlite(publicTaskId("BY-2"));
 
-      expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject({
-        ok: true,
-        changed: true,
-        task: {
-          id: "BY-2",
-          state: "new",
-          description: "Approved intent",
-          prerequisites: [{ id: "BY-1" }],
+      expect(yield* reviseTaskInSqlite({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject(
+        {
+          ok: true,
+          changed: true,
+          task: {
+            id: "BY-2",
+            state: "new",
+            description: "Approved intent",
+            prerequisites: [{ id: "BY-1" }],
+          },
         },
-      });
-      expect(yield* tasks.getTaskContextById(publicTaskId("BY-2"))).toEqual({
+      );
+      expect(yield* getTaskContextInSqlite(publicTaskId("BY-2"))).toEqual({
         id: "BY-2",
         title: "Approved proposal",
         description: "Approved intent",
@@ -75,12 +83,8 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
 it.scoped("renames a New Task while preserving its identity and surrounding facts", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
-      const taskChanges = yield* openSqliteTaskChangeTaskPersistence(
-        taskChangeTaskMutationOperations,
-      );
-      yield* tasks.createTask({ title: "Dependency", description: "Required", now });
-      yield* tasks.createTask({
+      yield* createTaskInSqlite({ title: "Dependency", description: "Required", now });
+      yield* createTaskInSqlite({
         title: "Original title",
         description: "Approved intent",
         dependsOn: [publicTaskId("BY-1")],
@@ -88,7 +92,7 @@ it.scoped("renames a New Task while preserving its identity and surrounding fact
       });
 
       expect(
-        yield* taskChanges.renameTask({ taskId: publicTaskId("BY-2"), title: "New title" }),
+        yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-2"), title: "New title" }),
       ).toMatchObject({
         ok: true,
         noOp: false,
@@ -101,7 +105,7 @@ it.scoped("renames a New Task while preserving its identity and surrounding fact
         },
       });
       expect(
-        yield* taskChanges.renameTask({ taskId: publicTaskId("BY-2"), title: "New title" }),
+        yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-2"), title: "New title" }),
       ).toMatchObject({
         ok: true,
         noOp: true,
@@ -114,21 +118,17 @@ it.scoped("renames a New Task while preserving its identity and surrounding fact
 it.scoped("requires revision before renaming a Todo Task", () =>
   withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
-      const taskChanges = yield* openSqliteTaskChangeTaskPersistence(
-        taskChangeTaskMutationOperations,
-      );
       const reviews = yield* openSqliteTaskReviewPersistence();
-      yield* tasks.createTask({ title: "Approved title", description: "Intent", now });
+      yield* createTaskInSqlite({ title: "Approved title", description: "Intent", now });
       yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), now);
       const reviewBefore = yield* reviews.listForTask(publicTaskId("BY-1"));
 
       expect(
-        yield* taskChanges.renameTask({ taskId: publicTaskId("BY-1"), title: "Changed title" }),
+        yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-1"), title: "Changed title" }),
       ).toEqual({ ok: false, code: "task_revision_required", state: "todo" });
-      yield* tasks.reviseTask({ taskId: publicTaskId("BY-1"), now: later });
+      yield* reviseTaskInSqlite({ taskId: publicTaskId("BY-1"), now: later });
       expect(
-        yield* taskChanges.renameTask({ taskId: publicTaskId("BY-1"), title: "Changed title" }),
+        yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-1"), title: "Changed title" }),
       ).toMatchObject({ ok: true, noOp: false, task: { title: "Changed title", state: "new" } });
       expect(yield* reviews.listForTask(publicTaskId("BY-1"))).toEqual(reviewBefore);
       expect(yield* reviews.reuseJudgment(publicTaskId("BY-1"), later)).toBeUndefined();
@@ -139,14 +139,15 @@ it.scoped("requires revision before renaming a Todo Task", () =>
 it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
-      yield* tasks.createTask({ title: "New proposal", description: "Editable", now });
+      yield* createTaskInSqlite({ title: "New proposal", description: "Editable", now });
 
-      expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toMatchObject({
-        ok: true,
-        changed: false,
-        task: { state: "new" },
-      });
+      expect(yield* reviseTaskInSqlite({ taskId: publicTaskId("BY-1"), now: later })).toMatchObject(
+        {
+          ok: true,
+          changed: false,
+          task: { state: "new" },
+        },
+      );
     }),
   ),
 );
@@ -156,14 +157,10 @@ it.scoped(
   () =>
     withTemporaryRepositoryState(({ repositoryRoot }) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
-        const taskChanges = yield* openSqliteTaskChangeTaskPersistence(
-          taskChangeTaskMutationOperations,
-        );
         const repository = yield* RepositorySql;
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
-          yield* tasks.createTask({ title, description: `${title} intent`, now });
+          yield* createTaskInSqlite({ title, description: `${title} intent`, now });
         }
         yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), now);
         yield* repository.operation(
@@ -195,52 +192,52 @@ it.scoped(
         yield* setTerminalTaskStateFixture(publicTaskId("BY-3"), "done", now);
         yield* setTerminalTaskStateFixture(publicTaskId("BY-4"), "cancelled", now);
 
-        expect(yield* taskChanges.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toEqual(
-          {
-            ok: false,
-            code: "task_change_linked",
-            changeId: "BY-C1",
-          },
-        );
         expect(
-          yield* taskChanges.renameTask({ taskId: publicTaskId("BY-1"), title: "Linked" }),
+          yield* reviseTaskForTaskChange({ taskId: publicTaskId("BY-1"), now: later }),
+        ).toEqual({
+          ok: false,
+          code: "task_change_linked",
+          changeId: "BY-C1",
+        });
+        expect(
+          yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-1"), title: "Linked" }),
         ).toMatchObject({ ok: true, noOp: true, task: { title: "Linked", state: "todo" } });
         expect(
-          yield* taskChanges.renameTask({ taskId: publicTaskId("BY-1"), title: "Changed" }),
+          yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-1"), title: "Changed" }),
         ).toEqual({ ok: false, code: "task_change_linked", changeId: "BY-C1" });
-        expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject(
-          {
-            ok: false,
-            code: "active_task_review",
-          },
-        );
-        expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-3"), now: later })).toEqual({
+        expect(
+          yield* reviseTaskInSqlite({ taskId: publicTaskId("BY-2"), now: later }),
+        ).toMatchObject({
+          ok: false,
+          code: "active_task_review",
+        });
+        expect(yield* reviseTaskInSqlite({ taskId: publicTaskId("BY-3"), now: later })).toEqual({
           ok: false,
           code: "invalid_task_state",
           state: "done",
         });
-        expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-4"), now: later })).toEqual({
+        expect(yield* reviseTaskInSqlite({ taskId: publicTaskId("BY-4"), now: later })).toEqual({
           ok: false,
           code: "invalid_task_state",
           state: "cancelled",
         });
         expect(
-          yield* taskChanges.renameTask({ taskId: publicTaskId("BY-3"), title: "Done" }),
+          yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-3"), title: "Done" }),
         ).toMatchObject({ ok: true, noOp: true, task: { title: "Done", state: "done" } });
         expect(
-          yield* taskChanges.renameTask({ taskId: publicTaskId("BY-3"), title: "Changed done" }),
+          yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-3"), title: "Changed done" }),
         ).toEqual({ ok: false, code: "invalid_task_state", state: "done" });
         expect(
-          yield* taskChanges.renameTask({ taskId: publicTaskId("BY-4"), title: "Cancelled" }),
+          yield* renameTaskForTaskChange({ taskId: publicTaskId("BY-4"), title: "Cancelled" }),
         ).toMatchObject({ ok: true, noOp: true, task: { title: "Cancelled", state: "cancelled" } });
         expect(
-          yield* taskChanges.renameTask({
+          yield* renameTaskForTaskChange({
             taskId: publicTaskId("BY-4"),
             title: "Changed cancelled",
           }),
         ).toEqual({ ok: false, code: "invalid_task_state", state: "cancelled" });
         for (const id of ["BY-1", "BY-2", "BY-3", "BY-4"] as const) {
-          expect(yield* tasks.getTaskById(publicTaskId(id))).toBeDefined();
+          expect(yield* getTaskInSqlite(publicTaskId(id))).toBeDefined();
         }
       }),
     ),

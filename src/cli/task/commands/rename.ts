@@ -1,3 +1,5 @@
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
@@ -5,11 +7,12 @@ import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type { RenameTaskResult } from "../../../task/taskStore.js";
 import { normalizeTaskTitle } from "../../../task/taskTitle.js";
+import { renameTask } from "../../../taskChange/composition/renameTask.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
-  withTaskRename,
+  withTaskChangeTasks,
 } from "../taskCliSupport.js";
 import { taskTitleInputError } from "../taskTitle.js";
 
@@ -26,11 +29,12 @@ export const runRenameCommand = (
   if (!title.ok) return Effect.succeed(taskTitleInputError(title));
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTaskRename(environment, (tasks) => {
-    const taskId = resolveTaskId(tasks, parsed.taskId);
+  return withTaskChangeTasks(environment, (context) => {
+    const taskId = resolveTaskId(context, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.map(tasks.renameTask({ taskId: taskId.taskId, title: title.title }), (result) =>
-      renameResult(taskId.taskId, result),
+    return Effect.map(
+      renameTask(environment.cwd, { taskId: taskId.taskId, title: title.title }),
+      (result) => renameResult(taskId.taskId, result),
     );
   });
 };

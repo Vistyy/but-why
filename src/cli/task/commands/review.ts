@@ -23,8 +23,8 @@ export const runTaskReviewCommand = (
   if (command.action === "list") {
     const parsed = parseCliTaskIdValue(command.taskId);
     if (!parsed.ok) return Effect.succeed(parsed.result);
-    return withTasks(environment, (tasks) => {
-      const resolved = resolveTaskId(tasks, parsed.taskId);
+    return withTasks(environment, (context) => {
+      const resolved = resolveTaskId(context, parsed.taskId);
       if (!resolved.ok) return Effect.succeed(resolved.result);
       return withTaskReviewInspection(environment, (reviews) =>
         Effect.map(reviews.listForTask(resolved.taskId), (history) =>

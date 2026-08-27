@@ -8,7 +8,7 @@ import {
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
-import { openSqliteTaskPersistence } from "../../task/adapters/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskCancellationOperations } from "../../task/adapters/sqlite/sqliteTaskPersistence.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
 import { openSqliteTaskChangeCancellationPort } from "../adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import { type CancellationUseCases, openCancellationUseCases } from "../cancelTaskChange.js";
@@ -36,7 +36,7 @@ export const withCancellationUseCases = <A, E, R>(
         taskChangeCancellationOperations,
         taskChangeCompletionOperations,
       ),
-      tasks: openSqliteTaskPersistence(),
+      tasks: openSqliteTaskCancellationOperations(),
       activeValidation: openSqliteActiveValidationRunPort(),
     }).pipe(
       Effect.flatMap(({ changes, tasks, activeValidation }) =>

@@ -302,25 +302,13 @@ rule:
 id: task-context-command-stays-in-task-intent
 language: TypeScript
 severity: error
-message: Do not import Change or Task/Change coordination modules from the Task Context command because Task Intent owns current Task Context; use Task Use Cases directly.
+message: Do not import Change or Task/Change coordination modules from the Task Context command because Task Intent owns current Task Context; use the Task Context operation directly.
 files:
   - src/cli/task/commands/context.ts
 rule:
   all:
     - kind: import_statement
     - regex: '[\s\S]*from\s+["`][^"`]*(?:/change/|/taskChange/)[^"`]*["`][\s\S]*'
----
-# Task dependency edits and revision must not obtain coordination operations from the generic Task use-case set.
-id: linked-task-mutations-use-coordination
-language: TypeScript
-severity: error
-message: Do not route linked Task dependency edits or Task revision through generic TaskUseCases; use the explicit Task/Change coordination use-case seam.
-files:
-  - src/cli/task/taskCliSupport.ts
-rule:
-  any:
-    - pattern: environment.taskUseCases.editTaskDependencies
-    - pattern: environment.taskUseCases.reviseTask
 ---
 # Reflect.get hides the type or validation that makes property access safe.
 id: direct-reflect-get-is-validated

@@ -1,8 +1,11 @@
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
 import { success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { createTaskContextDraft } from "../../../task/composition/taskContext.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
@@ -16,10 +19,10 @@ export const runContextDraftCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (tasks) => {
-    const taskId = resolveTaskId(tasks, parsed.taskId);
+  return withTasks(environment, (context) => {
+    const taskId = resolveTaskId(context, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.map(tasks.createTaskContextDraft(taskId.taskId), (draft) =>
+    return Effect.map(createTaskContextDraft(environment.cwd, taskId.taskId), (draft) =>
       draft === undefined ? taskNotFound(taskId.taskId) : success({ draft }),
     );
   });

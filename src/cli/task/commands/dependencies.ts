@@ -6,8 +6,11 @@ import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import type { TaskDependencyOperation } from "../../../task/taskStore.js";
-import type { RepoEditTaskDependenciesResult } from "../../../task/taskUseCases.js";
+import type {
+  EditTaskDependenciesResult,
+  TaskDependencyOperation,
+} from "../../../task/taskStore.js";
+import { editTaskDependencies } from "../../../taskChange/composition/editTaskDependencies.js";
 import { dependencyOptionRequiredError } from "../dependencyOptionUsage.js";
 import {
   resolveTaskId,
@@ -39,19 +42,19 @@ export const runDependenciesCommand = (
   const parsedDependent = parseCliTaskIdValue(command.taskId);
   if (!parsedDependent.ok) return Effect.succeed(parsedDependent.result);
 
-  return withTaskChangeTasks(environment, (tasks) => {
-    const dependent = resolveTaskId(tasks, parsedDependent.taskId);
+  return withTaskChangeTasks(environment, (context) => {
+    const dependent = resolveTaskId(context, parsedDependent.taskId);
     if (!dependent.ok) return Effect.succeed(dependent.result);
     const prerequisiteTaskIds: PublicTaskId[] = [];
     for (const value of command.dependsOn) {
       const parsedPrerequisite = parseCliTaskIdValue(value);
       if (!parsedPrerequisite.ok) return Effect.succeed(parsedPrerequisite.result);
-      const prerequisite = resolveTaskId(tasks, parsedPrerequisite.taskId);
+      const prerequisite = resolveTaskId(context, parsedPrerequisite.taskId);
       if (!prerequisite.ok) return Effect.succeed(prerequisite.result);
       prerequisiteTaskIds.push(prerequisite.taskId);
     }
     return Effect.map(
-      tasks.editTaskDependencies({
+      editTaskDependencies(environment.cwd, {
         taskId: dependent.taskId,
         operation: command.operation,
         prerequisiteTaskIds,
@@ -73,7 +76,7 @@ export const runDependenciesCommand = (
 
 const dependencyError = (
   taskId: PublicTaskId,
-  result: Exclude<RepoEditTaskDependenciesResult, { readonly ok: true }>,
+  result: Exclude<EditTaskDependenciesResult, { readonly ok: true }>,
 ): CliResult => {
   if (result.code === "task_not_found") return taskNotFound(taskId);
   const details = {
@@ -102,7 +105,7 @@ const dependencyError = (
 
 const dependencyErrorMessage = (
   taskId: PublicTaskId,
-  result: Exclude<RepoEditTaskDependenciesResult, { readonly ok: true }>,
+  result: Exclude<EditTaskDependenciesResult, { readonly ok: true }>,
 ): string => {
   switch (result.code) {
     case "task_not_found":

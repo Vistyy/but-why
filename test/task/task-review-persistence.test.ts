@@ -12,7 +12,6 @@ import {
 } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskPersistence } from "../../src/task/adapters/sqlite/sqliteTaskPersistence.js";
 import {
   admitTaskReview,
   openSqliteTaskReviewPersistence,
@@ -25,6 +24,7 @@ import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { withTemporaryRepositoryState, withTestRepository } from "../support/repository.js";
+import { createTaskInSqlite, getTaskInSqlite } from "../support/taskOperations.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 
 const now = "2026-08-11T12:00:00.000Z";
@@ -54,10 +54,9 @@ const simplificationAdvice: TaskSimplificationAdvice =
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      yield* tasks.createTask({ title: "Dependency", description: "Observed dependency", now });
-      yield* tasks.createTask({
+      yield* createTaskInSqlite({ title: "Dependency", description: "Observed dependency", now });
+      yield* createTaskInSqlite({
         title: "Proposal",
         description: "Exact description",
         dependsOn: [publicTaskId("BY-1")],
@@ -104,10 +103,9 @@ it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Rev
 it.scoped("distinguishes missing completion from inactive recovery and gates retry admission", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const taskId = publicTaskId("BY-1");
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
 
       expect(yield* reviews.complete({ reviewId: 999, findings: [], now })).toEqual({
         ok: false,
@@ -139,10 +137,9 @@ it.scoped("distinguishes missing completion from inactive recovery and gates ret
 it.scoped("keeps malformed and SQL completion failures distinct", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const repository = yield* RepositorySql;
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
         policy,
@@ -182,12 +179,11 @@ it.scoped("keeps malformed and SQL completion failures distinct", () =>
 it.scoped("derives an admitted Task Review workspace from the Git Common Directory", () =>
   withTemporaryRepositoryState((input) =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const admission = yield* openSqliteTaskChangeReviewAdmissionPersistence({
         checkAdmission: taskReviewAdmissionRejection,
         admit: admitTaskReview,
       });
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
 
       const admitted = yield* admission.admit({
         taskId: publicTaskId("BY-1"),
@@ -210,10 +206,9 @@ it.scoped("derives an admitted Task Review workspace from the Git Common Directo
 it.scoped("decodes persisted Task Simplification Advice Invocation evidence before use", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const repository = yield* RepositorySql;
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
         policy,
@@ -310,9 +305,8 @@ it.scoped("decodes persisted Task Simplification Advice Invocation evidence befo
 it.scoped("rejects Task reviewer policy changes after the first Invocation", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
 
       const first = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
@@ -382,11 +376,10 @@ it.scoped("rejects Task reviewer policy changes after the first Invocation", () 
 it.scoped("attributes frozen Task Reviewer configuration to every matching invoked Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const taskId = publicTaskId("BY-1");
       const configuration = { harness: "pi" as const, model: "test-model" };
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
 
       const older = yield* reviews.admit({
         taskId,
@@ -489,9 +482,8 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
   return withTestRepository(
     root,
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
         policy,
@@ -545,7 +537,7 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
         task: { id: "BY-1", state: "new" },
       });
       expect(existsSync(workspacePath)).toBe(false);
-      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
+      expect(yield* getTaskInSqlite(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
 
       const history = (yield* reviews.getById(admitted.review.id))?.agentInvocations ?? [];
       expect(history).toMatchObject([
@@ -574,10 +566,9 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
 it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const repository = yield* RepositorySql;
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
         policy,
@@ -661,7 +652,7 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
         outcome: null,
         findings: [],
       });
-      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
+      expect(yield* getTaskInSqlite(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
     }),
   ),
 );
@@ -669,9 +660,8 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
 it.scoped("orders immutable Task Review history by its SQLite ID", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* createTaskInSqlite({ title: "Proposal", description: "Exact", now });
 
       const first = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),

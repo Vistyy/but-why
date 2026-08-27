@@ -1,5 +1,5 @@
 import type { TaskState } from "./lifecycle.js";
-import type { DependencyValidationCode, TaskContext, TaskRecord, TaskSummary } from "./task.js";
+import type { DependencyValidationCode, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 import type { TaskTitleValidationCode } from "./taskTitle.js";
 
@@ -72,22 +72,6 @@ export type UpdateTaskContextInput = {
   readonly description: string;
   readonly now: string;
 };
-
-export type UpdateTaskContextResult =
-  | {
-      readonly ok: true;
-      readonly task: StoredTaskRecord;
-      readonly context: TaskContext;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "task_not_found";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "task_revision_required" | "invalid_task_state";
-      readonly state: TaskState;
-    };
 
 export type ReviseTaskInput = {
   readonly taskId: PublicTaskId;

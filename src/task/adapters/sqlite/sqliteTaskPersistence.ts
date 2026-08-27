@@ -1,7 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
-import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type { TaskState } from "../../lifecycle.js";
@@ -12,7 +15,6 @@ import {
   publicTaskId,
   publicTaskIdFromInternal,
 } from "../../taskId.js";
-import type { TaskPersistence } from "../../taskPersistence.js";
 import type {
   CancelTaskInput,
   CancelTaskResult,
@@ -40,40 +42,36 @@ import {
   type StoredTaskSummaryRow,
 } from "./sqliteTaskReadModel.js";
 
-export const openSqliteTaskPersistence = (): Effect.Effect<TaskPersistence, never, RepositorySql> =>
-  Effect.map(RepositorySql, (repository) => {
-    const idPrefix = repository.idPrefix;
-    return {
-      createTask: (input) =>
-        repository.transactionImmediate("create Task", (sql) => createTask(sql, idPrefix, input)),
-      editTaskDependencies: (input) =>
-        repository.transactionImmediate("edit Task dependencies", (sql) =>
-          editTaskDependencies(sql, input, idPrefix),
-        ),
-      listTasks: (input) =>
-        repository.transaction("list Tasks", (sql) => listTasks(sql, idPrefix, input)),
-      listActionableTasks: () =>
-        repository.transaction("list actionable Tasks", (sql) =>
-          listActionableTasks(sql, idPrefix),
-        ),
-      getTaskById: (taskId) =>
-        repository.transaction("read Task", (sql) => getTaskById(sql, taskId, idPrefix)),
-      getTaskContextById: (taskId) =>
-        repository.transaction("read Task Context", (sql) =>
-          getTaskContextById(sql, taskId, idPrefix),
-        ),
-      updateTaskContext: (input) =>
-        repository.transactionImmediate("update Task Context", (sql) =>
-          updateTaskContext(sql, idPrefix, input),
-        ),
-      reviseTask: (input) =>
-        repository.transactionImmediate("revise Task", (sql) => reviseTask(sql, input, idPrefix)),
-      cancelTask: (input) =>
-        repository.transactionImmediate("cancel Task", (sql) => cancelTask(sql, input, idPrefix)),
-    };
-  });
+export type TaskCancellationOperations = {
+  readonly getTaskById: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<StoredTaskRecord | undefined, RepositoryStorageError>;
+  readonly cancelTask: (
+    input: CancelTaskInput,
+  ) => Effect.Effect<CancelTaskResult, RepositoryStorageError>;
+};
 
-const createTask = (sql: SqlClient.SqlClient, idPrefix: string, input: CreateTaskInput) =>
+export const openSqliteTaskCancellationOperations = (): Effect.Effect<
+  TaskCancellationOperations,
+  never,
+  RepositorySql
+> =>
+  Effect.map(RepositorySql, (repository) => ({
+    getTaskById: (taskId) =>
+      repository.transaction("read Task for cancellation", (sql) =>
+        getTaskById(sql, taskId, repository.idPrefix),
+      ),
+    cancelTask: (input) =>
+      repository.transactionImmediate("cancel Task", (sql) =>
+        cancelTask(sql, input, repository.idPrefix),
+      ),
+  }));
+
+export const createTaskSqlite = (
+  sql: SqlClient.SqlClient,
+  idPrefix: string,
+  input: CreateTaskInput,
+) =>
   Effect.gen(function* () {
     const inserted = yield* sql<{ readonly id: number }>`
       INSERT INTO tasks (title, description, state)
@@ -101,7 +99,7 @@ const createTask = (sql: SqlClient.SqlClient, idPrefix: string, input: CreateTas
     return { ok: true as const, task: created, context };
   });
 
-export const editTaskDependencies = (
+export const editTaskDependenciesSqlite = (
   sql: SqlClient.SqlClient,
   input: EditTaskDependenciesInput,
   idPrefix: string,
@@ -190,7 +188,11 @@ export const editTaskDependencies = (
     };
   });
 
-const listTasks = (sql: SqlClient.SqlClient, idPrefix: string, input: ListTasksInput) =>
+export const listTasksSqlite = (
+  sql: SqlClient.SqlClient,
+  idPrefix: string,
+  input: ListTasksInput,
+) =>
   Effect.gen(function* () {
     const limit = input.limit === "all" || input.limit === undefined ? -1 : input.limit;
     const rows = input.state
@@ -218,9 +220,14 @@ const listTasks = (sql: SqlClient.SqlClient, idPrefix: string, input: ListTasksI
     const decoded = yield* decodePersisted("list Tasks", () =>
       rows.map((row) => decodeTaskSummaryRow(row, idPrefix)),
     );
-    const tasks = yield* Effect.forEach(decoded, (row) =>
-      rowToTaskSummary(sql, row, "list Tasks", idPrefix),
+    const prerequisites = yield* dependencyFactsForTasks(
+      sql,
+      decoded.map((row) => row.numericId),
+      "prerequisites",
+      "list Tasks",
+      idPrefix,
     );
+    const tasks = decoded.map((row) => taskSummary(row, prerequisites.get(row.numericId) ?? []));
     return { tasks, total: yield* countTasks(sql, input) };
   });
 
@@ -242,7 +249,7 @@ const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
     return rows[0]?.count ?? 0;
   });
 
-const listActionableTasks = (sql: SqlClient.SqlClient, idPrefix: string) =>
+export const listActionableTasksSqlite = (sql: SqlClient.SqlClient, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskSummaryRow>`
       SELECT id, id AS numericId, title, state
@@ -255,9 +262,14 @@ const listActionableTasks = (sql: SqlClient.SqlClient, idPrefix: string) =>
     const decoded = yield* decodePersisted("list actionable Tasks", () =>
       rows.map((row) => decodeTaskSummaryRow(row, idPrefix)),
     );
-    return yield* Effect.forEach(decoded, (row) =>
-      rowToTaskSummary(sql, row, "list actionable Tasks", idPrefix),
+    const prerequisites = yield* dependencyFactsForTasks(
+      sql,
+      decoded.map((row) => row.numericId),
+      "prerequisites",
+      "list actionable Tasks",
+      idPrefix,
     );
+    return decoded.map((row) => taskSummary(row, prerequisites.get(row.numericId) ?? []));
   });
 
 export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>
@@ -334,7 +346,11 @@ export const cancelTaskState = (
     WHERE id = ${internalTaskId(taskId, idPrefix)} AND state <> 'cancelled'
   `;
 
-const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>
+export const getTaskContextById = (
+  sql: SqlClient.SqlClient,
+  taskId: PublicTaskId,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskContextRow>`
       SELECT id, title, description FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}
@@ -344,7 +360,7 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPr
     return yield* decodePersisted("read Task Context", () => decodeTaskContextRow(row, idPrefix));
   });
 
-const updateTaskContext = (
+export const updateTaskContext = (
   sql: SqlClient.SqlClient,
   idPrefix: string,
   input: UpdateTaskContextInput,
@@ -377,7 +393,7 @@ const updateTaskContext = (
     return { ok: true as const, task: updated, context };
   });
 
-export const renameTask = (
+export const renameTaskSqlite = (
   sql: SqlClient.SqlClient,
   input: RenameTaskInput,
   idPrefix: string,
@@ -402,7 +418,11 @@ export const renameTask = (
     return { ok: true as const, noOp: false, task: updated };
   });
 
-export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput, idPrefix: string) =>
+export const reviseTaskSqlite = (
+  sql: SqlClient.SqlClient,
+  input: ReviseTaskInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const validated = yield* validateTaskRevisionTarget(sql, input.taskId, idPrefix);
     if (!validated.ok) return validated;
@@ -427,7 +447,7 @@ export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput, idP
     return { ok: true as const, changed: true, task: revised };
   });
 
-const cancelTask = (
+export const cancelTask = (
   sql: SqlClient.SqlClient,
   input: CancelTaskInput,
   idPrefix: string,
@@ -629,16 +649,44 @@ const dependencyFacts = (
     );
   });
 
-const rowToTaskSummary = (
+type StoredBatchedDependencyFactRow = StoredTaskDependencyFactRow & {
+  readonly ownerId: number;
+};
+
+const dependencyFactsForTasks = (
   sql: SqlClient.SqlClient,
-  row: DecodedTaskSummaryRow,
+  taskIds: readonly number[],
+  direction: "prerequisites" | "dependents",
   operationName: string,
   idPrefix: string,
 ) =>
-  Effect.map(
-    dependencyFacts(sql, row.id, "prerequisites", operationName, idPrefix),
-    (prerequisites) => taskSummary(row, prerequisites),
-  );
+  Effect.gen(function* () {
+    if (taskIds.length === 0) return new Map<number, readonly TaskDependencyFact[]>();
+    const ownerColumn =
+      direction === "prerequisites" ? "dependent_task_id" : "prerequisite_task_id";
+    const relatedColumn =
+      direction === "prerequisites" ? "prerequisite_task_id" : "dependent_task_id";
+    const placeholders = taskIds.map(() => "?").join(", ");
+    const rows = yield* sql.unsafe<StoredBatchedDependencyFactRow>(
+      `SELECT task_dependencies.${ownerColumn} AS ownerId,
+        tasks.id, tasks.id AS numericId, tasks.title, tasks.state
+       FROM task_dependencies
+       LEFT JOIN tasks ON tasks.id = task_dependencies.${relatedColumn}
+       WHERE task_dependencies.${ownerColumn} IN (${placeholders})
+       ORDER BY task_dependencies.${ownerColumn} ASC, tasks.id ASC`,
+      taskIds,
+    );
+    return yield* decodePersisted(operationName, () => {
+      const grouped = new Map<number, TaskDependencyFact[]>();
+      for (const row of rows) {
+        const ownerTaskId = publicTaskIdFromInternal(row.ownerId, idPrefix);
+        const fact = decodeTaskDependencyFacts([row], ownerTaskId, idPrefix)[0];
+        if (fact === undefined) throw new Error("Task dependency fact was not decoded");
+        grouped.set(row.ownerId, [...(grouped.get(row.ownerId) ?? []), fact]);
+      }
+      return grouped;
+    });
+  });
 
 const taskSummary = (
   row: DecodedTaskSummaryRow,
