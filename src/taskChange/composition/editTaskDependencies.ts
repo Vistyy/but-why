@@ -1,8 +1,7 @@
 import type { Effect } from "effect";
 import {
   type RepositoryOperationError,
-  type RepositoryOperationRuntime,
-  runRepositoryOperation,
+  runRepositoryOperationAt,
 } from "../../repositoryRuntime/repositoryOperation.js";
 import type {
   EditTaskDependenciesInput,
@@ -11,10 +10,10 @@ import type {
 import { editTaskDependenciesWithChangePrecondition } from "./taskChangeMutations.js";
 
 export const editTaskDependencies = (
-  runtime: RepositoryOperationRuntime,
+  cwd: string,
   input: EditTaskDependenciesInput,
 ): Effect.Effect<EditTaskDependenciesResult, RepositoryOperationError> =>
-  runRepositoryOperation(runtime, (_context, repository) =>
+  runRepositoryOperationAt(cwd, (_context, repository) =>
     repository.transactionImmediate("edit Task dependencies", (sql) =>
       editTaskDependenciesWithChangePrecondition(sql, input, repository.idPrefix),
     ),

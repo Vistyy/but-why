@@ -2,8 +2,7 @@ import { Effect } from "effect";
 import { RepositoryStateUnavailable } from "../../contracts/repositoryStorageError.js";
 import {
   type RepositoryOperationError,
-  type RepositoryOperationRuntime,
-  runRepositoryOperation,
+  runRepositoryOperationAt,
 } from "../../repositoryRuntime/repositoryOperation.js";
 import {
   getTaskContextById as getTaskContextByIdInSqlite,
@@ -44,20 +43,20 @@ export type ApplyTaskContextDraftResult =
     };
 
 export const getTaskContext = (
-  runtime: RepositoryOperationRuntime,
+  cwd: string,
   taskId: PublicTaskId,
 ): Effect.Effect<TaskContext | undefined, RepositoryOperationError> =>
-  runRepositoryOperation(runtime, (_context, repository) =>
+  runRepositoryOperationAt(cwd, (_context, repository) =>
     repository.transaction("read Task Context", (sql) =>
       getTaskContextByIdInSqlite(sql, taskId, repository.idPrefix),
     ),
   );
 
 export const createTaskContextDraft = (
-  runtime: RepositoryOperationRuntime,
+  cwd: string,
   taskId: PublicTaskId,
 ): Effect.Effect<TaskContextDraft | undefined, RepositoryOperationError> =>
-  runRepositoryOperation(runtime, (context, repository) =>
+  runRepositoryOperationAt(cwd, (context, repository) =>
     Effect.flatMap(
       repository.transaction("read Task Context", (sql) =>
         getTaskContextByIdInSqlite(sql, taskId, repository.idPrefix),
@@ -79,10 +78,10 @@ export const createTaskContextDraft = (
   );
 
 export const applyTaskContextDraft = (
-  runtime: RepositoryOperationRuntime,
+  cwd: string,
   input: ApplyTaskContextDraftInput,
 ): Effect.Effect<ApplyTaskContextDraftResult, RepositoryOperationError> =>
-  runRepositoryOperation(runtime, (context, repository) => {
+  runRepositoryOperationAt(cwd, (context, repository) => {
     const draft = readTaskContextDraft(context.paths.taskContextDraftsPath, input.taskId);
     if (!draft.ok) return Effect.succeed({ ok: false, error: draft.error });
     return Effect.map(

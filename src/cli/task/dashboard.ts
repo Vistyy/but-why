@@ -14,8 +14,8 @@ export const dashboard = (
   description: string,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> =>
-  withTasks(environment, (runtime) =>
-    Effect.map(listActionableTasks(runtime), (actionable) =>
+  withTasks(environment, (cwd) =>
+    Effect.map(listActionableTasks(cwd), (actionable) =>
       success({
         bin,
         description,

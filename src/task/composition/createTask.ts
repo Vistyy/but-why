@@ -1,8 +1,7 @@
 import type { Effect } from "effect";
 import {
   type RepositoryOperationError,
-  type RepositoryOperationRuntime,
-  runRepositoryOperation,
+  runRepositoryOperationAt,
 } from "../../repositoryRuntime/repositoryOperation.js";
 import { createTaskSqlite } from "../adapters/sqlite/sqliteTaskPersistence.js";
 import type { DependencyValidationCode, TaskContext, TaskRecord } from "../task.js";
@@ -14,10 +13,10 @@ export type CreateTaskResult =
   | { readonly ok: false; readonly code: DependencyValidationCode; readonly taskId?: PublicTaskId };
 
 export const createTask = (
-  runtime: RepositoryOperationRuntime,
+  cwd: string,
   input: CreateTaskInput,
 ): Effect.Effect<CreateTaskResult, RepositoryOperationError> =>
-  runRepositoryOperation(runtime, (_context, repository) =>
+  runRepositoryOperationAt(cwd, (_context, repository) =>
     repository.transactionImmediate("create Task", (sql) =>
       createTaskSqlite(sql, repository.idPrefix, input),
     ),

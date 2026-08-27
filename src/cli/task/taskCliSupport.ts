@@ -9,10 +9,8 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import {
-  openRepositoryOperation,
-  type RepositoryOperationRuntime,
-} from "../../repositoryRuntime/repositoryOperation.js";
+import { resolveLocalRepository } from "../../repositoryRuntime/repositoryContext.js";
+import type { RepositoryOperationError } from "../../repositoryRuntime/repositoryOperation.js";
 import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
@@ -52,25 +50,17 @@ export type TaskCommandEnvironment = {
 
 export const withTasks = (
   environment: TaskCommandEnvironment,
-  use: (runtime: RepositoryOperationRuntime) => Effect.Effect<CliResult, RepositoryStorageError>,
-): Effect.Effect<CliResult> => withRepository(environment, use);
-
-const withRepository = (
-  environment: TaskCommandEnvironment,
-  use: (runtime: RepositoryOperationRuntime) => Effect.Effect<CliResult, RepositoryStorageError>,
-): Effect.Effect<CliResult> => {
-  const loaded = openRepositoryOperation(environment.cwd);
-  const program = loaded.ok
-    ? use(loaded.runtime)
-    : Effect.succeed(repoStateLoadError(loaded.error));
-  return program.pipe(
+  use: (cwd: string) => Effect.Effect<CliResult, RepositoryOperationError>,
+): Effect.Effect<CliResult> =>
+  use(environment.cwd).pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        "code" in error
+          ? repoStateLoadError(error)
+          : repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
-};
 
 export const withTaskReviewInspection = (
   environment: TaskCommandEnvironment,
@@ -173,11 +163,10 @@ export type ResolvedTaskIdResult =
   | { readonly ok: true; readonly taskId: PublicTaskId }
   | { readonly ok: false; readonly result: CliResult };
 
-export const resolveTaskId = (
-  runtime: RepositoryOperationRuntime,
-  taskId: PublicTaskId,
-): ResolvedTaskIdResult => {
-  const resolvedTaskId = resolveRepoTaskId(runtime.context, taskId);
+export const resolveTaskId = (cwd: string, taskId: PublicTaskId): ResolvedTaskIdResult => {
+  const resolved = resolveLocalRepository(cwd);
+  if (!resolved.ok) return { ok: false, result: repoStateLoadError(resolved.error) };
+  const resolvedTaskId = resolveRepoTaskId(resolved.context, taskId);
   if (!resolvedTaskId.ok) {
     return { ok: false, result: taskIdResolutionError(resolvedTaskId) };
   }

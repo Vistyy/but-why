@@ -23,6 +23,17 @@ type CurrentChangeActivityEvidence = {
   readonly hasCurrentPassingEvidence: boolean;
 };
 
+type StoredCurrentCandidateRow = StoredCandidateRow & {
+  readonly validationRunId: number;
+};
+
+type StoredValidationEvidenceRow = {
+  readonly validationRunId: number;
+  readonly findings: string;
+  readonly artifacts: string;
+  readonly toolingFailure: string | null;
+};
+
 export const readCurrentPassingValidationEvidence = (
   sql: SqlClient.SqlClient,
   changeId: string,
@@ -100,39 +111,77 @@ export const readCurrentPassingValidationEvidenceForChanges = (
     const passingChangeIds = requestedChangeIds.filter(
       (changeId) => !activity.get(changeId)?.hasActiveValidation,
     );
-    const candidateRows = yield* readBatchedRows<StoredCandidateRow>(
+    const candidateRows = yield* readBatchedRows<StoredCurrentCandidateRow>(
       sql,
       passingChangeIds,
       (placeholders) => `
-        SELECT ${candidateReadColumns}
+        SELECT ${candidateReadColumns}, passing.id AS validationRunId
         FROM candidates AS candidate
+        JOIN validation_runs AS passing
+          ON passing.candidate_id = candidate.id AND passing.outcome = 'passed'
         WHERE candidate.change_id IN (${placeholders})
           AND candidate.id = (
             SELECT MAX(latest.id) FROM candidates AS latest
             WHERE latest.change_id = candidate.change_id
           )
+          AND passing.id = (
+            SELECT MAX(latestPassing.id) FROM validation_runs AS latestPassing
+            WHERE latestPassing.candidate_id = candidate.id AND latestPassing.outcome = 'passed'
+          )
         ORDER BY candidate.id DESC`,
       idPrefix,
     );
+    yield* validateSelectedPassingEvidence(sql, candidateRows);
     const candidates = yield* decodePersisted(currentPassingEvidenceOperation, () =>
       candidateRows.map((row) => decodeCandidate(row, idPrefix)),
     );
     for (const candidate of candidates) {
-      const current = yield* readPassingEvidenceForCandidate(
-        sql,
-        candidate,
-        undefined,
-        currentPassingEvidenceOperation,
-        idPrefix,
-      );
-      if (current !== undefined) {
-        activity.set(candidate.changeId, {
-          hasActiveValidation: false,
-          hasCurrentPassingEvidence: true,
-        });
-      }
+      activity.set(candidate.changeId, {
+        hasActiveValidation: false,
+        hasCurrentPassingEvidence: true,
+      });
     }
     return activity;
+  });
+
+const validateSelectedPassingEvidence = (
+  sql: SqlClient.SqlClient,
+  candidateRows: readonly StoredCurrentCandidateRow[],
+) =>
+  Effect.gen(function* () {
+    const runIds = [...new Set(candidateRows.map((row) => row.validationRunId))];
+    const rows: StoredValidationEvidenceRow[] = [];
+    for (let start = 0; start < runIds.length; start += currentPassingEvidenceBatchSize) {
+      const batch = runIds.slice(start, start + currentPassingEvidenceBatchSize);
+      rows.push(
+        ...(yield* sql.unsafe<StoredValidationEvidenceRow>(
+          `SELECT validation_run_id AS validationRunId, findings, artifacts,
+              tooling_failure AS toolingFailure
+           FROM validation_phase_results
+           WHERE validation_run_id IN (${batch.map(() => "?").join(", ")})`,
+          batch,
+        )),
+      );
+    }
+    yield* decodePersisted(currentPassingEvidenceOperation, () => {
+      const rowsByRun = new Map<number, StoredValidationEvidenceRow[]>();
+      for (const row of rows) {
+        const current = rowsByRun.get(row.validationRunId) ?? [];
+        const findings: unknown = JSON.parse(row.findings) as unknown;
+        const artifacts: unknown = JSON.parse(row.artifacts) as unknown;
+        if (!Array.isArray(findings) || !Array.isArray(artifacts)) {
+          throw new Error("Stored validation evidence is not an array");
+        }
+        if (row.toolingFailure !== null) JSON.parse(row.toolingFailure) as unknown;
+        current.push(row);
+        rowsByRun.set(row.validationRunId, current);
+      }
+      for (const row of candidateRows) {
+        if (!rowsByRun.has(row.validationRunId)) {
+          throw new Error("Passing Validation Run has no evidence");
+        }
+      }
+    });
   });
 
 const readBatchedRows = <A extends object>(

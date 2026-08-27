@@ -2,10 +2,10 @@
 
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
-import { stateStoreUnavailable, success } from "../../../cliResults.js";
+import { success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import { inspectTask } from "../../../task/composition/inspectTask.js";
-import { loadTaskChangeProjections } from "../../../taskChange/composition/loadTaskChangeInspection.js";
+import { listTaskChangeProjections } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
@@ -21,15 +21,13 @@ export const runTaskShowCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (runtime) => {
-    const taskId = resolveTaskId(runtime, parsed.taskId);
+  return withTasks(environment, (cwd) => {
+    const taskId = resolveTaskId(cwd, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.gen(function* () {
-      const task = yield* inspectTask(runtime, taskId.taskId);
+      const task = yield* inspectTask(cwd, taskId.taskId);
       if (task === undefined) return taskNotFound(taskId.taskId);
-      const change = loadTaskChangeProjections(runtime);
-      if (!change.ok) return stateStoreUnavailable(runtime.context.idPrefix);
-      const projections = yield* change.operation([taskId.taskId]);
+      const projections = yield* listTaskChangeProjections(cwd, [taskId.taskId]);
       const projection = projections.get(taskId.taskId) ?? null;
       return yield* withTaskReviewInspection(environment, (reviews) =>
         Effect.gen(function* () {

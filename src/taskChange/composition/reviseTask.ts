@@ -1,17 +1,16 @@
 import type { Effect } from "effect";
 import {
   type RepositoryOperationError,
-  type RepositoryOperationRuntime,
-  runRepositoryOperation,
+  runRepositoryOperationAt,
 } from "../../repositoryRuntime/repositoryOperation.js";
 import type { ReviseTaskInput, ReviseTaskResult } from "../../task/taskStore.js";
 import { reviseTaskWithChangePrecondition } from "./taskChangeMutations.js";
 
 export const reviseTask = (
-  runtime: RepositoryOperationRuntime,
+  cwd: string,
   input: ReviseTaskInput,
 ): Effect.Effect<ReviseTaskResult, RepositoryOperationError> =>
-  runRepositoryOperation(runtime, (_context, repository) =>
+  runRepositoryOperationAt(cwd, (_context, repository) =>
     repository.transactionImmediate("revise Task", (sql) =>
       reviseTaskWithChangePrecondition(sql, input, repository.idPrefix),
     ),

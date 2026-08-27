@@ -2,11 +2,11 @@
 
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
-import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
+import { success, usageError } from "../../../cliResults.js";
 import { listTasks } from "../../../task/composition/listTasks.js";
 import type { TaskState } from "../../../task/lifecycle.js";
 import type { TaskListLimit } from "../../../task/taskStore.js";
-import { loadTaskChangeProjections } from "../../../taskChange/composition/loadTaskChangeInspection.js";
+import { listTaskChangeProjections } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import { type TaskCommandEnvironment, withTasks } from "../taskCliSupport.js";
 
 export type TaskListCommand = {
@@ -24,20 +24,19 @@ export const runListCommand = (
   const limit = parseTaskListLimit(command.limit);
   if (!limit.ok) return Effect.succeed(limit.result);
 
-  return withTasks(environment, (runtime) =>
+  return withTasks(environment, (cwd) =>
     Effect.flatMap(
-      listTasks(runtime, {
+      listTasks(cwd, {
         includeDone: command.all || command.state !== undefined,
         ...(command.state === undefined ? {} : { state: command.state }),
         limit: limit.value,
       }),
-      (result) => {
-        const changeInspection = loadTaskChangeProjections(runtime);
-        if (!changeInspection.ok) {
-          return Effect.succeed<CliResult>(stateStoreUnavailable(runtime.context.idPrefix));
-        }
-        return Effect.map(
-          changeInspection.operation(result.tasks.map((task) => task.id)),
+      (result) =>
+        Effect.map(
+          listTaskChangeProjections(
+            cwd,
+            result.tasks.map((task) => task.id),
+          ),
           (projections) =>
             success({
               count: result.tasks.length,
@@ -55,8 +54,7 @@ export const runListCommand = (
                   ? { help: [listMoreTasksHelp(command)] }
                   : {}),
             }),
-        );
-      },
+        ),
     ),
   );
 };

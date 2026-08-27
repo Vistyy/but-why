@@ -22,11 +22,11 @@ export const runContextApplyCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (runtime) => {
-    const taskId = resolveTaskId(runtime, parsed.taskId);
+  return withTasks(environment, (cwd) => {
+    const taskId = resolveTaskId(cwd, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.map(
-      applyTaskContextDraft(runtime, {
+      applyTaskContextDraft(cwd, {
         taskId: taskId.taskId,
         now: environment.now().toISOString(),
       }),
