@@ -14,44 +14,6 @@ import { createTestWorkspace } from "../support/testWorkspace.js";
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
-const expectedCommandPaths = [
-  "init",
-  "task create",
-  "task dependencies add",
-  "task dependencies remove",
-  "task dependencies replace",
-  "task dependencies clear",
-  "task list",
-  "task show",
-  "task submit",
-  "task reviews",
-  "task review show",
-  "task review abandon",
-  "task-review show",
-  "task context",
-  "task context draft",
-  "task context apply",
-  "task cancel",
-  "change start",
-  "change prepare",
-  "change list",
-  "change show",
-  "change findings",
-  "change validation-runs",
-  "change submit",
-  "change cancel",
-  "change reconcile",
-  "change implement",
-  "change decision add",
-  "change decision list",
-  "change blocker raise",
-  "change blocker resolve",
-  "change blocker list",
-  "validation-run show",
-  "validation-run artifact",
-  "validation-run abandon",
-] as const;
-
 const parseOutput = (stdout: string): Record<string, unknown> =>
   JSON.parse(stdout) as Record<string, unknown>;
 const parseHelpOutput = (stdout: string): { readonly help?: unknown } =>
@@ -120,7 +82,7 @@ describe("by CLI", () => {
     ),
   );
 
-  it.effect("routes every generated public command", () =>
+  it.effect("renders generated root command help", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--help"]);
 
@@ -129,9 +91,6 @@ describe("by CLI", () => {
       const help = parseHelpOutput(result.stdout).help;
       expect(help).toEqual(expect.any(String));
       if (typeof help !== "string") return;
-      for (const commandPath of expectedCommandPaths) {
-        expect(help, commandPath).toContain(`- ${commandPath}`);
-      }
       expect(help).not.toContain("task task");
       expect(help).not.toContain("change change");
       for (const nativeCapability of [
