@@ -176,12 +176,14 @@ But Why's universal Specialist role boundaries, Acceptance Context handling, Can
 
 A Change linked to a Task freezes the built-in Stall Detector prompt and response contract in its Change Policy when Change Start captures Acceptance Context.
 The detector runs after the third and each later newly completed blocked Validation Run since the later of the latest full Validation Gate pass or latest Acceptance Context change.
-It receives the current Acceptance Context and Findings from only the newest three qualifying Validation Runs, ordered oldest to newest.
+It receives the current Acceptance Context, all previous qualifying Validation Run Findings in history order, and the current Validation Run Findings separately.
+A `stop` decision requires concrete evidence that a current Finding repeats the same underlying defect or an equivalent or broader consequence from an earlier Run.
+A distinct current Finding after an earlier defect disappears is progress unless concrete evidence relates it to the same non-convergence.
 The detector uses the model and thinking level from the frozen Acceptance Reviewer configuration.
 It runs directly through the installed Pi model and authentication configuration without a workspace or Agent Session.
 A `continue` decision returns the ordinary `validation_findings` result.
 A `stop` decision records an Implementation Blocker and returns `change_blocked`, requesting Operator direction rather than cancelling or approving the Change.
-An unavailable, incompatible, or malformed detector result returns `validation_findings` with a `stall_detection_unavailable` diagnostic and does not create a blocker.
+An unavailable, oversized, incompatible, or malformed detector result returns `validation_findings` with a `stall_detection_unavailable` diagnostic and does not create a blocker.
 Changes started before Stall Detection support, Changes without Acceptance Context, and unlinked Changes do not use Stall Detection.
 
 ## Agent Environment

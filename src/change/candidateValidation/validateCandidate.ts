@@ -334,7 +334,11 @@ const evaluateStallDetection = (
   Effect.gen(function* () {
     const runs = yield* dependencies.persistence.listRunsForChange(input.changeId);
     const current = runs.find((run) => run.id === input.validationRunId);
-    if (current === undefined || current.outcome !== "blocked") {
+    if (
+      current === undefined ||
+      current.outcome !== "blocked" ||
+      runs.at(-1)?.id !== input.validationRunId
+    ) {
       return { kind: "not_qualified" } as const;
     }
 
@@ -357,23 +361,30 @@ const evaluateStallDetection = (
         qualifying.push(run);
       }
     }
-    if (qualifying.length < 3) return { kind: "not_qualified" } as const;
+    if (qualifying.length < 3 || qualifying.at(-1)?.id !== input.validationRunId) {
+      return { kind: "not_qualified" } as const;
+    }
 
-    const selected = qualifying.slice(-3);
-    const groups: StallDetectionRunGroup[] = yield* Effect.forEach(selected, (run) =>
-      dependencies.persistence.listFindings(run.id).pipe(
-        Effect.map((findings) => ({
-          validationRunId: run.id,
-          findings: findings.map(({ producer, title, description, evidence, files }) => ({
-            producer,
-            title,
-            description,
-            evidence,
-            files,
-          })),
-        })),
-      ),
+    const qualifyingRunIds = qualifying.map((run) => run.id);
+    const findingsByRun = Map.groupBy(
+      yield* dependencies.persistence.listFindingsForRuns({
+        changeId: input.changeId,
+        validationRunIds: qualifyingRunIds,
+      }),
+      (finding) => finding.validationRunId,
     );
+    const groups: StallDetectionRunGroup[] = qualifying.map((run) => ({
+      validationRunId: run.id,
+      findings: (findingsByRun.get(run.id) ?? []).map(
+        ({ producer, title, description, evidence, files }) => ({
+          producer,
+          title,
+          description,
+          evidence,
+          files,
+        }),
+      ),
+    }));
     const judgment: StallDetectorResult = yield* dependencies.stallDetector.judge({
       acceptanceContext: input.acceptanceContext,
       runs: groups,
@@ -388,14 +399,14 @@ const evaluateStallDetection = (
       return {
         kind: "unavailable",
         message: judgment.message,
-        validationRunIds: selected.map((run) => run.id),
+        validationRunIds: qualifyingRunIds,
       } as const;
     }
     return judgment.decision === "stop"
       ? {
           kind: "stop",
           reason: judgment.reason,
-          validationRunIds: selected.map((run) => run.id),
+          validationRunIds: qualifyingRunIds,
         }
       : { kind: "continue" as const };
   });

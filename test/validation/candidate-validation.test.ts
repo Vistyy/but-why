@@ -15,6 +15,11 @@ import {
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { internalChangeId } from "../../src/change/changeId.js";
+import {
+  type StallDetector,
+  stallDetectorPrompt,
+  stallDetectorResponseContract,
+} from "../../src/change/stallDetection/stallDetector.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -416,6 +421,97 @@ describe("Candidate validation", () => {
       }),
     10_000,
   );
+
+  it.scoped(
+    "continues the complete BY-C72-style progression when the latest Finding is distinct",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
+        if (!captured.ok) throw new Error(captured.code);
+        yield* installAcceptanceContext(mainCheckout, captured.changeId);
+        const runIds = yield* installStallHistory(mainCheckout, captured.candidateId, [
+          "Correct the Task Review operation boundary",
+          "Preserve excluded Task Review error details",
+          "Repository identity is lost while handling an excluded Task Review error",
+          "Repository identity is rediscovered only after opening Repository Runtime",
+          "Remove obsolete Task Review inspection paths after preserving repository identity",
+        ]);
+        const judge = vi.fn<StallDetector["judge"]>(() =>
+          Effect.succeed({
+            ok: true as const,
+            decision: "continue" as const,
+            reason: "The latest Run reports distinct cleanup work after identity is preserved.",
+          }),
+        );
+        const validation = candidateValidationForTest({
+          localRepositoryRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+          stallDetector: { judge },
+        });
+
+        const previousRunId = runIds.at(-2);
+        const currentRunId = runIds.at(-1);
+        if (previousRunId === undefined || currentRunId === undefined) {
+          throw new Error("Expected previous and current Validation Runs");
+        }
+        expect(yield* evaluateStallDetection(validation, captured.changeId, previousRunId)).toEqual(
+          { kind: "not_qualified" },
+        );
+        const result = yield* evaluateStallDetection(validation, captured.changeId, currentRunId);
+
+        expect(result).toEqual({ kind: "continue" });
+        expect(judge).toHaveBeenCalledOnce();
+        expect(judge.mock.calls[0]?.[0].runs.map((run) => run.validationRunId)).toEqual(runIds);
+        expect(judge.mock.calls[0]?.[0].runs.map((run) => run.findings[0]?.title)).toEqual([
+          "Correct the Task Review operation boundary",
+          "Preserve excluded Task Review error details",
+          "Repository identity is lost while handling an excluded Task Review error",
+          "Repository identity is rediscovered only after opening Repository Runtime",
+          "Remove obsolete Task Review inspection paths after preserving repository identity",
+        ]);
+      }),
+  );
+
+  it.scoped("stops a genuine recurrence in the current Validation Run", () =>
+    Effect.gen(function* () {
+      const mainCheckout = candidateReadyRepo();
+      const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
+      if (!captured.ok) throw new Error(captured.code);
+      yield* installAcceptanceContext(mainCheckout, captured.changeId);
+      const runIds = yield* installStallHistory(mainCheckout, captured.candidateId, [
+        "Repository identity is lost on the excluded Task Review error path",
+        "Repository identity is lost on the excluded Task Review error path",
+        "Repository identity is lost on the excluded Task Review error path",
+      ]);
+      const judge = vi.fn<StallDetector["judge"]>(() =>
+        Effect.succeed({
+          ok: true as const,
+          decision: "stop" as const,
+          reason:
+            "The latest Run reproduces the same repository identity loss as the first Run after two corrections.",
+        }),
+      );
+      const validation = candidateValidationForTest({
+        localRepositoryRoot: mainCheckout,
+        artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+        repository: repositoryConfig(mainCheckout),
+        stallDetector: { judge },
+      });
+
+      const currentRunId = runIds.at(-1);
+      if (currentRunId === undefined) throw new Error("Expected a current Validation Run");
+      const result = yield* evaluateStallDetection(validation, captured.changeId, currentRunId);
+
+      expect(result).toEqual({
+        kind: "stop",
+        reason:
+          "The latest Run reproduces the same repository identity loss as the first Run after two corrections.",
+        validationRunIds: runIds,
+      });
+    }),
+  );
 });
 
 const reviewerFailure = (message: string) => ({
@@ -431,6 +527,12 @@ const reviewerFailure = (message: string) => ({
   stdout: "invalid reviewer output",
 });
 
+const stallAcceptanceContext = {
+  version: 1 as const,
+  title: "Validate phase ownership",
+  description: "Keep Tooling Failure ownership exact.",
+};
+
 const installAcceptanceContext = (root: string, changeId: string, withSpecialist = false) =>
   withTestRepository(
     root,
@@ -442,11 +544,9 @@ const installAcceptanceContext = (root: string, changeId: string, withSpecialist
             VALUES (1, 'Validate phase ownership', 'Keep Tooling Failure ownership exact.', 'todo')
           `;
           yield* sql`
-            UPDATE changes SET initial_acceptance_context = ${JSON.stringify({
-              version: 1,
-              title: "Validate phase ownership",
-              description: "Keep Tooling Failure ownership exact.",
-            })}, reviewer_configuration = ${JSON.stringify({
+            UPDATE changes SET initial_acceptance_context = ${JSON.stringify(
+              stallAcceptanceContext,
+            )}, reviewer_configuration = ${JSON.stringify({
               acceptanceReview: reviewerPolicy("acceptance"),
               specialistReviews: withSpecialist
                 ? [{ id: "standards", ...reviewerPolicy("standards") }]
@@ -458,6 +558,47 @@ const installAcceptanceContext = (root: string, changeId: string, withSpecialist
             INSERT INTO task_change_links (task_id, change_id)
             VALUES (1, ${internalChangeId(changeId, "BY")})
           `;
+        }),
+      ),
+    ),
+  );
+
+const installStallHistory = (root: string, candidateId: number, titles: readonly string[]) =>
+  withTestRepository(
+    root,
+    Effect.flatMap(RepositorySql, (repository) =>
+      repository.operation("install Stall Detection history", (sql) =>
+        Effect.forEach(titles, (title, index) => {
+          const validationRunId = 549 + index;
+          return Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO validation_runs (
+                id, candidate_id, validation_input_snapshot, outcome, cleanup_pending
+              ) VALUES (
+                ${validationRunId}, ${candidateId}, ${JSON.stringify({
+                  acceptanceContext: stallAcceptanceContext,
+                })}, 'blocked', 0
+              )
+            `;
+            yield* sql`
+              INSERT INTO validation_phase_results (
+                validation_run_id, phase, producer, outcome,
+                findings, artifacts, tooling_failure
+              ) VALUES (
+                ${validationRunId}, 'acceptance_review', 'acceptance', 'failed',
+                ${JSON.stringify([
+                  {
+                    title,
+                    description: `${title}.`,
+                    evidence: `Validation Run ${validationRunId} reports ${title}.`,
+                    files: [],
+                    artifactRefs: [],
+                  },
+                ])}, '[]', NULL
+              )
+            `;
+            return validationRunId;
+          });
         }),
       ),
     ),
@@ -486,6 +627,25 @@ const toolingFailureScopes = (root: string, validationRunId: number) =>
       ),
     ),
   );
+
+const evaluateStallDetection = (
+  validation: ReturnType<typeof candidateValidationForTest>,
+  changeId: string,
+  validationRunId: number,
+) =>
+  Effect.gen(function* () {
+    const service = yield* CandidateValidation;
+    return yield* service.evaluateStallDetection({
+      changeId,
+      validationRunId,
+      policy: {
+        prompt: stallDetectorPrompt,
+        responseContract: stallDetectorResponseContract,
+      },
+      acceptanceContext: stallAcceptanceContext,
+      acceptanceReview: reviewerPolicy("acceptance"),
+    });
+  }).pipe(Effect.provide(validation.layer.pipe(Layer.provide(NodeFileSystem.layer))));
 
 const validateCandidate = (
   validation: ReturnType<typeof candidateValidationForTest>,
