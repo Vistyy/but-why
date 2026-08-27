@@ -11,7 +11,7 @@ import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.j
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { normalizeTaskTitle } from "../../../task/taskTitle.js";
-import { createTaskCommand } from "../../../taskChange/composition/taskCommandOperations.js";
+import { createTask } from "../../../task/composition/createTask.js";
 import { type TaskCommandEnvironment, taskMutationView, withTasks } from "../taskCliSupport.js";
 import { taskTitleInputError } from "../taskTitle.js";
 
@@ -34,7 +34,7 @@ export const runCreateCommand = (
   if (!dependencies.ok) return Effect.succeed(dependencies.result);
   return withTasks(environment, (cwd) =>
     Effect.map(
-      createTaskCommand(cwd, {
+      createTask(cwd, {
         title: title.title,
         description: description.content,
         now: environment.now().toISOString(),

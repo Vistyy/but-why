@@ -9,7 +9,15 @@ import {
 } from "./repositoryRuntime.js";
 
 type RepositoryOperationRuntime = RepositoryRuntime<LocalRepositoryContext>;
-export type RepositoryOperationError = RepositoryStorageError | RepositoryRuntimeLoadError;
+export type RepositoryOperationStorageError = {
+  readonly _tag: "RepositoryOperationStorageError";
+  readonly error: RepositoryStorageError;
+  readonly idPrefix: string;
+};
+export type RepositoryOperationError =
+  | RepositoryOperationStorageError
+  | RepositoryStorageError
+  | RepositoryRuntimeLoadError;
 
 const openRepositoryOperation = (
   cwd: string,
@@ -28,9 +36,26 @@ export const runRepositoryOperationAt = <A, E, R>(
   Effect.suspend((): Effect.Effect<A, E | RepositoryOperationError, R> => {
     const loaded = openRepositoryOperation(cwd);
     return loaded.ok
-      ? runRepositoryOperation(loaded.runtime, use)
+      ? runRepositoryOperation(loaded.runtime, use).pipe(
+          Effect.mapError((error) =>
+            isRepositoryStorageError(error)
+              ? {
+                  _tag: "RepositoryOperationStorageError" as const,
+                  error,
+                  idPrefix: loaded.runtime.context.idPrefix,
+                }
+              : error,
+          ),
+        )
       : Effect.fail<RepositoryRuntimeLoadError>(loaded.error);
   });
+
+const isRepositoryStorageError = (error: unknown): error is RepositoryStorageError =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  typeof error._tag === "string" &&
+  error._tag.startsWith("Repository");
 
 const runRepositoryOperation = <A, E, R>(
   runtime: RepositoryOperationRuntime,

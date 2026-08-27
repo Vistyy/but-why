@@ -170,12 +170,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
     listForTask: (taskId) =>
       repository.transaction("list Task Reviews", (sql) =>
-        Effect.gen(function* () {
-          const rows = yield* readReviewRows(sql, taskId, repository.idPrefix);
-          return yield* Effect.forEach(rows, (row) =>
-            decodeReview(sql, row, repository.idPrefix, repository.commonDirectory),
-          );
-        }),
+        listTaskReviewsSqlite(sql, taskId, repository.idPrefix, repository.commonDirectory),
       ),
     getReviewerAgentSession: (taskId) =>
       repository.transaction("read Task Agent Session", (sql) =>
@@ -670,6 +665,19 @@ const readReviewRows = (sql: SqlClient.SqlClient, taskId: string, idPrefix: stri
     `SELECT ${reviewColumns} FROM task_reviews WHERE task_id = ? ORDER BY id ASC`,
     [internalTaskId(taskId, idPrefix)],
   );
+
+export const listTaskReviewsSqlite = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  idPrefix: string,
+  repositoryCommonDirectory: string,
+) =>
+  Effect.gen(function* () {
+    const rows = yield* readReviewRows(sql, taskId, idPrefix);
+    return yield* Effect.forEach(rows, (row) =>
+      decodeReview(sql, row, idPrefix, repositoryCommonDirectory),
+    );
+  });
 
 const getReview = (
   sql: SqlClient.SqlClient,

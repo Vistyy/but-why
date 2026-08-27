@@ -7,9 +7,14 @@ import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { internalChangeId } from "../../src/change/changeId.js";
 import {
+  readCurrentPassingValidationEvidence,
+  readCurrentPassingValidationEvidenceForChanges,
+} from "../../src/change/adapters/sqlite/sqlitePassingValidationEvidence.js";
+import {
   loadRaiseImplementationBlocker,
   loadRecordImplementationDecision,
 } from "../../src/change/composition/loadChangeInspection.js";
+import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
@@ -873,10 +878,28 @@ describe("Change inspection CLI", { timeout: 120_000 }, () => {
             (sql) =>
               sql`
                 UPDATE validation_phase_results
-                SET findings = 'not-json'
+                SET tooling_failure = '{"errorKind":"git_tooling_failed","operationName":"verify_candidate_head","errorMessage":"invalid","extra":true}'
                 WHERE validation_run_id = ${validation.validationRunId}
               `,
           );
+          const scalar = yield* Effect.either(
+            repository.transaction("read scalar malformed passing evidence", (sql) =>
+              readCurrentPassingValidationEvidence(sql, change.id, undefined, repository.idPrefix),
+            ),
+          );
+          const bulk = yield* Effect.either(
+            repository.transaction("read bulk malformed passing evidence", (sql) =>
+              readCurrentPassingValidationEvidenceForChanges(sql, [change.id], repository.idPrefix),
+            ),
+          );
+          expect(scalar._tag).toBe("Left");
+          expect(bulk._tag).toBe("Left");
+          if (scalar._tag === "Left") {
+            expect(scalar.left).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          }
+          if (bulk._tag === "Left") {
+            expect(bulk.left).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          }
         }),
       );
 

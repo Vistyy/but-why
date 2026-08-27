@@ -24,9 +24,21 @@ const withRepository = <A, E>(use: (root: string) => Effect.Effect<A, E>) =>
 
 const createTestTask = (root: string, description = "Original description") =>
   Effect.map(createTask(root, { title: "Original title", description, now }), (result) => {
-    if (!result.ok) throw new Error(result.code);
+    if (!result.ok) {
+      throw new Error("error" in result ? result.error.code : result.code);
+    }
     return result.task;
   });
+
+const requireDraft = (
+  draft:
+    | { readonly path: string; readonly content: string }
+    | undefined
+    | { readonly ok: false; readonly error: unknown },
+) => {
+  if (draft === undefined || "error" in draft) throw new Error("Expected Task Context draft");
+  return draft;
+};
 
 const setTaskState = (root: string, taskId: string, state: "todo" | "done" | "cancelled") =>
   runRepositoryOperationAt(root, (_context, repository) =>
@@ -43,8 +55,7 @@ it.effect("creates and replaces Task Context drafts from current intent", () =>
   withRepository((root) =>
     Effect.gen(function* () {
       yield* createTestTask(root);
-      const first = yield* createTaskContextDraft(root, publicTaskId("BY-1"));
-      if (first === undefined) throw new Error("Expected Task Context draft");
+      const first = requireDraft(yield* createTaskContextDraft(root, publicTaskId("BY-1")));
       expect(readFileSync(first.path, "utf8")).toBe("Original description");
 
       writeFileSync(first.path, "Discarded local edit");
@@ -59,8 +70,7 @@ it.effect("rejects malformed drafts before persistence and retains them", () =>
   withRepository((root) =>
     Effect.gen(function* () {
       yield* createTestTask(root);
-      const draft = yield* createTaskContextDraft(root, publicTaskId("BY-1"));
-      if (draft === undefined) throw new Error("Expected Task Context draft");
+      const draft = requireDraft(yield* createTaskContextDraft(root, publicTaskId("BY-1")));
 
       writeFileSync(draft.path, Buffer.from([0xff]));
       expect(
@@ -92,8 +102,7 @@ it.effect("retains drafts after Task persistence rejection", () =>
   withRepository((root) =>
     Effect.gen(function* () {
       yield* createTestTask(root);
-      const draft = yield* createTaskContextDraft(root, publicTaskId("BY-1"));
-      if (draft === undefined) throw new Error("Expected Task Context draft");
+      const draft = requireDraft(yield* createTaskContextDraft(root, publicTaskId("BY-1")));
       writeFileSync(draft.path, "Updated description");
       yield* setTaskState(root, "BY-1", "todo");
 
@@ -116,17 +125,18 @@ it.effect("reports cleanup failure after a successful Task Context persistence",
   withRepository((root) =>
     Effect.gen(function* () {
       yield* createTestTask(root);
-      const draft = yield* createTaskContextDraft(root, publicTaskId("BY-1"));
-      if (draft === undefined) throw new Error("Expected Task Context draft");
+      const draft = requireDraft(yield* createTaskContextDraft(root, publicTaskId("BY-1")));
       writeFileSync(draft.path, "Updated description");
       const draftsPath = join(root, ".git", "but-why", "task-context-drafts");
       chmodSync(draftsPath, 0o500);
       let result: ApplyTaskContextDraftResult;
       try {
-        result = yield* applyTaskContextDraft(root, {
+        const applied = yield* applyTaskContextDraft(root, {
           taskId: publicTaskId("BY-1"),
           now: later,
         });
+        if ("error" in applied) throw new Error(applied.error.code);
+        result = applied;
       } finally {
         chmodSync(draftsPath, 0o700);
       }

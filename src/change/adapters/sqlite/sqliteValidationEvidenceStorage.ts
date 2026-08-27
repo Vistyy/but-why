@@ -156,7 +156,7 @@ export const listValidationToolingFailures = (
       return encoded.map((source, index) => ({
         sequence: index + 1,
         validationRunId,
-        ...parseToolingFailure(source),
+        ...decodeSqliteValidationToolingFailure(source),
       }));
     });
   });
@@ -250,7 +250,7 @@ const parseArtifacts = (
     return artifact;
   });
 
-const parseToolingFailure = (
+export const decodeSqliteValidationToolingFailure = (
   source: string,
 ): Omit<CandidateValidationToolingFailure, "sequence" | "validationRunId"> => {
   const row = objectValue(JSON.parse(source) as unknown, "Tooling Failure");

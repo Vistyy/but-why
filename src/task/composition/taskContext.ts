@@ -73,18 +73,31 @@ export type ApplyTaskContextDraftResult =
 export const createTaskContextDraft = (
   cwd: string,
   taskId: PublicTaskId,
-): Effect.Effect<TaskContextDraft | undefined, RepositoryOperationError> =>
-  runRepositoryOperationAt(cwd, (context, repository) =>
-    Effect.flatMap(
+): Effect.Effect<
+  TaskContextDraft | undefined | TaskContextIdResolutionFailure,
+  RepositoryOperationError
+> =>
+  runRepositoryOperationAt<
+    TaskContextDraft | undefined | TaskContextIdResolutionFailure,
+    RepositoryStorageError,
+    never
+  >(cwd, (context, repository) => {
+    const resolved = resolveRepoTaskId(context, taskId);
+    if (!resolved.ok) return Effect.succeed({ ok: false as const, error: resolved });
+    return Effect.flatMap(
       repository.transaction("read Task Context", (sql) =>
-        getTaskContextByIdInSqlite(sql, taskId, repository.idPrefix),
+        getTaskContextByIdInSqlite(sql, resolved.taskId, repository.idPrefix),
       ),
       (taskContext) =>
         taskContext === undefined
           ? Effect.succeed(undefined)
           : Effect.try({
               try: () => ({
-                ...writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext),
+                ...writeTaskContextDraft(
+                  context.paths.taskContextDraftsPath,
+                  resolved.taskId,
+                  taskContext,
+                ),
               }),
               catch: (cause) =>
                 new RepositoryStateUnavailable({
@@ -92,20 +105,29 @@ export const createTaskContextDraft = (
                   cause,
                 }),
             }),
-    ),
-  );
+    );
+  });
 
 export const applyTaskContextDraft = (
   cwd: string,
   input: ApplyTaskContextDraftInput,
-): Effect.Effect<ApplyTaskContextDraftResult, RepositoryOperationError> =>
-  runRepositoryOperationAt(cwd, (context, repository) => {
-    const draft = readTaskContextDraft(context.paths.taskContextDraftsPath, input.taskId);
+): Effect.Effect<
+  ApplyTaskContextDraftResult | TaskContextIdResolutionFailure,
+  RepositoryOperationError
+> =>
+  runRepositoryOperationAt<
+    ApplyTaskContextDraftResult | TaskContextIdResolutionFailure,
+    RepositoryStorageError,
+    never
+  >(cwd, (context, repository) => {
+    const resolved = resolveRepoTaskId(context, input.taskId);
+    if (!resolved.ok) return Effect.succeed({ ok: false as const, error: resolved });
+    const draft = readTaskContextDraft(context.paths.taskContextDraftsPath, resolved.taskId);
     if (!draft.ok) return Effect.succeed({ ok: false, error: draft.error });
     return Effect.map(
       repository.transactionImmediate("update Task Context", (sql) =>
         updateTaskContext(sql, repository.idPrefix, {
-          taskId: input.taskId,
+          taskId: resolved.taskId,
           description: draft.draft.description,
           now: input.now,
         } satisfies UpdateTaskContextInput),

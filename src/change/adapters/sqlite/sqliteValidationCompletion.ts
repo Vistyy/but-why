@@ -5,13 +5,13 @@ import { validationArtifactRef } from "../../../contracts/validationArtifact.js"
 import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   assertValidationArtifactRecord,
-  assertValidationToolingFailureEvidence,
   decodeValidationFindingEvidence,
 } from "../../candidateValidation/candidateValidationEvidence.js";
 import type { CandidateValidationOutcome } from "../../candidateValidation/candidateValidationRunStore.js";
 import type { ChangePolicy } from "../../changePolicy.js";
 import { type ValidationPhase, validationPhase } from "../../validationRun/validationRun.js";
 import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
+import { decodeSqliteValidationToolingFailure } from "./sqliteValidationEvidenceStorage.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 type PhaseResultEvidenceRow = {
@@ -104,23 +104,20 @@ const isPreDispatchReviewerIntegrityFailure = (
   if (evidence?.toolingFailure === null || evidence === undefined) return false;
   const findings: unknown = JSON.parse(evidence.findings) as unknown;
   const artifacts: unknown = JSON.parse(evidence.artifacts) as unknown;
-  const failure: unknown = JSON.parse(evidence.toolingFailure) as unknown;
   if (
     !Array.isArray(findings) ||
     findings.length !== 0 ||
     !Array.isArray(artifacts) ||
-    artifacts.length !== 0 ||
-    typeof failure !== "object" ||
-    failure === null ||
-    Array.isArray(failure)
+    artifacts.length !== 0
   ) {
     return false;
   }
-  const value = failure as { readonly errorKind?: unknown; readonly operationName?: unknown };
+  const failure = decodeSqliteValidationToolingFailure(evidence.toolingFailure);
   return (
-    (value.errorKind === "git_tooling_failed" && value.operationName === "verify_candidate_head") ||
-    (value.errorKind === "infrastructure_tooling_failed" &&
-      value.operationName ===
+    (failure.errorKind === "git_tooling_failed" &&
+      failure.operationName === "verify_candidate_head") ||
+    (failure.errorKind === "infrastructure_tooling_failed" &&
+      failure.operationName ===
         (phase === validationPhase.acceptanceReview
           ? "verify_acceptance_candidate"
           : "verify_specialist_candidate"))
@@ -212,27 +209,7 @@ export const validateValidationCompletion = (
     for (const finding of findings) decodeValidationFindingEvidence(finding, artifactRefs);
     if (findings.length > 0) findingsByPosition.set(key, findings.length);
     if (row.toolingFailure !== null) {
-      const failure: unknown = JSON.parse(row.toolingFailure) as unknown;
-      if (typeof failure !== "object" || failure === null || Array.isArray(failure)) {
-        throw new Error("Tooling Failure is not an object");
-      }
-      const value = failure as {
-        readonly errorKind?: unknown;
-        readonly operationName?: unknown;
-        readonly errorMessage?: unknown;
-      };
-      if (
-        typeof value.errorKind !== "string" ||
-        typeof value.operationName !== "string" ||
-        typeof value.errorMessage !== "string"
-      ) {
-        throw new Error("Tooling Failure fields are invalid");
-      }
-      assertValidationToolingFailureEvidence({
-        errorKind: value.errorKind,
-        operationName: value.operationName,
-        errorMessage: value.errorMessage,
-      });
+      decodeSqliteValidationToolingFailure(row.toolingFailure);
       toolingPositions.add(key);
     }
   }
@@ -264,27 +241,7 @@ export const validateValidationCompletion = (
 
   const phaseToolingFailureCount = toolingPositions.size;
   if (runToolingFailure !== null) {
-    const failure: unknown = JSON.parse(runToolingFailure) as unknown;
-    if (typeof failure !== "object" || failure === null || Array.isArray(failure)) {
-      throw new Error("Tooling Failure is not an object");
-    }
-    const value = failure as {
-      readonly errorKind?: unknown;
-      readonly operationName?: unknown;
-      readonly errorMessage?: unknown;
-    };
-    if (
-      typeof value.errorKind !== "string" ||
-      typeof value.operationName !== "string" ||
-      typeof value.errorMessage !== "string"
-    ) {
-      throw new Error("Tooling Failure fields are invalid");
-    }
-    assertValidationToolingFailureEvidence({
-      errorKind: value.errorKind,
-      operationName: value.operationName,
-      errorMessage: value.errorMessage,
-    });
+    decodeSqliteValidationToolingFailure(runToolingFailure);
   }
   if (
     phaseToolingFailureCount !== evidenceRows.filter((row) => row.toolingFailure !== null).length
