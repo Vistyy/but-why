@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   passTaskReviewFixture,
@@ -158,6 +159,41 @@ it.scoped("orders actionable Tasks by lifecycle priority and numeric ID", () => 
     }),
   );
 });
+
+it.scoped("batches Task list relationships beyond one SQL parameter batch", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "insert Task list batch fixture",
+        (sql) => sql`
+          WITH RECURSIVE numbers(n) AS (
+            SELECT 1
+            UNION ALL
+            SELECT n + 1 FROM numbers WHERE n < 1001
+          )
+          INSERT INTO tasks (id, title, description, state)
+          SELECT n, 'Task ' || n, 'Description ' || n, 'new' FROM numbers
+        `,
+      );
+      yield* repository.operation(
+        "insert Task list relationship fixture",
+        (sql) => sql`
+          INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
+          VALUES (1001, 1000)
+        `,
+      );
+
+      const listed = yield* listTasksInSqlite({ includeDone: false, limit: "all" });
+      expect(listed.total).toBe(1001);
+      expect(listed.tasks).toHaveLength(1001);
+      expect(listed.tasks[1000]).toMatchObject({
+        id: "BY-1001",
+        blockedBy: [{ id: "BY-1000", title: "Task 1000", state: "new" }],
+      });
+    }),
+  ),
+);
 
 it.scoped("bounds Task lists after filtering and preserves the matching total", () => {
   return withTemporaryRepositoryState(() =>

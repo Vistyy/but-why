@@ -653,6 +653,8 @@ type StoredBatchedDependencyFactRow = StoredTaskDependencyFactRow & {
   readonly ownerId: number;
 };
 
+const dependencyBatchSize = 500;
+
 const dependencyFactsForTasks = (
   sql: SqlClient.SqlClient,
   taskIds: readonly number[],
@@ -666,16 +668,22 @@ const dependencyFactsForTasks = (
       direction === "prerequisites" ? "dependent_task_id" : "prerequisite_task_id";
     const relatedColumn =
       direction === "prerequisites" ? "prerequisite_task_id" : "dependent_task_id";
-    const placeholders = taskIds.map(() => "?").join(", ");
-    const rows = yield* sql.unsafe<StoredBatchedDependencyFactRow>(
-      `SELECT task_dependencies.${ownerColumn} AS ownerId,
-        tasks.id, tasks.id AS numericId, tasks.title, tasks.state
-       FROM task_dependencies
-       LEFT JOIN tasks ON tasks.id = task_dependencies.${relatedColumn}
-       WHERE task_dependencies.${ownerColumn} IN (${placeholders})
-       ORDER BY task_dependencies.${ownerColumn} ASC, tasks.id ASC`,
-      taskIds,
-    );
+    const rows: StoredBatchedDependencyFactRow[] = [];
+    for (let start = 0; start < taskIds.length; start += dependencyBatchSize) {
+      const batch = taskIds.slice(start, start + dependencyBatchSize);
+      const placeholders = batch.map(() => "?").join(", ");
+      rows.push(
+        ...(yield* sql.unsafe<StoredBatchedDependencyFactRow>(
+          `SELECT task_dependencies.${ownerColumn} AS ownerId,
+            tasks.id, tasks.id AS numericId, tasks.title, tasks.state
+           FROM task_dependencies
+           LEFT JOIN tasks ON tasks.id = task_dependencies.${relatedColumn}
+           WHERE task_dependencies.${ownerColumn} IN (${placeholders})
+           ORDER BY task_dependencies.${ownerColumn} ASC, tasks.id ASC`,
+          batch,
+        )),
+      );
+    }
     return yield* decodePersisted(operationName, () => {
       const grouped = new Map<number, TaskDependencyFact[]>();
       for (const row of rows) {
