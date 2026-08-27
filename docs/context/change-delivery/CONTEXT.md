@@ -139,10 +139,13 @@ _Avoid_: Mutable current config, Candidate-controlled policy, Validation Run sna
 
 **Stall Detection**:
 A Change-owned bounded detector for linked Changes whose frozen Change Policy contains Stall Detector policy.
-It judges only the current Acceptance Context and the newest three qualifying blocked Validation Runs after the third qualifying Run.
+After the third qualifying blocked Validation Run, it judges the complete qualifying Finding history for only the current Acceptance Context.
+It receives previous Validation Run Findings in history order and the current Validation Run Findings separately.
+`stop` requires concrete evidence that a current Finding repeats the same underlying defect or an equivalent or broader consequence from an earlier Run.
+A distinct current Finding after an earlier defect disappears is progress unless concrete evidence relates it to the same non-convergence.
 It uses the frozen Acceptance Reviewer model and thinking level through a workspace-free Pi model request.
 `continue` leaves ordinary Findings correction in control, while `stop` requests Operator direction through an Implementation Blocker.
-Unavailable or malformed detector execution does not create a blocker.
+Unavailable, oversized, or malformed detector execution does not create a blocker.
 _Avoid_: Stall record, detector attempt, automatic Change cancellation
 
 **Validation Input Snapshot**:

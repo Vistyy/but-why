@@ -9,14 +9,19 @@ export const stallDetectorResponseContract =
 
 export const stallDetectorPrompt = `You are the Stall Detector for a linked Change.
 
-\`continue\` means the Findings remain concrete correction work and the history does not establish that the implementation approach is failing.
+The input separates all previous qualifying Validation Run Findings from the current Validation Run Findings under one unchanged Acceptance Context.
+Previous Validation Runs are ordered oldest to newest.
+Judge whether the current Run shows that correction work is looping or progressing.
 
-\`stop\` means the history itself shows that the approach is not credibly converging or that safe continuation requires Operator authority, such as the same underlying conflict recurring despite correction, corrections producing equivalent or broader violations, incompatible accepted constraints, or materially expanding cross-cutting problems.
+\`continue\` means the current Findings are new correction work, a narrower follow-up, or evidence that earlier defects disappeared.
 
-Do not stop merely because reviews failed, Findings remain, or Findings are serious.
+\`stop\` means the current Findings concretely repeat the same underlying defect at the same boundary, location, or consequence as an earlier Run, or show an equivalent or broader consequence of that defect.
+Exact wording is not required for repetition.
+A problem that recurs after different intervening Findings can show a loop.
 
-Base the relationship only on concrete details that identify the accepted constraint, observable defect or consequence, and relevant correction.
-Temporal or evaluative wording in a Finding, including \`still\`, \`remain\`, \`again\`, \`recurring\`, \`equivalent\`, or \`broader\`, is not evidence of repetition or non-convergence by itself.
+Do not stop merely because reviews failed, Findings remain, Findings are serious, or earlier Runs conflict with each other.
+Base a \`stop\` decision on concrete details that relate the current Finding to an earlier accepted constraint, observable defect or consequence, and location or boundary.
+Temporal or evaluative wording in a Finding, including \`still\`, \`remain\`, \`again\`, \`recurring\`, \`equivalent\`, or \`broader\`, is not evidence of repetition by itself.
 
 Return only:
 ${stallDetectorResponseContract}
@@ -80,6 +85,17 @@ const decodeResponse = (value: unknown, policy: StallDetectorPolicy) => {
   })(value);
 };
 
+const requestContent = (input: StallDetectionInput) => {
+  const current = input.runs.at(-1);
+  return JSON.stringify({
+    acceptanceContext: input.acceptanceContext,
+    previousValidationRuns: input.runs.slice(0, -1).map((run) => ({
+      findings: run.findings,
+    })),
+    currentValidationRun: { findings: current?.findings ?? [] },
+  });
+};
+
 export const makePiAiStallDetector = (): StallDetector => ({
   judge: (input) =>
     Effect.gen(function* () {
@@ -96,20 +112,22 @@ export const makePiAiStallDetector = (): StallDetector => ({
             if (model === undefined) {
               return { kind: "unavailable" as const, message: "The frozen model is unavailable." };
             }
+            const content = requestContent(input);
+            const requestBytes = new TextEncoder().encode(
+              `${input.policy.prompt}\n${content}`,
+            ).byteLength;
+            if (requestBytes > 262_144) {
+              return {
+                kind: "unavailable" as const,
+                message:
+                  "The complete Stall Detection history exceeds the 262144-byte request limit.",
+              };
+            }
             const response = await runtime.completeSimple(
               model,
               {
                 systemPrompt: input.policy.prompt,
-                messages: [
-                  {
-                    role: "user",
-                    content: JSON.stringify({
-                      acceptanceContext: input.acceptanceContext,
-                      runs: input.runs,
-                    }),
-                    timestamp: 0,
-                  },
-                ],
+                messages: [{ role: "user", content, timestamp: 0 }],
               },
               input.thinking === undefined ? undefined : { reasoning: input.thinking },
             );
@@ -126,8 +144,7 @@ export const makePiAiStallDetector = (): StallDetector => ({
               )
               .map((part) => part.text)
               .join("");
-            const decoded = decodeResponse(JSON.parse(text) as unknown, input.policy);
-            return { kind: "decision" as const, ...decoded };
+            return { kind: "decision" as const, ...decodeResponse(JSON.parse(text), input.policy) };
           },
           catch: (cause) => new StallDetectorModelFailure({ cause }),
         }),

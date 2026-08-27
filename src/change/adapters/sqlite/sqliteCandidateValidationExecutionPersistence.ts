@@ -43,6 +43,7 @@ import { requireCoherentValidationCompletion } from "./sqliteValidationCompletio
 import {
   listValidationArtifacts,
   listValidationFindings,
+  listValidationFindingsForRuns,
   listValidationPhaseResults,
   listValidationToolingFailures,
 } from "./sqliteValidationEvidenceStorage.js";
@@ -203,6 +204,10 @@ export const openSqliteCandidateValidationExecutionPort = () =>
       listFindings: (validationRunId) =>
         repository.transaction("list Candidate validation Findings", (sql) =>
           listValidationFindings(sql, validationRunId, repository.idPrefix),
+        ),
+      listFindingsForRuns: (validationRunIds) =>
+        repository.transaction("list Stall Detection Findings", (sql) =>
+          listValidationFindingsForRuns(sql, validationRunIds),
         ),
       listPreviousCandidateReviewerFindings: (input) =>
         repository.transaction("list previous Candidate reviewer Findings", (sql) =>

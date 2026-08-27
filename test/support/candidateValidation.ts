@@ -15,7 +15,10 @@ import {
   CandidateValidationWorkspace,
   StallDetectorExecution,
 } from "../../src/change/candidateValidation/validateCandidate.js";
-import { makePiAiStallDetector } from "../../src/change/stallDetection/stallDetector.js";
+import {
+  makePiAiStallDetector,
+  type StallDetector,
+} from "../../src/change/stallDetection/stallDetector.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { restoreDisposableWorkspace } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
@@ -33,6 +36,7 @@ export const candidateValidationForTest = (input: {
   readonly artifactsRoot: string;
   readonly repository: RepositorySqlConfig;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly stallDetector?: StallDetector;
 }) => {
   const repositoryLayer = repositorySqlLayer(input.repository);
   const persistenceLayer = Layer.effect(
@@ -70,7 +74,7 @@ export const candidateValidationForTest = (input: {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
           processExecutor: piReviewerProcessExecutor,
         }),
-        Layer.succeed(StallDetectorExecution, makePiAiStallDetector()),
+        Layer.succeed(StallDetectorExecution, input.stallDetector ?? makePiAiStallDetector()),
       ),
     ),
   );

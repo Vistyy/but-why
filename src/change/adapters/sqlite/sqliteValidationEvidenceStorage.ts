@@ -130,6 +130,46 @@ export const listValidationFindings = (
     );
   });
 
+export const listValidationFindingsForRuns = (
+  sql: SqlClient.SqlClient,
+  validationRunIds: readonly number[],
+) =>
+  Effect.gen(function* () {
+    if (validationRunIds.length === 0) return [];
+    const rows = yield* sql<StoredPhaseResultRow>`
+      SELECT validation_run_id AS validationRunId, phase, producer, outcome,
+        findings, artifacts, tooling_failure AS toolingFailure
+      FROM validation_phase_results
+      WHERE ${sql.in("validation_run_id", validationRunIds)}
+    `;
+    return yield* decodePersisted("list Stall Detection Findings", () => {
+      const artifactRefsByRun = new Map<number, Set<string>>();
+      for (const row of rows) {
+        const refs = artifactRefsByRun.get(row.validationRunId) ?? new Set<string>();
+        for (const artifact of parseArtifacts(row.artifacts)) refs.add(`artifact:${artifact.path}`);
+        artifactRefsByRun.set(row.validationRunId, refs);
+      }
+      return rows
+        .flatMap((row) =>
+          parseFindings(
+            row.findings,
+            artifactRefsByRun.get(row.validationRunId) ?? new Set<string>(),
+          ).map((finding) => ({
+            ...finding,
+            validationRunId: row.validationRunId,
+            phase: decodePhase(row.phase),
+            producer: row.producer,
+          })),
+        )
+        .sort(
+          (left, right) =>
+            left.validationRunId - right.validationRunId ||
+            phasePosition(left.phase) - phasePosition(right.phase) ||
+            left.producer.localeCompare(right.producer),
+        );
+    });
+  });
+
 export const listValidationToolingFailures = (
   sql: SqlClient.SqlClient,
   validationRunId: number,
