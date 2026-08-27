@@ -144,7 +144,10 @@ export const makePiAiStallDetector = (): StallDetector => ({
               )
               .map((part) => part.text)
               .join("");
-            return { kind: "decision" as const, ...decodeResponse(JSON.parse(text), input.policy) };
+            return {
+              kind: "decision" as const,
+              ...decodeResponse(JSON.parse(text) as unknown, input.policy),
+            };
           },
           catch: (cause) => new StallDetectorModelFailure({ cause }),
         }),
