@@ -105,11 +105,7 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
       openSqliteTaskReviewPersistence().pipe(
         Effect.flatMap((persistence) =>
           use({
-            getCompletedSimplificationAdvice: (taskId) =>
-              persistence.getCompletedSimplificationAdvice(taskId),
             getById: persistence.getById,
-            getLatestForTask: persistence.getLatestForTask,
-            listForTask: persistence.listForTask,
             proposalIsCurrent: persistence.proposalIsCurrent,
             inspectIdentity: (review) =>
               inspectTaskReviewIdentity(
