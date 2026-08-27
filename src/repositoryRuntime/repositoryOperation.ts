@@ -50,7 +50,15 @@ export const runRepositoryOperationAt = <A, E, R>(
       : Effect.fail<RepositoryRuntimeLoadError>(loaded.error);
   });
 
-const isRepositoryStorageError = (error: unknown): error is RepositoryStorageError =>
+export const isRepositoryOperationStorageError = (
+  error: unknown,
+): error is RepositoryOperationStorageError =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  error._tag === "RepositoryOperationStorageError";
+
+export const isRepositoryStorageError = (error: unknown): error is RepositoryStorageError =>
   typeof error === "object" &&
   error !== null &&
   "_tag" in error &&
