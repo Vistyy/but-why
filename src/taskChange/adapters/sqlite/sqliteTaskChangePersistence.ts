@@ -5,9 +5,9 @@ import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { CompleteMergedChangeInput } from "../../../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import type { TaskRecord } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
-import type { StoredTaskRecord } from "../../../task/taskStore.js";
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
 import type { TaskChangeLinkPort } from "../../taskChangePorts.js";
 
@@ -16,7 +16,7 @@ export type TaskReadOperation = {
     sql: SqlClient.SqlClient,
     taskId: PublicTaskId,
     idPrefix: string,
-  ) => Effect.Effect<StoredTaskRecord | undefined, SqlError | RepositoryPersistedDataInvalid>;
+  ) => Effect.Effect<TaskRecord | undefined, SqlError | RepositoryPersistedDataInvalid>;
 };
 
 export type TaskChangeCompletionOperations = {

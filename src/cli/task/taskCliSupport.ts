@@ -73,7 +73,7 @@ const withRepository = (
 ): Effect.Effect<CliResult> => {
   const loaded = openRepositoryRuntime(environment.cwd);
   const program = loaded.ok
-    ? loaded.runtime.provide(use(loaded.runtime.context))
+    ? use(loaded.runtime.context)
     : Effect.succeed(repoStateLoadError(loaded.error));
   return program.pipe(
     Effect.catchAll((error) =>

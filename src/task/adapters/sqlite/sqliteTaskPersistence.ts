@@ -8,7 +8,12 @@ import {
 import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type { TaskState } from "../../lifecycle.js";
-import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../../task.js";
+import type {
+  DependencyValidationCode,
+  TaskDependencyFact,
+  TaskRecord,
+  TaskSummary,
+} from "../../task.js";
 import {
   internalTaskId,
   type PublicTaskId,
@@ -24,7 +29,6 @@ import type {
   RenameTaskInput,
   RenameTaskResult,
   ReviseTaskInput,
-  StoredTaskRecord,
   UpdateTaskContextInput,
 } from "../../taskStore.js";
 import { normalizeTaskTitle } from "../../taskTitle.js";
@@ -45,7 +49,7 @@ import {
 export type TaskCancellationOperations = {
   readonly getTaskById: (
     taskId: PublicTaskId,
-  ) => Effect.Effect<StoredTaskRecord | undefined, RepositoryStorageError>;
+  ) => Effect.Effect<TaskRecord | undefined, RepositoryStorageError>;
   readonly cancelTask: (
     input: CancelTaskInput,
   ) => Effect.Effect<CancelTaskResult, RepositoryStorageError>;
@@ -726,7 +730,7 @@ const rowToStoredTaskRecord = (
       cancelReason: row.cancelReason,
       prerequisites,
       dependents,
-    } satisfies StoredTaskRecord;
+    } satisfies TaskRecord;
   });
 
 const invalidData = (operationName: string, message: string) =>
