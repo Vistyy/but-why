@@ -18,9 +18,9 @@ import {
   taskReviewAdmissionRejection,
 } from "../../src/task/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
+import { decodeTaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import type { TaskSimplificationAdvice } from "../../src/task/review/taskSimplificationAdvice.js";
-import { decodeTaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { createGitRepo } from "../support/by-cli.js";
