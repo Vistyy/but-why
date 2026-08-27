@@ -59,13 +59,33 @@ export const readCurrentPassingValidationEvidence = (
     if (!(yield* isOpenChange(sql, changeId, currentPassingEvidenceOperation, idPrefix))) {
       return undefined;
     }
-    const evidence = yield* readCurrentPassingValidationEvidenceForChanges(
-      sql,
-      [changeId],
-      idPrefix,
-      query,
+    const candidateRows = yield* sql.unsafe<StoredCandidateRow>(
+      `SELECT ${candidateReadColumns}
+       FROM candidates AS candidate
+       WHERE candidate.change_id = ?
+       ORDER BY candidate.id DESC LIMIT 1`,
+      [internalChangeId(changeId, idPrefix)],
     );
-    return evidence.get(changeId)?.currentPassingEvidence;
+    const candidate = yield* decodeSelectedCandidate(
+      candidateRows[0],
+      changeId,
+      currentPassingEvidenceOperation,
+      idPrefix,
+    );
+    if (
+      candidate === undefined ||
+      (query?.candidateId !== undefined && candidate.id !== query.candidateId) ||
+      (query?.changeBaseSha !== undefined && candidate.changeBaseSha !== query.changeBaseSha)
+    ) {
+      return undefined;
+    }
+    return yield* readPassingEvidenceForCandidate(
+      sql,
+      candidate,
+      query,
+      currentPassingEvidenceOperation,
+      idPrefix,
+    );
   });
 
 export const readCurrentPassingValidationEvidenceForChanges = (
