@@ -727,7 +727,8 @@ export const runContinueChange = (pi: ContinueChangeCapabilities): void => {
   const publicationPullRequestUrl = (snapshot: ChangeInspectionSnapshot): string | null => {
     const pullRequest = snapshot.publication?.pullRequest;
     if (pullRequest === null || pullRequest === undefined) return null;
-    const url = pullRequest.url;
+    // biome-ignore lint/complexity/useLiteralKeys: Preserve index-signature-safe access.
+    const url = pullRequest["url"];
     return typeof url === "string" ? url : null;
   };
 
