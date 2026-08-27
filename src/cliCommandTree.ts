@@ -8,7 +8,6 @@ import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
 import { Console, Context, Effect, Layer, Logger, Option, Ref } from "effect";
 import type * as Types from "effect/Types";
-import { collapseHome } from "./cli/cliPath.js";
 import {
   dependencyOptionRequiredError,
   missingDependencyOperation,
@@ -695,10 +694,7 @@ const initCommand = withCliHandler(
 const commandRootBase = Command.make("by", {}).pipe(
   Command.withDescription("Validate completed code changes against approved human intent."),
 );
-const commandRootWithHandler = withCliHandler(commandRootBase, (_values, environment) =>
-  dashboardResult(environment),
-);
-const commandTree = commandRootWithHandler.pipe(
+const commandTree = commandRootBase.pipe(
   Command.withSubcommands([
     initCommand,
     taskCommand,
@@ -809,17 +805,6 @@ export const runCommandTree = (
       help: ["Run `by --help` for generated command help."],
     });
   });
-
-const dashboardResult = (environment: CliEnvironment): Effect.Effect<CliResult> =>
-  Effect.promise(() => import("./cli/task/dashboard.js")).pipe(
-    Effect.flatMap(({ dashboard }) =>
-      dashboard(
-        collapseHome(environment.executablePath),
-        "Validate completed code changes against approved human intent.",
-        environment,
-      ),
-    ),
-  );
 
 const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
   Effect.succeed(

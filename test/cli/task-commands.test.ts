@@ -19,7 +19,7 @@ const createTask = (root: string, file: string, title: string, description: stri
   return runByInProcessEffect(root, ["task", "create", "--title", title, "--file", file]);
 };
 
-it.effect("renders Task list, detail, and dashboard projections", () =>
+it.effect("renders Task list and detail projections", () =>
   withRepository((root) =>
     Effect.gen(function* () {
       expect((yield* createTask(root, "first.md", "First", "First intent")).status).toBe(0);
@@ -46,16 +46,6 @@ it.effect("renders Task list, detail, and dashboard projections", () =>
           dependents: [],
           change: null,
         },
-      });
-
-      const dashboard = yield* runByInProcessEffect(root, []);
-      expect(dashboard.status).toBe(0);
-      expect(parse(dashboard.stdout)).toMatchObject({
-        count: 2,
-        tasks: [
-          { id: "BY-1", title: "First", state: "new" },
-          { id: "BY-2", title: "Second", state: "new" },
-        ],
       });
     }),
   ),

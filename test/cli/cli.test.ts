@@ -1,12 +1,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
 
-import { collapseHome } from "../../src/cli/cliPath.js";
 import { mapRuntimeError } from "../../src/cli.js";
 import { runtimeError } from "../../src/cliResults.js";
 import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
@@ -146,6 +144,20 @@ describe("by CLI", () => {
         expect(help, nativeCapability).toContain(nativeCapability);
       }
     }),
+  );
+
+  it.effect(
+    "uses generated root help for a bare invocation outside an initialized repository",
+    () =>
+      Effect.gen(function* () {
+        const root = createTestWorkspace();
+        const bare = yield* runByInProcessEffect(root, []);
+        const explicit = yield* runByInProcessEffect(root, ["--help"]);
+
+        expect(bare).toEqual(explicit);
+        expect(bare.status).toBe(0);
+        expect(bare.stderr).toBe("");
+      }),
   );
 
   it.effect("renders the Task Submit help description", () =>
@@ -366,9 +378,5 @@ describe("by CLI", () => {
       error: { code: "stable_code", message: "Stable message" },
       help: [],
     });
-  });
-
-  ordinaryIt("collapses the home directory in executable paths", () => {
-    expect(collapseHome(join(homedir(), ".local/bin/by"))).toBe("~/.local/bin/by");
   });
 });

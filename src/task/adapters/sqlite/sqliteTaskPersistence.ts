@@ -254,29 +254,6 @@ const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
     return rows[0]?.count ?? 0;
   });
 
-export const listActionableTasksSqlite = (sql: SqlClient.SqlClient, idPrefix: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredTaskSummaryRow>`
-      SELECT id, id AS numericId, title, state
-      FROM tasks
-      WHERE state IN ('new', 'todo')
-      ORDER BY
-        CASE state WHEN 'new' THEN 0 WHEN 'todo' THEN 1 END ASC,
-        id ASC
-    `;
-    const decoded = yield* decodePersisted("list actionable Tasks", () =>
-      rows.map((row) => decodeTaskSummaryRow(row, idPrefix)),
-    );
-    const prerequisites = yield* dependencyFactsForTasks(
-      sql,
-      decoded.map((row) => row.numericId),
-      "prerequisites",
-      "list actionable Tasks",
-      idPrefix,
-    );
-    return decoded.map((row) => taskSummary(row, prerequisites.get(row.numericId) ?? []));
-  });
-
 export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskRecordRow>`
