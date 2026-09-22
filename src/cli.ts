@@ -1,4 +1,4 @@
-import { lstat, mkdtemp, rm } from "node:fs/promises";
+import { lstat, mkdtemp, rmdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { Data, Effect } from "effect";
@@ -287,7 +287,7 @@ function cleanup(
 
     const clear = yield* Effect.result(
       Effect.tryPromise({
-        try: () => rm(worktree.temporary, { recursive: true }),
+        try: () => rmdir(worktree.temporary),
         catch: () => invalid("Temporary directory cleanup failed"),
       }),
     );

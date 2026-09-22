@@ -223,6 +223,26 @@ describe("standalone reviewer", () => {
     await rm(dirname(path), { recursive: true });
   });
 
+  it("does not recursively delete unexpected files beside the checkout", async () => {
+    const r = await repo();
+
+    const reviewer: Reviewer = async ({ cwd }) => {
+      await writeFile(join(dirname(cwd), "unrelated"), "keep this file");
+
+      return "done";
+    };
+
+    const got = await execute(r.root, ["review", "repository", "--at", r.base], reviewer);
+    expect(got.status).toBe(1);
+    expect(got.value.cleanupFailure).toContain("temporary directory cleanup failed");
+    const directory = got.value.cleanupFailure?.match(/\((\/tmp\/but-why-[^)]+)\)/)?.[1];
+
+    if (directory === undefined) throw new Error("Expected retained temporary directory");
+
+    expect(await readFile(join(directory, "unrelated"), "utf8")).toBe("keep this file");
+    await rm(directory, { recursive: true, force: true });
+  });
+
   it("preserves and reports a dirty task-owned checkout", async () => {
     const r = await repo();
     const at = r.base;
