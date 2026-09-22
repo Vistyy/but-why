@@ -306,26 +306,6 @@ describe("standalone reviewer", () => {
     expect(got.value.rules?.[1]?.provenance).toContain(`${r.base}:.but-why/rules/check.md`);
     expect(got.value.rules?.every(({ digest }) => /^[0-9a-f]{64}$/.test(digest))).toBe(true);
     expect(got.value.reviews?.map(({ output }) => output)).toEqual(["completed", "completed"]);
-
-    const alternate = join(r.home, "alternate-rules");
-    await mkdir(alternate);
-    await writeFile(join(alternate, "other.md"), "ANOTHER RULE\n");
-    await writeFile(
-      r.config,
-      JSON.stringify({ model: "fixture/model", rulesDirectory: alternate }),
-    );
-
-    const overridden = await execute(
-      r.root,
-      ["review", "repository", "--at", r.base],
-      async () => "completed",
-    );
-
-    expect(overridden.value.rules?.map(({ identity }) => identity)).toEqual([
-      "global/other",
-      "project/check",
-    ]);
-    expect(overridden.value.rules?.[0]?.provenance).toBe(join(alternate, "other.md"));
   });
 
   it("preserves a checkout when its Git registration stops being detached", async () => {

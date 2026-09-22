@@ -3,7 +3,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
-import type { UserConfig } from "./config.js";
 import { type GitError, git } from "./git.js";
 
 const PROJECT_RULES = ".but-why/rules";
@@ -36,11 +35,6 @@ function missing(error: unknown): boolean {
 }
 
 class AbsentPath extends Data.TaggedError("AbsentPath")<Record<string, never>> {}
-
-function globalDirectory(config: UserConfig): string {
-  // Pi's configured agent directory supplies rules, not reviewer instructions.
-  return config.rulesDirectory ?? join(getAgentDir(), "but-why", "rules");
-}
 
 function globalRules(directory: string): Effect.Effect<Rule[], PolicyError> {
   const names = Effect.tryPromise({
@@ -122,11 +116,9 @@ function projectRules(cwd: string, pinned: string): Effect.Effect<Rule[], GitErr
 export function loadRules(
   cwd: string,
   pinned: string,
-  config: UserConfig,
 ): Effect.Effect<Rule[], GitError | PolicyError> {
   return Effect.gen(function* () {
-    const directory = globalDirectory(config);
-    const global = yield* globalRules(directory);
+    const global = yield* globalRules(join(getAgentDir(), "but-why", "rules"));
     const project = yield* projectRules(cwd, pinned);
     const rules = [...global, ...project];
 

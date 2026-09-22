@@ -339,7 +339,7 @@ function runReview(
     const repository = (yield* git(cwd, ["rev-parse", "--show-toplevel"])).trim();
     const selected = yield* scopeFor(repository, input);
     const config = yield* loadConfig;
-    const rules = yield* loadRules(repository, selected.base ?? selected.head, config);
+    const rules = yield* loadRules(repository, selected.base ?? selected.head);
     const slug = yield* parseModelSlug(input.options["--model"] ?? config.model);
 
     const requestedThinkingLevel = yield* parseThinkingLevel(

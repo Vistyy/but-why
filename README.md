@@ -40,7 +40,7 @@ Each run creates one detached checkout at the reviewed commit. All selected rule
 
 One Markdown file is one rule. But Why ships no rules yet.
 
-- Global: `<Pi agent directory>/but-why/rules/*.md` (normally `~/.pi/agent/but-why/rules/`; respects `PI_CODING_AGENT_DIR`). To use another absolute directory, add `"rulesDirectory": "/absolute/path/to/rules"` to the same config file.
+- Global: `<Pi agent directory>/but-why/rules/*.md` (normally `~/.pi/agent/but-why/rules/`; follows `PI_CODING_AGENT_DIR`).
 
 - Project: `.but-why/rules/*.md`, read from the **base commit** for `change` or the audited commit for `files` and `repository`. Changing a rule in the proposed head cannot weaken a change review of that head.
 
