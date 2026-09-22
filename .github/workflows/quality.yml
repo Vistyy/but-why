@@ -12,4 +12,8 @@ jobs:
           node-version: 24
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile
-      - run: just check
+      - run: corepack pnpm exec oxlint --deny-warnings src test
+      - run: corepack pnpm exec biome check --error-on-warnings src test scripts
+      - run: corepack pnpm typecheck
+      - run: corepack pnpm test
+      - run: corepack pnpm build
