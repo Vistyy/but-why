@@ -1,8 +1,9 @@
-import { dirname, join } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import {
   createAgentSession,
+  DefaultPackageManager,
   DefaultResourceLoader,
+  getAgentDir,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -11,17 +12,46 @@ import { ReviewerActivityUncertain } from "./reviewers.js";
 
 const CLEANUP_MS = 2_000;
 
-export async function openReviewerSession(cwd: string, selected: SelectedModel) {
-  const settingsManager = SettingsManager.inMemory({
-    compaction: { enabled: false },
-    retry: { enabled: false },
+/** Resolve Pi package references once, before concurrent reviewer sessions start. */
+export async function resolveReviewerExtensions(cwd: string, sources: readonly string[]) {
+  if (sources.length === 0) return [];
+
+  const packageManager = new DefaultPackageManager({
+    cwd,
+    agentDir: getAgentDir(),
+    settingsManager: SettingsManager.inMemory(),
   });
+
+  const paths: string[] = [];
+
+  for (const source of sources) {
+    const resources = await packageManager.resolveExtensionSources([source], { temporary: true });
+    const selected = resources.extensions.filter(({ enabled }) => enabled).map(({ path }) => path);
+
+    if (selected.length === 0)
+      throw new Error(`No Pi extension found for reviewer source: ${source}`);
+    paths.push(...selected);
+  }
+
+  return [...new Set(paths)];
+}
+
+export async function openReviewerSession(
+  cwd: string,
+  selected: SelectedModel,
+  extensions: readonly string[] = [],
+) {
+  const settingsManager = SettingsManager.inMemory({ retry: { enabled: false } });
 
   const loader = new DefaultResourceLoader({
     cwd,
-    agentDir: join(dirname(cwd), "empty-agent"),
+    agentDir: getAgentDir(),
     settingsManager,
     noExtensions: true,
+    additionalExtensionPaths: [...extensions],
+    skillsOverride: () => ({ skills: [], diagnostics: [] }),
+    promptsOverride: () => ({ prompts: [], diagnostics: [] }),
+    themesOverride: () => ({ themes: [], diagnostics: [] }),
     noSkills: true,
     noPromptTemplates: true,
     noThemes: true,
@@ -33,12 +63,22 @@ export async function openReviewerSession(cwd: string, selected: SelectedModel) 
 
   await loader.reload();
 
+  const loadedExtensions = loader.getExtensions();
+
+  if (loadedExtensions.errors.length)
+    throw new Error(
+      `Cannot load reviewer extensions: ${loadedExtensions.errors.map(({ error }) => error).join("; ")}`,
+    );
+
+  if (extensions.length > 0 && loadedExtensions.extensions.length === 0)
+    throw new Error("Configured reviewer extensions contain no Pi extension");
+
   if (
     loader.getAgentsFiles().agentsFiles.length ||
     loader.getAppendSystemPrompt().length ||
     loader.getSkills().skills.length ||
     loader.getPrompts().prompts.length ||
-    loader.getExtensions().extensions.length ||
+    (extensions.length === 0 && loadedExtensions.extensions.length > 0) ||
     loader.getThemes().themes.length
   )
     throw new Error("Pi resource loader discovered untrusted reviewer context");
@@ -63,12 +103,13 @@ export async function reviewWithPi(
     signal: AbortSignal;
   },
   selected: SelectedModel,
+  extensions: readonly string[] = [],
 ): Promise<string> {
   if (input.signal.aborted) throw new Error("Reviewer interrupted during setup");
 
   // Session creation has no AbortSignal API. If interrupted while it is pending,
   // the reviewer scheduler preserves the checkout until the activity settles.
-  const { session } = await openReviewerSession(input.cwd, selected);
+  const { session } = await openReviewerSession(input.cwd, selected, extensions);
   let promptTask: Promise<void> | undefined;
   let cleanupTask: Promise<boolean> | undefined;
 

@@ -12,7 +12,7 @@ import {
   inspectOwnedWorktree,
 } from "./git.js";
 import { parseModelSlug, resolveReviewModel } from "./model.js";
-import { reviewWithPi } from "./piReviewer.js";
+import { resolveReviewerExtensions, reviewWithPi } from "./piReviewer.js";
 import { type Reviewer, type ReviewFailure, runReviewers } from "./reviewers.js";
 import { loadRules } from "./rules.js";
 
@@ -334,15 +334,18 @@ function runReview(
     }));
     result.reviews = [];
 
-    const activeReviewer =
-      reviewer ??
-      (yield* resolveReviewModel(slug).pipe(
-        Effect.map(
-          (resolved): Reviewer =>
-            (assignment) =>
-              reviewWithPi(assignment, resolved),
-        ),
-      ));
+    let activeReviewer = reviewer;
+
+    if (activeReviewer === undefined) {
+      const resolved = yield* resolveReviewModel(slug);
+
+      const extensions = yield* Effect.tryPromise({
+        try: () => resolveReviewerExtensions(repository, config.extensions ?? []),
+        catch: (cause) => invalid(`Cannot resolve reviewer extensions: ${String(cause)}`),
+      });
+
+      activeReviewer = (assignment) => reviewWithPi(assignment, resolved, extensions);
+    }
 
     const commonDir = yield* commonDirectory(repository);
 

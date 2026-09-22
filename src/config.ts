@@ -7,12 +7,14 @@ const ConfigSchema = Schema.fromJsonString(
   Schema.Struct({
     rulesDirectory: Schema.optional(Schema.String),
     model: Schema.optional(Schema.String),
+    extensions: Schema.optional(Schema.Array(Schema.String)),
   }),
 );
 
 export interface UserConfig {
   readonly rulesDirectory?: string | undefined;
   readonly model?: string | undefined;
+  readonly extensions?: readonly string[] | undefined;
 }
 
 export class ConfigError extends Data.TaggedError("ConfigError")<{
@@ -47,6 +49,19 @@ export const loadConfig: Effect.Effect<UserConfig, ConfigError> = Effect.gen(fun
 
   if (config.rulesDirectory !== undefined && !isAbsolute(config.rulesDirectory))
     return yield* new ConfigError({ message: "rulesDirectory must be absolute" });
+
+  if (
+    config.extensions?.some(
+      (source) =>
+        !isAbsolute(source) &&
+        !["npm:", "git:", "http://", "https://", "ssh://"].some((prefix) =>
+          source.startsWith(prefix),
+        ),
+    ) === true
+  )
+    return yield* new ConfigError({
+      message: "extensions must be absolute paths or Pi package references",
+    });
 
   return config;
 });

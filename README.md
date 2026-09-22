@@ -22,6 +22,17 @@ Set a default model in `~/.config/but-why/config.json`:
 
 Any review command can add `--model provider/model-id` to override this default. The identifier must match a model in Pi's catalog with configured authentication. If neither the config nor the command supplies a model, the review fails; it never silently chooses another one.
 
+To use a Pi extension in reviewers, list it in the same **user** config file:
+
+```json
+{
+  "model": "provider/model-id",
+  "extensions": ["/absolute/path/to/extension/index.ts", "npm:example-extension@1.0.0"]
+}
+```
+
+Entries can be absolute local paths or Pi package references such as `npm:…` and `git:…`; Pi resolves the packages as it does for temporary `-e` extensions. Unlisted global extensions and extensions from the reviewed repository do not load. No package skills, prompts, themes, or `AGENTS.md` are supplied to reviewers. Pi auto-compaction is enabled, so a configured remote-compaction extension can handle a review that reaches Pi's context threshold. **Listed extensions are trusted code with full process permissions**: they can alter prompts, tools, or files; this opt-in is not a sandbox.
+
 Each run creates one detached checkout at the reviewed commit. All selected rules run in separate Pi sessions against that checkout, with up to three reviewers at once. Reviewers may inspect and run focused probes with shell access; they are instructed not to edit files or run a full test suite. This is **cooperative, not a sandbox**. But Why checks the checkout before and after review, including ignored files. It removes the checkout only when it can prove it remains clean, and reports the preserved path if cleanup is unsafe.
 
 ## Rules

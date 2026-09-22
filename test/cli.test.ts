@@ -134,6 +134,16 @@ describe("standalone reviewer", () => {
     const malformed = await execute(r.root, [...args, "--model", "not-a-slug"], reviewer);
     expect(malformed.status).toBe(1);
     expect(malformed.value.error).toContain("exact provider/model-id");
+
+    await writeFile(
+      join(r.home, ".config", "but-why", "config.json"),
+      JSON.stringify({ model: "fixture/model", extensions: ["./project-extension.ts"] }),
+    );
+    const relative = await execute(r.root, args, reviewer);
+    expect(relative.status).toBe(1);
+    expect(relative.value.error).toContain(
+      "extensions must be absolute paths or Pi package references",
+    );
   });
 
   it("rejects an unknown Pi model before creating a reviewer checkout", async () => {
