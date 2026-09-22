@@ -8,9 +8,12 @@ import { ReviewerActivityUncertain } from "../src/reviewers.js";
 
 const roots: string[] = [];
 
+const originalHome = process.env["HOME"];
+
 const OutputSchema = Schema.fromJsonString(
   Schema.Struct({
     incomplete: Schema.Boolean,
+    model: Schema.optional(Schema.String),
     rules: Schema.optional(
       Schema.Array(
         Schema.Struct({
@@ -35,9 +38,16 @@ const OutputSchema = Schema.fromJsonString(
 
 async function repo() {
   const root = await mkdtemp(join(tmpdir(), "by-test-"));
-  roots.push(root);
+  const home = await mkdtemp(join(tmpdir(), "by-config-home-"));
+  roots.push(root, home);
+  process.env["HOME"] = home;
   process.env["PI_CODING_AGENT_DIR"] = join(root, "agent");
   await mkdir(join(root, "agent"), { recursive: true });
+  await mkdir(join(home, ".config", "but-why"), { recursive: true });
+  await writeFile(
+    join(home, ".config", "but-why", "config.json"),
+    JSON.stringify({ model: "fixture/model" }),
+  );
 
   const run = async (...args: string[]) => {
     const { execFile } = await import("node:child_process");
@@ -56,10 +66,10 @@ async function repo() {
   await run("commit", "-qm", "base");
   const base = (await run("rev-parse", "HEAD")).stdout.trim();
 
-  return { root, run, base };
+  return { root, home, run, base };
 }
 
-async function execute(root: string, args: string[], reviewer: Reviewer) {
+async function execute(root: string, args: string[], reviewer?: Reviewer) {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const status = await runCli(args, reviewer, root);
 
@@ -75,6 +85,9 @@ async function execute(root: string, args: string[], reviewer: Reviewer) {
 afterEach(async () => {
   vi.restoreAllMocks();
   delete process.env["PI_CODING_AGENT_DIR"];
+
+  if (originalHome === undefined) delete process.env["HOME"];
+  else process.env["HOME"] = originalHome;
   await Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true })));
 });
 
@@ -100,6 +113,50 @@ describe("standalone reviewer", () => {
     expect(prose).toContain("code.ts");
     expect(prose).toContain("export const next = 2");
   });
+  it("uses the configured model, allows an explicit override, and never picks a fallback", async () => {
+    const r = await repo();
+    const args = ["review", "repository", "--at", r.base];
+    const reviewer: Reviewer = async () => "reviewed";
+
+    const configured = await execute(r.root, args, reviewer);
+    expect(configured.status).toBe(0);
+    expect(configured.value.model).toBe("fixture/model");
+
+    const overridden = await execute(r.root, [...args, "--model", "other/model"], reviewer);
+    expect(overridden.status).toBe(0);
+    expect(overridden.value.model).toBe("other/model");
+
+    await writeFile(join(r.home, ".config", "but-why", "config.json"), "{}");
+    const absent = await execute(r.root, args, reviewer);
+    expect(absent.status).toBe(1);
+    expect(absent.value.error).toContain("Choose a reviewer model");
+
+    const malformed = await execute(r.root, [...args, "--model", "not-a-slug"], reviewer);
+    expect(malformed.status).toBe(1);
+    expect(malformed.value.error).toContain("exact provider/model-id");
+  });
+
+  it("rejects an unknown Pi model before creating a reviewer checkout", async () => {
+    const r = await repo();
+
+    const got = await execute(r.root, [
+      "review",
+      "repository",
+      "--at",
+      r.base,
+      "--model",
+      "missing-review-provider/unknown-model",
+    ]);
+
+    expect(got.status).toBe(1);
+    expect(got.value.model).toBe("missing-review-provider/unknown-model");
+    expect(got.value.error).toContain("Unknown reviewer model");
+    expect(got.value.cleanupFailure).toBeUndefined();
+    expect(
+      (await r.run("worktree", "list", "--porcelain")).stdout.match(/\nworktree /g),
+    ).toBeNull();
+  });
+
   it("bounds a large valid change diff without rejecting the review", async () => {
     const r = await repo();
     await writeFile(join(r.root, "code.ts"), `export const large = "${"x".repeat(180_000)}";\n`);
@@ -182,6 +239,26 @@ describe("standalone reviewer", () => {
     expect(got.value.rules?.[1]?.provenance).toContain(`${r.base}:.but-why/rules/check.md`);
     expect(got.value.rules?.every(({ digest }) => /^[0-9a-f]{64}$/.test(digest))).toBe(true);
     expect(got.value.reviews?.map(({ output }) => output)).toEqual(["completed", "completed"]);
+
+    const alternate = join(r.home, "alternate-rules");
+    await mkdir(alternate);
+    await writeFile(join(alternate, "other.md"), "ANOTHER RULE\n");
+    await writeFile(
+      join(r.home, ".config", "but-why", "config.json"),
+      JSON.stringify({ model: "fixture/model", rulesDirectory: alternate }),
+    );
+
+    const overridden = await execute(
+      r.root,
+      ["review", "repository", "--at", r.base],
+      async () => "completed",
+    );
+
+    expect(overridden.value.rules?.map(({ identity }) => identity)).toEqual([
+      "global/other",
+      "project/check",
+    ]);
+    expect(overridden.value.rules?.[0]?.provenance).toBe(join(alternate, "other.md"));
   });
 
   it("preserves a checkout when its Git registration stops being detached", async () => {

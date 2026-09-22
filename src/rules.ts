@@ -1,17 +1,14 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
-import { Data, Effect, Schema } from "effect";
+import { join } from "node:path";
+import { Data, Effect } from "effect";
+import type { UserConfig } from "./config.js";
 import { type GitError, git } from "./git.js";
 
 const PROJECT_RULES = ".but-why/rules";
 
 const RULE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
-
-const ConfigSchema = Schema.fromJsonString(
-  Schema.Struct({ rulesDirectory: Schema.optional(Schema.String) }),
-);
 
 export interface Rule {
   readonly identity: string;
@@ -40,38 +37,12 @@ function missing(error: unknown): boolean {
 
 class AbsentPath extends Data.TaggedError("AbsentPath")<Record<string, never>> {}
 
-function optionalFile(path: string): Effect.Effect<string | undefined, PolicyError> {
-  return Effect.tryPromise({
-    try: () => readFile(path, "utf8"),
-    catch: (cause) => (missing(cause) ? new AbsentPath({}) : invalid(`Cannot read ${path}`)),
-  }).pipe(Effect.catchTag("AbsentPath", () => Effect.as(Effect.void, undefined)));
-}
-
-function globalDirectory(): Effect.Effect<string, PolicyError> {
-  // Pi's config directory is user-owned. It is not loaded as agent instructions.
+function globalDirectory(config: UserConfig): string {
+  // Pi's configured agent directory supplies rules, not reviewer instructions.
   // oxlint-disable-next-line effecttsgo/process-env
   const agentDir = process.env["PI_CODING_AGENT_DIR"] ?? join(homedir(), ".pi", "agent");
-  const configPath = join(homedir(), ".config", "but-why", "config.json");
 
-  return optionalFile(configPath).pipe(
-    Effect.flatMap((content) => {
-      if (content === undefined) return Effect.succeed(join(agentDir, "but-why", "rules"));
-
-      return Schema.decodeEffect(ConfigSchema)(content).pipe(
-        Effect.mapError(() => invalid(`Invalid global config: ${configPath}`)),
-        Effect.flatMap((config) => {
-          const directory = config.rulesDirectory;
-
-          if (directory === undefined) return Effect.succeed(join(agentDir, "but-why", "rules"));
-
-          if (!isAbsolute(directory))
-            return Effect.fail(invalid("rulesDirectory must be absolute"));
-
-          return Effect.succeed(directory);
-        }),
-      );
-    }),
-  );
+  return config.rulesDirectory ?? join(agentDir, "but-why", "rules");
 }
 
 function globalRules(directory: string): Effect.Effect<Rule[], PolicyError> {
@@ -154,9 +125,10 @@ function projectRules(cwd: string, pinned: string): Effect.Effect<Rule[], GitErr
 export function loadRules(
   cwd: string,
   pinned: string,
+  config: UserConfig,
 ): Effect.Effect<Rule[], GitError | PolicyError> {
   return Effect.gen(function* () {
-    const directory = yield* globalDirectory();
+    const directory = globalDirectory(config);
     const global = yield* globalRules(directory);
     const project = yield* projectRules(cwd, pinned);
     const rules = [...global, ...project];

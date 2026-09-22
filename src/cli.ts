@@ -2,6 +2,7 @@ import { lstat, mkdtemp, rmdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { Data, Effect } from "effect";
+import { loadConfig } from "./config.js";
 import {
   boundedDiff,
   commonDirectory,
@@ -10,6 +11,7 @@ import {
   hasRegistration,
   inspectOwnedWorktree,
 } from "./git.js";
+import { parseModelSlug, resolveReviewModel } from "./model.js";
 import { reviewWithPi } from "./piReviewer.js";
 import { type Reviewer, type ReviewFailure, runReviewers } from "./reviewers.js";
 import { loadRules } from "./rules.js";
@@ -37,6 +39,7 @@ type Output = {
   incomplete: boolean;
   mode?: Mode;
   commits?: { base: string; head: string } | { at: string };
+  model?: string;
   scope?: string;
   rules?: { identity: string; provenance: string; digest: string }[];
   reviews?: {
@@ -110,7 +113,8 @@ function parse(args: readonly string[]): Effect.Effect<Invocation, InputError> {
     const mode = yield* parseMode(command, suppliedMode);
     const options: Record<string, string> = {};
     const paths: string[] = [];
-    const allowed = mode === "change" ? ["--base", "--head"] : ["--at"];
+    const requiredOptions = mode === "change" ? ["--base", "--head"] : ["--at"];
+    const allowed = [...requiredOptions, "--model"];
 
     for (let index = 0; index < rest.length; index++) {
       const arg = rest[index];
@@ -125,7 +129,7 @@ function parse(args: readonly string[]): Effect.Effect<Invocation, InputError> {
       yield* addOption(allowed, arg, rest[++index], options);
     }
 
-    for (const option of allowed) yield* required(options, option);
+    for (const option of requiredOptions) yield* required(options, option);
 
     if (mode === "files" && paths.length === 0)
       return yield* invalid("Files mode requires at least one path");
@@ -302,7 +306,7 @@ function cleanup(
 
 function runReview(
   args: readonly string[],
-  reviewer: Reviewer,
+  reviewer: Reviewer | undefined,
   cwd: string,
   signal: AbortSignal,
   result: Output,
@@ -312,9 +316,12 @@ function runReview(
     const input = yield* parse(args);
     const repository = (yield* git(cwd, ["rev-parse", "--show-toplevel"])).trim();
     const selected = yield* scopeFor(repository, input);
-    const rules = yield* loadRules(repository, selected.base ?? selected.head);
+    const config = yield* loadConfig;
+    const rules = yield* loadRules(repository, selected.base ?? selected.head, config);
+    const slug = yield* parseModelSlug(input.options["--model"] ?? config.model);
 
     result.mode = input.mode;
+    result.model = slug.value;
     result.commits =
       selected.base === undefined
         ? { at: selected.head }
@@ -326,6 +333,16 @@ function runReview(
       digest,
     }));
     result.reviews = [];
+
+    const activeReviewer =
+      reviewer ??
+      (yield* resolveReviewModel(slug).pipe(
+        Effect.map(
+          (resolved): Reviewer =>
+            (assignment) =>
+              reviewWithPi(assignment, resolved),
+        ),
+      ));
 
     const commonDir = yield* commonDirectory(repository);
 
@@ -364,7 +381,7 @@ function runReview(
         prompt: reviewPrompt(rule.identity, rule.provenance, rule.text, selected.description),
       })),
       path,
-      reviewer,
+      activeReviewer,
       signal,
     );
 
@@ -383,7 +400,7 @@ function runReview(
 
 export function runCli(
   args: string[] = process.argv.slice(2),
-  reviewer: Reviewer = reviewWithPi,
+  reviewer?: Reviewer,
   cwd = process.cwd(),
 ): Promise<number> {
   const result: Output = { incomplete: true };

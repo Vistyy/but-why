@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { expect, it } from "vitest";
 import { openReviewerSession } from "../src/piReviewer.js";
 
@@ -23,7 +24,16 @@ it("builds an isolated Pi SDK session without discovering repository instruction
       "# Hostile\n\nHostile instructions",
     );
 
-    const { session, loader } = await openReviewerSession(cwd);
+    const runtime = await ModelRuntime.create({ refreshOnCreate: false });
+    const model = runtime.getModels()[0];
+
+    if (model === undefined) throw new Error("Expected a built-in Pi model");
+
+    const { session, loader } = await openReviewerSession(cwd, {
+      slug: { provider: model.provider, id: model.id, value: `${model.provider}/${model.id}` },
+      model,
+      runtime,
+    });
 
     try {
       expect(session.agent.state.tools.map((tool) => tool.name).sort()).toEqual([
@@ -42,6 +52,8 @@ it("builds an isolated Pi SDK session without discovering repository instruction
       expect(loader.getSkills().skills).toEqual([]);
       expect(loader.getAppendSystemPrompt()).toEqual([]);
       expect(session.sessionFile).toBeUndefined();
+      expect(session.model?.provider).toBe(model.provider);
+      expect(session.model?.id).toBe(model.id);
     } finally {
       session.dispose();
     }
