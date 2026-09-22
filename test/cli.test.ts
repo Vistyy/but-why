@@ -109,6 +109,7 @@ describe("standalone reviewer", () => {
 
     expect(got.status).toBe(0);
     const prose = got.value.reviews?.[0]?.output;
+    expect(prose).toContain("Do not edit files");
     expect(prose).toContain("PINNED BASE POLICY");
     expect(prose?.split("Rule project/check (")[1]).not.toContain("LIVE MUTATED POLICY");
     expect(prose).toContain("code.ts");

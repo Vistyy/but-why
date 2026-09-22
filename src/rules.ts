@@ -28,8 +28,6 @@ function digest(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-// Filesystem exceptions are decoded at this trusted configuration boundary.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native filesystem exception boundary.
 function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
@@ -112,7 +110,6 @@ function projectRules(cwd: string, pinned: string): Effect.Effect<Rule[], GitErr
   );
 }
 
-/** Resolve policy before creating a reviewer worktree; project policy is pinned to the comparison base. */
 export function loadRules(
   cwd: string,
   pinned: string,

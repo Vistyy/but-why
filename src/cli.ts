@@ -18,6 +18,7 @@ import {
   resolveReviewModel,
 } from "./model.js";
 import { resolveReviewerExtensions, reviewWithPi } from "./piReviewer.js";
+import { reviewPrompt } from "./reviewerInstructions.js";
 import { type Reviewer, type ReviewFailure, runReviewers } from "./reviewers.js";
 import { loadRules } from "./rules.js";
 
@@ -250,10 +251,6 @@ function failureText(failure: ReviewFailure | null): string | null {
   }
 }
 
-function reviewPrompt(identity: string, provenance: string, text: string, scope: string): string {
-  return `Review pinned code in this checkout. Do not edit files or run the full test suite; focused probes are allowed. Inspect related code as needed. Report every substantiated encounter with this rule in concise prose. Do not silently filter findings.\n\n${scope}\n\nRule ${identity} (${provenance}):\n${text}`;
-}
-
 function errorMessage(error: { readonly message: string }): string {
   return error.message.slice(0, 1000);
 }
@@ -476,8 +473,6 @@ export function runCli(
     .then(() => {
       if (controller.signal.aborted) result.error = "Interrupted";
       result.incomplete = result.error !== undefined || result.cleanupFailure !== undefined;
-      // The CLI emits one machine-readable JSON record, not an Effect diagnostic log.
-      // oxlint-disable-next-line effecttsgo/global-console
       console.log(JSON.stringify(result));
 
       return result.incomplete ? 1 : 0;

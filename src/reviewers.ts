@@ -26,7 +26,6 @@ export type ReviewOutcome = RuleAssignment & {
 
 export type ReviewBatch = { results: ReviewOutcome[]; uncertain: boolean };
 
-/** The adapter failed to prove that its underlying activity stopped. */
 export class ReviewerActivityUncertain extends Data.TaggedError("ReviewerActivityUncertain")<{
   readonly message: string;
 }> {}
@@ -62,8 +61,6 @@ function failedReview(
 ): Effect.Effect<ReviewOutcome> {
   return Effect.gen(function* () {
     if (!finished()) {
-      // Keep the Effect.forEach slot occupied throughout this grace period.
-      // Other settled slots may run new rules, but this activity cannot be replaced.
       yield* Effect.sleep(settle);
 
       if (!finished()) markUncertain();
@@ -93,8 +90,6 @@ function reviewOne(
     if (signal?.aborted === true)
       return { ...rule, output: null, failure: { _tag: "ReviewerInterrupted" } };
 
-    // A timed-out reviewer may still be using this shared checkout. Do not fill
-    // its concurrency slot with another Pi session until activity is proven stopped.
     if (!mayStart()) return { ...rule, output: null, failure: { _tag: "ReviewerSkipped" } };
 
     let finished = false;
@@ -134,8 +129,6 @@ function reviewOne(
   });
 }
 
-// Effect owns the reviewer AbortSignal and deadline. Bounded observation after
-// interruption determines whether checkout cleanup is safe.
 export function runReviewers(
   rules: readonly RuleAssignment[],
   cwd: string,

@@ -7,7 +7,6 @@ export default defineConfig({
   overrides: [
     {
       files: ["test/**/*.ts"],
-      // Tests exercise native Promise and AbortSignal behavior at the reviewer boundary.
       rules: {
         "effecttsgo/async-function": "off",
         "effecttsgo/global-timers": "off",
@@ -17,8 +16,19 @@ export default defineConfig({
     },
     {
       files: ["src/piReviewer.ts"],
-      // The Pi SDK exposes a Promise API; Effect owns its lifecycle in reviewers.ts.
       rules: { "effecttsgo/async-function": "off" },
+    },
+    {
+      files: ["src/config.ts", "src/rules.ts"],
+      rules: { "anti-slop/no-unknown-parameters": "off" },
+    },
+    {
+      files: ["src/git.ts"],
+      rules: { "effecttsgo/global-timers-in-effect": "off" },
+    },
+    {
+      files: ["src/cli.ts"],
+      rules: { "effecttsgo/global-console": "off" },
     },
   ],
 });

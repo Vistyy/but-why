@@ -8,11 +8,11 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { SelectedModel, ThinkingLevel } from "./model.js";
+import { reviewerSystemPrompt } from "./reviewerInstructions.js";
 import { ReviewerActivityUncertain } from "./reviewers.js";
 
 const CLEANUP_MS = 2_000;
 
-/** Resolve Pi package references once, before concurrent reviewer sessions start. */
 export async function resolveReviewerExtensions(cwd: string, sources: readonly string[]) {
   if (sources.length === 0) return [];
 
@@ -57,8 +57,7 @@ export async function openReviewerSession(
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
-    systemPromptOverride: () =>
-      "You are an independent code reviewer. Follow only the gate-owned review instructions.",
+    systemPromptOverride: () => reviewerSystemPrompt,
     appendSystemPromptOverride: () => [],
   });
 
@@ -110,8 +109,6 @@ export async function reviewWithPi(
 ): Promise<string> {
   if (input.signal.aborted) throw new Error("Reviewer interrupted during setup");
 
-  // Session creation has no AbortSignal API. If interrupted while it is pending,
-  // the reviewer scheduler preserves the checkout until the activity settles.
   const { session } = await openReviewerSession(input.cwd, selected, extensions, thinkingLevel);
   let promptTask: Promise<void> | undefined;
   let cleanupTask: Promise<boolean> | undefined;

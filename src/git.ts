@@ -16,7 +16,6 @@ export class GitError extends Data.TaggedError("GitError")<{
   readonly message: string;
 }> {}
 
-// Node process failures are decoded at the native boundary.
 function gitFailure(operation: string, cause: unknown): GitError {
   const message = cause instanceof Error ? cause.message : "Git command failed";
 
@@ -39,7 +38,6 @@ export function git(cwd: string, args: readonly string[]): Effect.Effect<string,
   });
 }
 
-/** A large patch is input context, not a reason to reject an otherwise valid review. */
 export function boundedDiff(
   cwd: string,
   base: string,
@@ -57,8 +55,6 @@ export function boundedDiff(
     let complete = false;
 
     const stop = () => child.kill("SIGKILL");
-    // Native subprocess timeout must kill the OS process, not only interrupt the Effect fiber.
-    // oxlint-disable-next-line effecttsgo/global-timers-in-effect
     const timeout = setTimeout(stop, COMMAND_TIMEOUT_MS);
     signal.addEventListener("abort", stop, { once: true });
 
@@ -152,7 +148,6 @@ function registration(cwd: string, path: string): Effect.Effect<string | undefin
   );
 }
 
-/** Verify task ownership before cleanup, not merely that a path happens to contain the right commit. */
 export function inspectOwnedWorktree(input: {
   readonly source: string;
   readonly path: string;

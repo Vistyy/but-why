@@ -52,7 +52,6 @@ export function effectiveThinkingLevel(
   return clampThinkingLevel(selected.model, requested);
 }
 
-/** A model choice must not depend on Pi's saved settings or first-available fallback. */
 export function parseModelSlug(
   value: string | undefined,
 ): Effect.Effect<ModelSlug, ModelSelectionError> {

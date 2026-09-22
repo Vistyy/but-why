@@ -23,13 +23,10 @@ export class ConfigError extends Data.TaggedError("ConfigError")<{
 
 class ConfigAbsent extends Data.TaggedError("ConfigAbsent")<Record<string, never>> {}
 
-// Native filesystem errors enter as unknown and are classified only at this I/O boundary.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native filesystem exception boundary.
 function absent(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-/** Read the user's configuration once per review, never from the audited checkout. */
 export const loadConfig: Effect.Effect<UserConfig, ConfigError> = Effect.gen(function* () {
   const path = join(getAgentDir(), "but-why", "config.json");
 

@@ -84,20 +84,10 @@ describe("Effect reviewer orchestration", () => {
     const controller = new AbortController();
 
     const pending = Effect.runPromise(
-      runReviewers(
-        rules(1),
-        "/checkout",
-        () =>
-          new Promise(() => {
-            /* deliberately uncooperative */
-          }),
-        3,
-        controller.signal,
-        {
-          deadlineMs: 1_000,
-          settleMs: 5,
-        },
-      ),
+      runReviewers(rules(1), "/checkout", () => new Promise(() => {}), 3, controller.signal, {
+        deadlineMs: 1_000,
+        settleMs: 5,
+      }),
     );
 
     controller.abort();
@@ -114,9 +104,7 @@ describe("Effect reviewer orchestration", () => {
       () => {
         started++;
 
-        return new Promise(() => {
-          /* deliberately uncooperative */
-        });
+        return new Promise(() => {});
       },
       { concurrency: 2, deadlineMs: 5, settleMs: 5 },
     );
@@ -141,10 +129,7 @@ describe("Effect reviewer orchestration", () => {
         active++;
         maximum = Math.max(maximum, active);
 
-        if (prompt === "p0")
-          return new Promise(() => {
-            /* deliberately uncooperative */
-          });
+        if (prompt === "p0") return new Promise(() => {});
 
         const duration = prompt === "p3" || prompt === "p4" ? 225 : 75;
 
@@ -177,17 +162,10 @@ describe("Effect reviewer orchestration", () => {
     expect(cooperative.results[0]?.failure?._tag).toBe("ReviewerTimedOut");
     expect(cooperative.uncertain).toBe(false);
 
-    const uncooperative = await run(
-      rules(1),
-      () =>
-        new Promise(() => {
-          /* deliberately uncooperative */
-        }),
-      {
-        deadlineMs: 5,
-        settleMs: 5,
-      },
-    );
+    const uncooperative = await run(rules(1), () => new Promise(() => {}), {
+      deadlineMs: 5,
+      settleMs: 5,
+    });
 
     expect(uncooperative.results[0]?.failure?._tag).toBe("ReviewerTimedOut");
     expect(uncooperative.uncertain).toBe(true);
