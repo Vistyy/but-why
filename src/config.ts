@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Effect, Schema } from "effect";
 
 const ConfigSchema = Schema.fromJsonString(
@@ -33,7 +33,7 @@ function absent(error: unknown): boolean {
 
 /** Read the user's configuration once per review, never from the audited checkout. */
 export const loadConfig: Effect.Effect<UserConfig, ConfigError> = Effect.gen(function* () {
-  const path = join(homedir(), ".config", "but-why", "config.json");
+  const path = join(getAgentDir(), "but-why", "config.json");
 
   const content = yield* Effect.tryPromise({
     try: () => readFile(path, "utf8"),

@@ -14,7 +14,7 @@ by review repository --at <full-commit-sha>
 
 Only committed revisions are supported. `change` reviews the direct difference between the two commits and may inspect related code. Large diffs are explicitly truncated in the review context rather than rejected. `files` reviews the named regular files and related code; `repository` gives the reviewer the whole repository as its scope. A reviewer's observations are not guaranteed to exhaust that scope.
 
-Set a default model and thinking level in `~/.config/but-why/config.json`:
+Set a default model and thinking level in `<Pi agent directory>/but-why/config.json` (normally `~/.pi/agent/but-why/config.json`; follows `PI_CODING_AGENT_DIR`):
 
 ```json
 { "model": "provider/model-id", "thinkingLevel": "high" }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
 import type { UserConfig } from "./config.js";
 import { type GitError, git } from "./git.js";
@@ -39,10 +39,7 @@ class AbsentPath extends Data.TaggedError("AbsentPath")<Record<string, never>> {
 
 function globalDirectory(config: UserConfig): string {
   // Pi's configured agent directory supplies rules, not reviewer instructions.
-  // oxlint-disable-next-line effecttsgo/process-env
-  const agentDir = process.env["PI_CODING_AGENT_DIR"] ?? join(homedir(), ".pi", "agent");
-
-  return config.rulesDirectory ?? join(agentDir, "but-why", "rules");
+  return config.rulesDirectory ?? join(getAgentDir(), "but-why", "rules");
 }
 
 function globalRules(directory: string): Effect.Effect<Rule[], PolicyError> {

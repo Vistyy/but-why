@@ -43,13 +43,11 @@ async function repo() {
   const home = await mkdtemp(join(tmpdir(), "by-config-home-"));
   roots.push(root, home);
   process.env["HOME"] = home;
-  process.env["PI_CODING_AGENT_DIR"] = join(root, "agent");
-  await mkdir(join(root, "agent"), { recursive: true });
-  await mkdir(join(home, ".config", "but-why"), { recursive: true });
-  await writeFile(
-    join(home, ".config", "but-why", "config.json"),
-    JSON.stringify({ model: "fixture/model" }),
-  );
+  const agentDir = join(home, "pi-agent");
+  const config = join(agentDir, "but-why", "config.json");
+  process.env["PI_CODING_AGENT_DIR"] = agentDir;
+  await mkdir(join(agentDir, "but-why"), { recursive: true });
+  await writeFile(config, JSON.stringify({ model: "fixture/model" }));
 
   const run = async (...args: string[]) => {
     const { execFile } = await import("node:child_process");
@@ -68,7 +66,7 @@ async function repo() {
   await run("commit", "-qm", "base");
   const base = (await run("rev-parse", "HEAD")).stdout.trim();
 
-  return { root, home, run, base };
+  return { root, home, agentDir, config, run, base };
 }
 
 async function execute(root: string, args: string[], reviewer?: Reviewer) {
@@ -119,6 +117,9 @@ describe("standalone reviewer", () => {
     const r = await repo();
     const args = ["review", "repository", "--at", r.base];
     const reviewer: Reviewer = async () => "reviewed";
+    const oldConfig = join(r.home, ".config", "but-why", "config.json");
+    await mkdir(dirname(oldConfig), { recursive: true });
+    await writeFile(oldConfig, JSON.stringify({ model: "obsolete/model" }));
 
     const configured = await execute(r.root, args, reviewer);
     expect(configured.status).toBe(0);
@@ -126,10 +127,7 @@ describe("standalone reviewer", () => {
     expect(configured.value.requestedThinkingLevel).toBe("medium");
     expect(configured.value.thinkingLevel).toBeUndefined();
 
-    await writeFile(
-      join(r.home, ".config", "but-why", "config.json"),
-      JSON.stringify({ model: "fixture/model", thinkingLevel: "high" }),
-    );
+    await writeFile(r.config, JSON.stringify({ model: "fixture/model", thinkingLevel: "high" }));
     const configuredLevel = await execute(r.root, args, reviewer);
     expect(configuredLevel.value.requestedThinkingLevel).toBe("high");
 
@@ -147,7 +145,7 @@ describe("standalone reviewer", () => {
     expect(invalidLevel.status).toBe(1);
     expect(invalidLevel.value.error).toContain("Thinking level must be");
 
-    await writeFile(join(r.home, ".config", "but-why", "config.json"), "{}");
+    await writeFile(r.config, "{}");
     const absent = await execute(r.root, args, reviewer);
     expect(absent.status).toBe(1);
     expect(absent.value.error).toContain("Choose a reviewer model");
@@ -157,7 +155,7 @@ describe("standalone reviewer", () => {
     expect(malformed.value.error).toContain("exact provider/model-id");
 
     await writeFile(
-      join(r.home, ".config", "but-why", "config.json"),
+      r.config,
       JSON.stringify({ model: "fixture/model", extensions: ["./project-extension.ts"] }),
     );
     const relative = await execute(r.root, args, reviewer);
@@ -174,7 +172,7 @@ describe("standalone reviewer", () => {
 
     try {
       await writeFile(
-        join(r.home, ".config", "but-why", "config.json"),
+        r.config,
         JSON.stringify({
           model: "openai/gpt-4.1-mini",
           thinkingLevel: "high",
@@ -280,7 +278,7 @@ describe("standalone reviewer", () => {
   });
   it("reports both global and pinned project rules separately", async () => {
     const r = await repo();
-    const global = join(r.root, "agent", "but-why", "rules");
+    const global = join(r.agentDir, "but-why", "rules");
     await mkdir(global, { recursive: true });
     await writeFile(join(global, "check.md"), "GLOBAL RULE\n");
 
@@ -304,7 +302,7 @@ describe("standalone reviewer", () => {
     await mkdir(alternate);
     await writeFile(join(alternate, "other.md"), "ANOTHER RULE\n");
     await writeFile(
-      join(r.home, ".config", "but-why", "config.json"),
+      r.config,
       JSON.stringify({ model: "fixture/model", rulesDirectory: alternate }),
     );
 
