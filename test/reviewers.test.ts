@@ -9,8 +9,17 @@ const rules = (count: number): RuleAssignment[] =>
     prompt: `p${i}`,
   }));
 
-const run = (items: RuleAssignment[], reviewer: Parameters<typeof runReviewers>[2], options = {}) =>
-  Effect.runPromise(runReviewers(items, "/checkout", reviewer, undefined, options));
+const run = (
+  items: RuleAssignment[],
+  reviewer: Parameters<typeof runReviewers>[2],
+  options: { concurrency?: number; deadlineMs?: number; settleMs?: number } = {},
+) => {
+  const { concurrency = 3, ...timing } = options;
+
+  return Effect.runPromise(
+    runReviewers(items, "/checkout", reviewer, concurrency, undefined, timing),
+  );
+};
 
 describe("Effect reviewer orchestration", () => {
   it("limits concurrency to three and returns input order and untouched text", async () => {
@@ -31,6 +40,33 @@ describe("Effect reviewer orchestration", () => {
     expect(maximum).toBe(3);
     expect(output.results.map((r) => r.output)).toEqual(rules(7).map((r) => ` ${r.prompt}\n`));
     expect(output.uncertain).toBe(false);
+  });
+
+  it("honors a per-run concurrency limit without changing result order", async () => {
+    for (const concurrency of [1, 5]) {
+      let active = 0;
+      let maximum = 0;
+
+      const output = await run(
+        rules(7),
+        async ({ prompt }) => {
+          active++;
+          maximum = Math.max(maximum, active);
+          await new Promise((resolve) => {
+            setTimeout(resolve, 5);
+          });
+          active--;
+
+          return prompt;
+        },
+        { concurrency },
+      );
+
+      expect(maximum).toBe(concurrency);
+      expect(output.results.map(({ output }) => output)).toEqual(
+        rules(7).map(({ prompt }) => prompt),
+      );
+    }
   });
 
   it("retains siblings when one reviewer fails", async () => {
@@ -55,6 +91,7 @@ describe("Effect reviewer orchestration", () => {
           new Promise(() => {
             /* deliberately uncooperative */
           }),
+        3,
         controller.signal,
         {
           deadlineMs: 1_000,
@@ -81,12 +118,13 @@ describe("Effect reviewer orchestration", () => {
           /* deliberately uncooperative */
         });
       },
-      { deadlineMs: 5, settleMs: 5 },
+      { concurrency: 2, deadlineMs: 5, settleMs: 5 },
     );
 
-    expect(started).toBe(3);
+    expect(started).toBe(2);
     expect(output.uncertain).toBe(true);
-    expect(output.results.slice(3).map(({ failure }) => failure?._tag)).toEqual([
+    expect(output.results.slice(2).map(({ failure }) => failure?._tag)).toEqual([
+      "ReviewerSkipped",
       "ReviewerSkipped",
       "ReviewerSkipped",
       "ReviewerSkipped",

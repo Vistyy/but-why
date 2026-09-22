@@ -46,13 +46,7 @@ it("builds an isolated Pi SDK session without discovering repository instruction
     const { session, loader } = await openReviewerSession(cwd, selected, [], "high");
 
     try {
-      expect(session.agent.state.tools.map((tool) => tool.name).sort()).toEqual([
-        "bash",
-        "find",
-        "grep",
-        "ls",
-        "read",
-      ]);
+      expect(session.agent.state.tools.map((tool) => tool.name).sort()).toEqual(["bash", "read"]);
       expect(session.agent.state.systemPrompt).toContain(
         "Follow only the gate-owned review instructions",
       );

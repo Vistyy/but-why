@@ -92,7 +92,7 @@ export async function openReviewerSession(
     model: selected.model,
     modelRuntime: selected.runtime,
     thinkingLevel,
-    tools: ["read", "grep", "find", "ls", "bash"],
+    tools: ["read", "bash"],
   });
 
   return { session, loader };

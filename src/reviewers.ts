@@ -140,6 +140,7 @@ export function runReviewers(
   rules: readonly RuleAssignment[],
   cwd: string,
   reviewer: Reviewer,
+  concurrency: number,
   signal?: AbortSignal,
   options: { deadlineMs?: number; settleMs?: number } = {},
 ): Effect.Effect<ReviewBatch> {
@@ -156,6 +157,6 @@ export function runReviewers(
   return Effect.forEach(
     rules,
     (rule) => reviewOne(rule, cwd, reviewer, signal, deadline, settle, markUncertain, mayStart),
-    { concurrency: 3 },
+    { concurrency },
   ).pipe(Effect.map((results) => ({ results, uncertain })));
 }

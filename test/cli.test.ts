@@ -16,6 +16,7 @@ const OutputSchema = Schema.fromJsonString(
     model: Schema.optional(Schema.String),
     requestedThinkingLevel: Schema.optional(Schema.String),
     thinkingLevel: Schema.optional(Schema.String),
+    concurrency: Schema.optional(Schema.Finite),
     rules: Schema.optional(
       Schema.Array(
         Schema.Struct({
@@ -126,6 +127,7 @@ describe("standalone reviewer", () => {
     expect(configured.value.model).toBe("fixture/model");
     expect(configured.value.requestedThinkingLevel).toBe("medium");
     expect(configured.value.thinkingLevel).toBeUndefined();
+    expect(configured.value.concurrency).toBe(3);
 
     await writeFile(r.config, JSON.stringify({ model: "fixture/model", thinkingLevel: "high" }));
     const configuredLevel = await execute(r.root, args, reviewer);
@@ -133,13 +135,20 @@ describe("standalone reviewer", () => {
 
     const overridden = await execute(
       r.root,
-      [...args, "--model", "other/model", "--thinking-level", "low"],
+      [...args, "--model", "other/model", "--thinking-level", "low", "--concurrency", "1"],
       reviewer,
     );
 
     expect(overridden.status).toBe(0);
     expect(overridden.value.model).toBe("other/model");
     expect(overridden.value.requestedThinkingLevel).toBe("low");
+    expect(overridden.value.concurrency).toBe(1);
+
+    for (const limit of ["0", "1.5", "9007199254740992"]) {
+      const invalidLimit = await execute(r.root, [...args, "--concurrency", limit], reviewer);
+      expect(invalidLimit.status).toBe(1);
+      expect(invalidLimit.value.error).toContain("--concurrency must be a positive integer");
+    }
 
     const invalidLevel = await execute(r.root, [...args, "--thinking-level", "ultra"], reviewer);
     expect(invalidLevel.status).toBe(1);

@@ -47,6 +47,7 @@ type Output = {
   model?: string;
   requestedThinkingLevel?: string;
   thinkingLevel?: string;
+  concurrency?: number;
   scope?: string;
   rules?: { identity: string; provenance: string; digest: string }[];
   reviews?: {
@@ -100,6 +101,19 @@ function addOption(
   return Effect.void;
 }
 
+function reviewerConcurrency(value: string | undefined): Effect.Effect<number, InputError> {
+  if (value === undefined) return Effect.succeed(3);
+
+  if (!/^[1-9][0-9]*$/.test(value))
+    return Effect.fail(invalid("--concurrency must be a positive integer"));
+
+  const limit = Number(value);
+
+  return Number.isSafeInteger(limit)
+    ? Effect.succeed(limit)
+    : Effect.fail(invalid("--concurrency must be a positive integer"));
+}
+
 function parseMode(
   command: string | undefined,
   mode: string | undefined,
@@ -107,7 +121,7 @@ function parseMode(
   if (command !== "review" || (mode !== "change" && mode !== "files" && mode !== "repository"))
     return Effect.fail(
       invalid(
-        "Usage: by review change --base SHA --head SHA | by review files --at SHA <paths...> | by review repository --at SHA (all modes accept --model provider/model-id and --thinking-level LEVEL)",
+        "Usage: by review change --base SHA --head SHA | by review files --at SHA <paths...> | by review repository --at SHA (all modes accept --model provider/model-id, --thinking-level LEVEL, and --concurrency N)",
       ),
     );
 
@@ -121,7 +135,7 @@ function parse(args: readonly string[]): Effect.Effect<Invocation, InputError> {
     const options: Record<string, string> = {};
     const paths: string[] = [];
     const requiredOptions = mode === "change" ? ["--base", "--head"] : ["--at"];
-    const allowed = [...requiredOptions, "--model", "--thinking-level"];
+    const allowed = [...requiredOptions, "--model", "--thinking-level", "--concurrency"];
 
     for (let index = 0; index < rest.length; index++) {
       const arg = rest[index];
@@ -321,6 +335,7 @@ function runReview(
 ) {
   return Effect.gen(function* () {
     const input = yield* parse(args);
+    const concurrency = yield* reviewerConcurrency(input.options["--concurrency"]);
     const repository = (yield* git(cwd, ["rev-parse", "--show-toplevel"])).trim();
     const selected = yield* scopeFor(repository, input);
     const config = yield* loadConfig;
@@ -334,6 +349,7 @@ function runReview(
     result.mode = input.mode;
     result.model = slug.value;
     result.requestedThinkingLevel = requestedThinkingLevel;
+    result.concurrency = concurrency;
     result.commits =
       selected.base === undefined
         ? { at: selected.head }
@@ -400,6 +416,7 @@ function runReview(
       })),
       path,
       activeReviewer,
+      concurrency,
       signal,
     );
 
