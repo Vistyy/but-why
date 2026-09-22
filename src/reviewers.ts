@@ -16,6 +16,7 @@ export type ReviewFailure =
   | { readonly _tag: "ReviewerFailed"; readonly cause: unknown }
   | { readonly _tag: "ReviewerTimedOut" }
   | { readonly _tag: "ReviewerInterrupted" }
+  | { readonly _tag: "ReviewerSkipped" }
   | { readonly _tag: "EmptyReview" };
 
 export type ReviewOutcome = RuleAssignment & {
@@ -84,10 +85,15 @@ function reviewOne(
   deadline: number,
   settle: number,
   markUncertain: () => void,
+  mayStart: () => boolean,
 ): Effect.Effect<ReviewOutcome> {
   return Effect.gen(function* () {
     if (signal?.aborted === true)
       return { ...rule, output: null, failure: { _tag: "ReviewerInterrupted" } };
+
+    // A timed-out reviewer may still be using this shared checkout. Do not fill
+    // its concurrency slot with another Pi session until activity is proven stopped.
+    if (!mayStart()) return { ...rule, output: null, failure: { _tag: "ReviewerSkipped" } };
 
     let finished = false;
 
@@ -143,9 +149,11 @@ export function runReviewers(
     uncertain = true;
   };
 
+  const mayStart = () => !uncertain;
+
   return Effect.forEach(
     rules,
-    (rule) => reviewOne(rule, cwd, reviewer, signal, deadline, settle, markUncertain),
+    (rule) => reviewOne(rule, cwd, reviewer, signal, deadline, settle, markUncertain, mayStart),
     { concurrency: 3 },
   ).pipe(Effect.map((results) => ({ results, uncertain })));
 }

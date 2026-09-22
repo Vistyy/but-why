@@ -223,6 +223,32 @@ describe("standalone reviewer", () => {
     await rm(dirname(path), { recursive: true });
   });
 
+  it("preserves ignored files created in the reviewer checkout", async () => {
+    const r = await repo();
+    await writeFile(join(r.root, ".gitignore"), "output.cache\n");
+    await r.run("add", ".gitignore");
+    await r.run("commit", "-qm", "ignore fixture output");
+    const head = (await r.run("rev-parse", "HEAD")).stdout.trim();
+
+    const reviewer: Reviewer = async ({ cwd }) => {
+      await writeFile(join(cwd, "output.cache"), "preserve ignored output");
+
+      return "done";
+    };
+
+    const got = await execute(r.root, ["review", "repository", "--at", head], reviewer);
+    expect(got.status).toBe(1);
+    expect(got.value.cleanupFailure).toContain("Worktree is dirty: !! output.cache");
+    const path = got.value.cleanupFailure?.match(/Preserved checkout (.*?):/)?.[1];
+
+    if (path === undefined) throw new Error("Expected preserved checkout path");
+
+    expect(await readFile(join(path, "output.cache"), "utf8")).toBe("preserve ignored output");
+    await rm(join(path, "output.cache"));
+    await r.run("worktree", "remove", path);
+    await rm(dirname(path), { recursive: true });
+  });
+
   it("does not recursively delete unexpected files beside the checkout", async () => {
     const r = await repo();
 

@@ -218,6 +218,8 @@ function failureText(failure: ReviewFailure | null): string | null {
       return "Reviewer timed out";
     case "ReviewerInterrupted":
       return "Reviewer interrupted";
+    case "ReviewerSkipped":
+      return "Reviewer skipped because another reviewer may still be running";
     case "EmptyReview":
       return "Reviewer returned no prose";
   }

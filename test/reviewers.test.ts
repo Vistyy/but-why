@@ -69,6 +69,30 @@ describe("Effect reviewer orchestration", () => {
     expect(output.uncertain).toBe(true);
   });
 
+  it("does not start queued sessions when an uncooperative reviewer remains active", async () => {
+    let started = 0;
+
+    const output = await run(
+      rules(6),
+      () => {
+        started++;
+
+        return new Promise(() => {
+          /* deliberately uncooperative */
+        });
+      },
+      { deadlineMs: 5, settleMs: 5 },
+    );
+
+    expect(started).toBe(3);
+    expect(output.uncertain).toBe(true);
+    expect(output.results.slice(3).map(({ failure }) => failure?._tag)).toEqual([
+      "ReviewerSkipped",
+      "ReviewerSkipped",
+      "ReviewerSkipped",
+    ]);
+  });
+
   it("reports cooperative and uncooperative timed-out activity distinctly", async () => {
     const cooperative = await run(
       rules(1),

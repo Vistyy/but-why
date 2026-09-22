@@ -188,7 +188,12 @@ export function inspectOwnedWorktree(input: {
 
     if (head !== input.commit) return "Worktree HEAD changed";
 
-    const dirty = yield* git(input.path, ["status", "--porcelain=v1", "--untracked-files=all"]);
+    const dirty = yield* git(input.path, [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+      "--ignored=matching",
+    ]);
 
     if (dirty.length > 0) return `Worktree is dirty: ${dirty.slice(0, 200)}`;
 
