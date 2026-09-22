@@ -5,6 +5,8 @@ import {
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 
+const CLEANUP_MS = 2_000;
+
 export async function reviewWithPi(input: {
   cwd: string;
   prompt: string;
@@ -32,26 +34,51 @@ export async function reviewWithPi(input: {
     loader.getExtensions().extensions.length
   )
     throw new Error("Pi resource loader discovered untrusted reviewer context");
-  const { session } = await createAgentSession({
+  if (input.signal.aborted) throw new Error("Reviewer interrupted during setup");
+
+  // Session creation has no AbortSignal API. Observe it even if the caller
+  // interrupts while creation is pending, and abort/dispose as soon as available.
+  const creation = createAgentSession({
     cwd: input.cwd,
     sessionManager: SessionManager.inMemory(input.cwd),
     resourceLoader: loader,
     tools: ["read", "grep", "find", "ls", "bash"],
   });
+  const { session } = await creation;
+  let promptTask: Promise<void> | undefined;
+  let cleanupTask: Promise<boolean> | undefined;
+  const abortSession = () => {
+    cleanupTask ??= (async () => {
+      const stopped = Promise.allSettled([session.abort(), ...(promptTask ? [promptTask] : [])]);
+      return Promise.race([
+        stopped.then(() => true),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), CLEANUP_MS)),
+      ]);
+    })();
+    return cleanupTask;
+  };
   const abort = () => {
-    void session.abort();
+    void abortSession().catch(() => undefined);
   };
   input.signal.addEventListener("abort", abort, { once: true });
+  let text = "";
+  let settled: boolean;
   try {
     if (input.signal.aborted) throw new Error("Reviewer interrupted");
-    await session.prompt(input.prompt);
+    promptTask = session.prompt(input.prompt);
+    await promptTask;
     if (input.signal.aborted) throw new Error("Reviewer interrupted");
-    const text = session.getLastAssistantText()?.trim();
-    if (!text) throw new Error("Reviewer produced no final assistant text");
-    return text;
+    text = session.getLastAssistantText() ?? "";
+    if (!text.trim()) throw new Error("Reviewer produced no final assistant text");
   } finally {
     input.signal.removeEventListener("abort", abort);
-    await session.abort();
+    settled = await abortSession();
     session.dispose();
   }
+  if (!settled) {
+    const error = new Error("Pi reviewer activity did not settle before cleanup bound");
+    error.name = "ReviewerActivityUncertain";
+    throw error;
+  }
+  return text;
 }
