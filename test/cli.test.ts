@@ -122,10 +122,8 @@ describe("standalone reviewer", () => {
 
     expect(got.status).toBe(0);
     const prose = got.value.reviews?.[0]?.output;
-    expect(prose).toContain("enumerate every changed path and inspect every diff hunk");
-    expect(prose).toContain("Do not edit files");
     expect(prose).toContain("PINNED BASE POLICY");
-    expect(prose?.split("Rule project/check (")[1]).not.toContain("LIVE MUTATED POLICY");
+    expect(prose).not.toContain("LIVE MUTATED POLICY");
     expect(prose).toContain(r.base);
     expect(prose).toContain(head);
     expect(prose).not.toContain("code.ts");

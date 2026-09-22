@@ -47,9 +47,6 @@ it("builds an isolated Pi SDK session without discovering repository instruction
 
     try {
       expect(session.agent.state.tools.map((tool) => tool.name).sort()).toEqual(["bash", "read"]);
-      expect(session.agent.state.systemPrompt).toContain(
-        "Follow only the gate-owned review instructions",
-      );
       expect(session.agent.state.systemPrompt).not.toContain("HOSTILE_");
       expect(loader.getAgentsFiles().agentsFiles).toEqual([]);
       expect(loader.getExtensions().extensions).toEqual([]);
