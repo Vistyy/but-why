@@ -38,12 +38,20 @@ export async function reviewWithPi(input: {
     resourceLoader: loader,
     tools: ["read", "grep", "find", "ls", "bash"],
   });
+  const abort = () => {
+    void session.abort();
+  };
+  input.signal.addEventListener("abort", abort, { once: true });
   try {
     if (input.signal.aborted) throw new Error("Reviewer interrupted");
     await session.prompt(input.prompt);
     if (input.signal.aborted) throw new Error("Reviewer interrupted");
-    return session.getLastAssistantText() ?? "";
+    const text = session.getLastAssistantText()?.trim();
+    if (!text) throw new Error("Reviewer produced no final assistant text");
+    return text;
   } finally {
+    input.signal.removeEventListener("abort", abort);
+    await session.abort();
     session.dispose();
   }
 }

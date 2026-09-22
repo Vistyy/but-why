@@ -1,5 +1,5 @@
-import { defineConfig } from "oxlint";
 import config from "@syzom/typescript-quality/oxlint/effect";
+import { defineConfig } from "oxlint";
 
 export default defineConfig({
   ...config,

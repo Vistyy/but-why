@@ -11,6 +11,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 0.84.2
         version: 0.84.2(supports-color@9.4.0)(ws@8.21.1)(zod@4.4.3)
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.12
@@ -24,9 +27,6 @@ importers:
       '@types/node':
         specifier: 24.0.0
         version: 24.0.0
-      effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
       oxlint:
         specifier: 1.82.0
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
