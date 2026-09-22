@@ -1,20 +1,51 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type Reviewer, runCli } from "../src/cli.js";
+import { ReviewerActivityUncertain } from "../src/reviewers.js";
 
 const roots: string[] = [];
+
+const OutputSchema = Schema.fromJsonString(
+  Schema.Struct({
+    incomplete: Schema.Boolean,
+    rules: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          identity: Schema.String,
+          provenance: Schema.String,
+          digest: Schema.String,
+        }),
+      ),
+    ),
+    reviews: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          output: Schema.NullOr(Schema.String),
+          failure: Schema.NullOr(Schema.String),
+        }),
+      ),
+    ),
+    cleanupFailure: Schema.optional(Schema.String),
+    error: Schema.optional(Schema.String),
+  }),
+);
+
 async function repo() {
   const root = await mkdtemp(join(tmpdir(), "by-test-"));
   roots.push(root);
-  process.env.PI_CODING_AGENT_DIR = join(root, "agent");
+  process.env["PI_CODING_AGENT_DIR"] = join(root, "agent");
   await mkdir(join(root, "agent"), { recursive: true });
+
   const run = async (...args: string[]) => {
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
+
     return promisify(execFile)("git", args, { cwd: root });
   };
+
   await run("init", "-q");
   await run("config", "user.email", "test@example.com");
   await run("config", "user.name", "Test");
@@ -24,18 +55,26 @@ async function repo() {
   await run("add", ".");
   await run("commit", "-qm", "base");
   const base = (await run("rev-parse", "HEAD")).stdout.trim();
+
   return { root, run, base };
 }
+
 async function execute(root: string, args: string[], reviewer: Reviewer) {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const status = await runCli(args, reviewer, root);
-  const value = JSON.parse(String(log.mock.calls[0]?.[0]));
+
+  const value = await Effect.runPromise(
+    Schema.decodeEffect(OutputSchema)(String(log.mock.calls[0]?.[0])),
+  );
+
   log.mockRestore();
+
   return { status, value };
 }
+
 afterEach(async () => {
   vi.restoreAllMocks();
-  delete process.env.PI_CODING_AGENT_DIR;
+  delete process.env["PI_CODING_AGENT_DIR"];
   await Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true })));
 });
 
@@ -47,19 +86,38 @@ describe("standalone reviewer", () => {
     await r.run("add", ".");
     await r.run("commit", "-qm", "head");
     const head = (await r.run("rev-parse", "HEAD")).stdout.trim();
+
     const got = await execute(
       r.root,
       ["review", "change", "--base", r.base, "--head", head],
       async ({ prompt }) => prompt,
     );
+
     expect(got.status).toBe(0);
-    expect(got.value.reviews[0].output).toContain("PINNED BASE POLICY");
-    expect(
-      got.value.reviews[0].output.slice(got.value.reviews[0].output.indexOf("Rule project/check")),
-    ).toContain("PINNED BASE POLICY");
-    expect(got.value.reviews[0].output).toContain("code.ts");
-    expect(got.value.reviews[0].output).toContain("export const next = 2");
+    const prose = got.value.reviews?.[0]?.output;
+    expect(prose).toContain("PINNED BASE POLICY");
+    expect(prose?.split("Rule project/check (")[1]).not.toContain("LIVE MUTATED POLICY");
+    expect(prose).toContain("code.ts");
+    expect(prose).toContain("export const next = 2");
   });
+  it("bounds a large valid change diff without rejecting the review", async () => {
+    const r = await repo();
+    await writeFile(join(r.root, "code.ts"), `export const large = "${"x".repeat(180_000)}";\n`);
+    await r.run("add", "code.ts");
+    await r.run("commit", "-qm", "large change");
+    const head = (await r.run("rev-parse", "HEAD")).stdout.trim();
+
+    const got = await execute(
+      r.root,
+      ["review", "change", "--base", r.base, "--head", head],
+      async ({ prompt }) => prompt,
+    );
+
+    expect(got.status).toBe(0);
+    expect(got.value.reviews?.[0]?.output).toContain("[Diff truncated after");
+    expect(got.value.reviews?.[0]?.output).toContain("code.ts");
+  });
+
   it("rejects traversal and absent audited paths", async () => {
     const r = await repo();
     const review = async () => "";
@@ -83,34 +141,104 @@ describe("standalone reviewer", () => {
     const at = (await r.run("rev-parse", "HEAD")).stdout.trim();
     let running = 0;
     let maximum = 0;
+
     const reviewer: Reviewer = async ({ prompt }) => {
       running++;
       maximum = Math.max(maximum, running);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 20);
+      });
       running--;
+
       if (prompt.includes("project/a")) throw new Error("one failed");
+
       return "completed";
     };
+
     const got = await execute(r.root, ["review", "repository", "--at", at], reviewer);
     expect(maximum).toBeLessThanOrEqual(3);
     expect(got.status).toBe(1);
-    expect(got.value.reviews.filter((x: { output: string | null }) => x.output).length).toBe(3);
-    expect(
-      got.value.reviews.some((x: { failure: string | null }) => x.failure === "one failed"),
-    ).toBe(true);
+    expect(got.value.reviews?.filter(({ output }) => output !== null)).toHaveLength(3);
+    expect(got.value.reviews?.some(({ failure }) => failure === "one failed")).toBe(true);
   });
+  it("reports both global and pinned project rules separately", async () => {
+    const r = await repo();
+    const global = join(r.root, "agent", "but-why", "rules");
+    await mkdir(global, { recursive: true });
+    await writeFile(join(global, "check.md"), "GLOBAL RULE\n");
+
+    const got = await execute(
+      r.root,
+      ["review", "repository", "--at", r.base],
+      async () => "completed",
+    );
+
+    expect(got.status).toBe(0);
+    expect(got.value.rules?.map(({ identity }) => identity)).toEqual([
+      "global/check",
+      "project/check",
+    ]);
+    expect(got.value.rules?.[0]?.provenance).toBe(join(global, "check.md"));
+    expect(got.value.rules?.[1]?.provenance).toContain(`${r.base}:.but-why/rules/check.md`);
+    expect(got.value.rules?.every(({ digest }) => /^[0-9a-f]{64}$/.test(digest))).toBe(true);
+    expect(got.value.reviews?.map(({ output }) => output)).toEqual(["completed", "completed"]);
+  });
+
+  it("preserves a checkout when its Git registration stops being detached", async () => {
+    const r = await repo();
+
+    const reviewer: Reviewer = async ({ cwd }) => {
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      await promisify(execFile)("git", ["switch", "-c", "registration-changed"], { cwd });
+
+      return "reviewed";
+    };
+
+    const got = await execute(r.root, ["review", "repository", "--at", r.base], reviewer);
+    expect(got.status).toBe(1);
+    expect(got.value.cleanupFailure).toContain("Git registration is absent or changed");
+    const path = got.value.cleanupFailure?.match(/Preserved checkout (.*?):/)?.[1];
+
+    if (path === undefined) throw new Error("Expected preserved checkout path");
+
+    await r.run("worktree", "remove", path);
+    await rm(dirname(path), { recursive: true });
+  });
+
+  it("preserves a checkout when the Pi adapter cannot prove its activity settled", async () => {
+    const r = await repo();
+
+    const got = await execute(r.root, ["review", "repository", "--at", r.base], () =>
+      Promise.reject(new ReviewerActivityUncertain({ message: "still active" })),
+    );
+
+    expect(got.status).toBe(1);
+    expect(got.value.cleanupFailure).toContain("Reviewer may still be running");
+    const path = got.value.cleanupFailure?.match(/Preserved checkout (.*?):/)?.[1];
+
+    if (path === undefined) throw new Error("Expected preserved checkout path");
+
+    await r.run("worktree", "remove", path);
+    await rm(dirname(path), { recursive: true });
+  });
+
   it("preserves and reports a dirty task-owned checkout", async () => {
     const r = await repo();
     const at = r.base;
+
     const reviewer: Reviewer = async ({ cwd }) => {
       await writeFile(join(cwd, "intrusion"), "dirty");
+
       return "done";
     };
+
     const got = await execute(r.root, ["review", "repository", "--at", at], reviewer);
     expect(got.status).toBe(1);
     expect(got.value.cleanupFailure).toContain("Checkout integrity changed");
-    const path = String(got.value.cleanupFailure).match(/Preserved checkout (.*?):/)?.[1];
-    if (!path) throw new Error("Expected preserved checkout path");
+    const path = got.value.cleanupFailure?.match(/Preserved checkout (.*?):/)?.[1];
+
+    if (path === undefined) throw new Error("Expected preserved checkout path");
     expect(await readFile(join(path, "intrusion"), "utf8")).toBe("dirty");
     await rm(join(path, ".."), { recursive: true, force: true });
   });

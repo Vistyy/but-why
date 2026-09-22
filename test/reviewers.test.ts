@@ -16,13 +16,18 @@ describe("Effect reviewer orchestration", () => {
   it("limits concurrency to three and returns input order and untouched text", async () => {
     let active = 0;
     let maximum = 0;
+
     const output = await run(rules(7), async ({ prompt }) => {
       active++;
       maximum = Math.max(maximum, active);
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 5);
+      });
       active--;
+
       return ` ${prompt}\n`;
     });
+
     expect(maximum).toBe(3);
     expect(output.results.map((r) => r.output)).toEqual(rules(7).map((r) => ` ${r.prompt}\n`));
     expect(output.uncertain).toBe(false);
@@ -31,20 +36,33 @@ describe("Effect reviewer orchestration", () => {
   it("retains siblings when one reviewer fails", async () => {
     const output = await run(rules(3), async ({ prompt }) => {
       if (prompt === "p1") throw new Error("failed");
+
       return prompt;
     });
+
     expect(output.results.map((r) => r.output)).toEqual(["p0", null, "p2"]);
     expect(output.results[1]?.failure?._tag).toBe("ReviewerFailed");
   });
 
   it("interrupts the result promptly and marks unsettled activity uncertain", async () => {
     const controller = new AbortController();
+
     const pending = Effect.runPromise(
-      runReviewers(rules(1), "/checkout", () => new Promise(() => undefined), controller.signal, {
-        deadlineMs: 1_000,
-        settleMs: 5,
-      }),
+      runReviewers(
+        rules(1),
+        "/checkout",
+        () =>
+          new Promise(() => {
+            /* deliberately uncooperative */
+          }),
+        controller.signal,
+        {
+          deadlineMs: 1_000,
+          settleMs: 5,
+        },
+      ),
     );
+
     controller.abort();
     const output = await pending;
     expect(output.results[0]?.failure?._tag).toBe("ReviewerInterrupted");
@@ -60,13 +78,22 @@ describe("Effect reviewer orchestration", () => {
         }),
       { deadlineMs: 5, settleMs: 5 },
     );
+
     expect(cooperative.results[0]?.failure?._tag).toBe("ReviewerTimedOut");
     expect(cooperative.uncertain).toBe(false);
 
-    const uncooperative = await run(rules(1), () => new Promise(() => undefined), {
-      deadlineMs: 5,
-      settleMs: 5,
-    });
+    const uncooperative = await run(
+      rules(1),
+      () =>
+        new Promise(() => {
+          /* deliberately uncooperative */
+        }),
+      {
+        deadlineMs: 5,
+        settleMs: 5,
+      },
+    );
+
     expect(uncooperative.results[0]?.failure?._tag).toBe("ReviewerTimedOut");
     expect(uncooperative.uncertain).toBe(true);
   });

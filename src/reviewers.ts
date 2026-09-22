@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 
 export type Reviewer = (input: {
   cwd: string;
@@ -25,11 +25,109 @@ export type ReviewOutcome = RuleAssignment & {
 
 export type ReviewBatch = { results: ReviewOutcome[]; uncertain: boolean };
 
+/** The adapter failed to prove that its underlying activity stopped. */
+export class ReviewerActivityUncertain extends Data.TaggedError("ReviewerActivityUncertain")<{
+  readonly message: string;
+}> {}
+
 const DEADLINE_MS = 120_000;
+
 const SETTLE_MS = 2_000;
 
-// The reviewer is an external Promise boundary: Effect interruption aborts its signal,
-// but does not prove that the underlying SDK activity has finished.
+type ActivityFailure = ReviewFailure | { readonly _tag: "TimeoutError" };
+
+function interrupted(signal: AbortSignal): Effect.Effect<never, ReviewFailure> {
+  return Effect.callback((resume) => {
+    const fail = () => resume(Effect.fail({ _tag: "ReviewerInterrupted" }));
+
+    if (signal.aborted) {
+      fail();
+
+      return Effect.void;
+    }
+
+    signal.addEventListener("abort", fail, { once: true });
+
+    return Effect.sync(() => signal.removeEventListener("abort", fail));
+  });
+}
+
+function failedReview(
+  rule: RuleAssignment,
+  error: ActivityFailure,
+  finished: () => boolean,
+  settle: number,
+  markUncertain: () => void,
+): Effect.Effect<ReviewOutcome> {
+  return Effect.gen(function* () {
+    if (!finished()) {
+      yield* Effect.sleep(settle);
+
+      if (!finished()) markUncertain();
+    }
+
+    if (error._tag === "ReviewerFailed" && error.cause instanceof ReviewerActivityUncertain)
+      markUncertain();
+
+    const failure: ReviewFailure =
+      error._tag === "TimeoutError" ? { _tag: "ReviewerTimedOut" } : error;
+
+    return { ...rule, output: null, failure };
+  });
+}
+
+function reviewOne(
+  rule: RuleAssignment,
+  cwd: string,
+  reviewer: Reviewer,
+  signal: AbortSignal | undefined,
+  deadline: number,
+  settle: number,
+  markUncertain: () => void,
+): Effect.Effect<ReviewOutcome> {
+  return Effect.gen(function* () {
+    if (signal?.aborted === true)
+      return { ...rule, output: null, failure: { _tag: "ReviewerInterrupted" } };
+
+    let finished = false;
+
+    const activity = Effect.tryPromise({
+      try: (reviewSignal) =>
+        Promise.resolve()
+          .then(() => reviewer({ cwd, prompt: rule.prompt, signal: reviewSignal }))
+          .then(
+            (text) => {
+              finished = true;
+
+              return text;
+            },
+            (cause: unknown) => {
+              finished = true;
+
+              throw cause;
+            },
+          ),
+      catch: (cause): ReviewFailure => ({ _tag: "ReviewerFailed", cause }),
+    });
+
+    const observed =
+      signal === undefined ? activity : Effect.raceFirst(activity, interrupted(signal));
+
+    const outcome = yield* Effect.result(Effect.timeout(observed, deadline));
+
+    if (outcome._tag === "Failure")
+      return yield* failedReview(rule, outcome.failure, () => finished, settle, markUncertain);
+
+    const output = outcome.success;
+
+    return output.trim().length > 0
+      ? { ...rule, output, failure: null }
+      : { ...rule, output: null, failure: { _tag: "EmptyReview" } };
+  });
+}
+
+// Effect owns the reviewer AbortSignal and deadline. Bounded observation after
+// interruption determines whether checkout cleanup is safe.
 export function runReviewers(
   rules: readonly RuleAssignment[],
   cwd: string,
@@ -40,88 +138,14 @@ export function runReviewers(
   const deadline = options.deadlineMs ?? DEADLINE_MS;
   const settle = options.settleMs ?? SETTLE_MS;
   let uncertain = false;
-  // Keep cancellation, timeout and bounded settlement in one scope so their races
-  // share the same activity and uncertainty state.
-  const runOne = (rule: RuleAssignment): Effect.Effect<ReviewOutcome, never, never> =>
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the explicit bounded cancellation state machine is intentional.
-    Effect.gen(function* () {
-      if (signal?.aborted)
-        return { ...rule, output: null, failure: { _tag: "ReviewerInterrupted" } as const };
-      let finished = false;
-      const controller = new AbortController();
-      const abort = () => controller.abort();
-      const onInterrupt = () => {
-        controller.abort();
-      };
-      signal?.addEventListener("abort", onInterrupt, { once: true });
-      const activity = Promise.resolve()
-        .then(() => reviewer({ cwd, prompt: rule.prompt, signal: controller.signal }))
-        .then(
-          (text) => {
-            finished = true;
-            return text;
-          },
-          (error: unknown) => {
-            finished = true;
-            throw error;
-          },
-        );
-      let rejectInterrupted: ((reason: Error) => void) | undefined;
-      const interrupted = new Promise<string>((_, reject) => {
-        rejectInterrupted = reject;
-      });
-      const interruptReviewer = () => rejectInterrupted?.(new Error("Reviewer interrupted"));
-      try {
-        signal?.addEventListener("abort", interruptReviewer, { once: true });
-        if (signal?.aborted) interruptReviewer();
-        const result = yield* Effect.result(
-          Effect.timeout(
-            Effect.tryPromise({
-              try: (effectSignal) => {
-                effectSignal.addEventListener("abort", abort, { once: true });
-                return signal ? Promise.race([activity, interrupted]) : activity;
-              },
-              catch: (cause): ReviewFailure => ({ _tag: "ReviewerFailed", cause }),
-            }),
-            deadline,
-          ),
-        );
-        if (result._tag === "Success") {
-          const output = result.success;
-          return output.trim().length
-            ? { ...rule, output, failure: null }
-            : { ...rule, output: null, failure: { _tag: "EmptyReview" } as const };
-        }
-        controller.abort();
-        if (!finished) {
-          yield* Effect.sleep(settle);
-          if (!finished) uncertain = true;
-        }
-        const error = result.failure;
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "cause" in error &&
-          typeof error.cause === "object" &&
-          error.cause !== null &&
-          "name" in error.cause &&
-          error.cause.name === "ReviewerActivityUncertain"
-        )
-          uncertain = true;
-        const failure: ReviewFailure = signal?.aborted
-          ? { _tag: "ReviewerInterrupted" }
-          : "_tag" in error && error._tag === "TimeoutError"
-            ? { _tag: "ReviewerTimedOut" }
-            : (error as ReviewFailure);
-        return { ...rule, output: null, failure };
-      } finally {
-        signal?.removeEventListener("abort", onInterrupt);
-        signal?.removeEventListener("abort", interruptReviewer);
-        void activity.catch(() => undefined);
-      }
-    });
-  return Effect.map(Effect.forEach(rules, runOne, { concurrency: 3 }), (results) => ({
-    results,
-    uncertain,
-  }));
+
+  const markUncertain = () => {
+    uncertain = true;
+  };
+
+  return Effect.forEach(
+    rules,
+    (rule) => reviewOne(rule, cwd, reviewer, signal, deadline, settle, markUncertain),
+    { concurrency: 3 },
+  ).pipe(Effect.map((results) => ({ results, uncertain })));
 }

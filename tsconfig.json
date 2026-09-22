@@ -2,7 +2,10 @@
   "extends": "@syzom/typescript-quality/tsconfig/effect.json",
   "compilerOptions": {
     "noEmit": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "oxlint.config.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs", "oxlint.config.ts"]
 }

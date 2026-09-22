@@ -1,4 +1,5 @@
 {
   "extends": ["@syzom/typescript-quality/biome"],
-  "files": { "includes": ["**", "!!dist", "!!coverage"] }
+  "files": { "includes": ["**", "!!dist", "!!coverage"] },
+  "linter": { "rules": { "complexity": { "useLiteralKeys": "off" } } }
 }
