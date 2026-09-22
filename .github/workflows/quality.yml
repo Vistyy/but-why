@@ -10,13 +10,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: corepack enable
-      - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm exec effect-tsgo patch --oxlint --no-typescript
-      - run: corepack pnpm exec biome check --error-on-warnings .
-      - run: corepack pnpm exec oxlint --config oxlint.config.ts .
-      - run: corepack pnpm typecheck
-      - run: corepack pnpm test
-      - run: corepack pnpm build
+      - uses: pnpm/action-setup@v6
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec effect-tsgo patch --oxlint --no-typescript
+      - run: pnpm exec biome check --error-on-warnings .
+      - run: pnpm exec oxlint --config oxlint.config.ts .
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
       - run: node scripts/test-cli-process.mjs
       - run: git diff --check
