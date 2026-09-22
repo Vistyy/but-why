@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { lstat, realpath } from "node:fs/promises";
 import { promisify } from "node:util";
 import { Data, Effect } from "effect";
@@ -8,8 +8,6 @@ const exec = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 30_000;
 
 const OUTPUT_LIMIT = 1_000_000;
-
-const DIFF_LIMIT = 160_000;
 
 export class GitError extends Data.TaggedError("GitError")<{
   readonly operation: string;
@@ -35,74 +33,6 @@ export function git(cwd: string, args: readonly string[]): Effect.Effect<string,
         maxBuffer: OUTPUT_LIMIT,
       }).then((result) => result.stdout),
     catch: (cause) => gitFailure(operation, cause),
-  });
-}
-
-export function boundedDiff(
-  cwd: string,
-  base: string,
-  head: string,
-): Effect.Effect<string, GitError> {
-  return Effect.callback<string, GitError>((resume, signal) => {
-    const child = spawn("git", ["diff", "--no-ext-diff", base, head, "--"], {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let text = "";
-    let stderr = "";
-    let truncated = false;
-    let complete = false;
-
-    const stop = () => child.kill("SIGKILL");
-    // oxlint-disable-next-line effecttsgo/global-timers-in-effect
-    const timeout = setTimeout(stop, COMMAND_TIMEOUT_MS);
-    signal.addEventListener("abort", stop, { once: true });
-
-    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
-      if (truncated) return;
-
-      if (text.length + chunk.length > DIFF_LIMIT) {
-        text += chunk.slice(0, DIFF_LIMIT - text.length);
-        truncated = true;
-        stop();
-      } else {
-        text += chunk;
-      }
-    });
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
-      stderr = (stderr + chunk).slice(0, 500);
-    });
-
-    const finish = (code: number | null) => {
-      if (complete) return;
-      complete = true;
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", stop);
-
-      if (signal.aborted) return;
-
-      if (truncated) {
-        resume(Effect.succeed(`${text}\n[Diff truncated after ${DIFF_LIMIT} characters.]`));
-      } else if (code === 0) {
-        resume(Effect.succeed(text));
-      } else {
-        resume(
-          Effect.fail(new GitError({ operation: "diff", message: stderr || "Git diff failed" })),
-        );
-      }
-    };
-
-    child.once("error", (cause) => {
-      if (complete) return;
-      complete = true;
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", stop);
-      resume(Effect.fail(gitFailure("diff", cause)));
-    });
-    child.once("close", finish);
-
-    return Effect.sync(stop);
   });
 }
 

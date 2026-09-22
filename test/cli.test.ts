@@ -93,7 +93,7 @@ afterEach(async () => {
 });
 
 describe("standalone reviewer", () => {
-  it("pins project rules to base and supplies direct change paths and diff", async () => {
+  it("pins project rules to base and supplies change IDs for checkout inspection", async () => {
     const r = await repo();
     await writeFile(join(r.root, ".but-why/rules/check.md"), "LIVE MUTATED POLICY\n");
     await writeFile(join(r.root, "code.ts"), "export const next = 2;\n");
@@ -104,18 +104,32 @@ describe("standalone reviewer", () => {
     const got = await execute(
       r.root,
       ["review", "change", "--base", r.base, "--head", head],
-      async ({ prompt }) => prompt,
+      async ({ cwd, prompt }) => {
+        const { execFile } = await import("node:child_process");
+        const { promisify } = await import("node:util");
+
+        const diff = (
+          await promisify(execFile)("git", ["diff", "--no-ext-diff", r.base, head, "--"], {
+            cwd,
+          })
+        ).stdout;
+
+        expect(diff).toContain("export const next = 2");
+
+        return prompt;
+      },
     );
 
     expect(got.status).toBe(0);
     const prose = got.value.reviews?.[0]?.output;
-    expect(prose).toContain("inspect every changed path and diff hunk");
-    expect(prose).toContain("If the supplied diff is truncated, use Git");
+    expect(prose).toContain("enumerate every changed path and inspect every diff hunk");
     expect(prose).toContain("Do not edit files");
     expect(prose).toContain("PINNED BASE POLICY");
     expect(prose?.split("Rule project/check (")[1]).not.toContain("LIVE MUTATED POLICY");
-    expect(prose).toContain("code.ts");
-    expect(prose).toContain("export const next = 2");
+    expect(prose).toContain(r.base);
+    expect(prose).toContain(head);
+    expect(prose).not.toContain("code.ts");
+    expect(prose).not.toContain("export const next = 2");
   });
   it("uses configured model and thinking defaults with per-review overrides", async () => {
     const r = await repo();
@@ -227,7 +241,7 @@ describe("standalone reviewer", () => {
     ).toBeNull();
   });
 
-  it("bounds a large valid change diff without rejecting the review", async () => {
+  it("does not embed a large change diff in rule prompts", async () => {
     const r = await repo();
     await writeFile(join(r.root, "code.ts"), `export const large = "${"x".repeat(180_000)}";\n`);
     await r.run("add", "code.ts");
@@ -241,8 +255,11 @@ describe("standalone reviewer", () => {
     );
 
     expect(got.status).toBe(0);
-    expect(got.value.reviews?.[0]?.output).toContain("[Diff truncated after");
-    expect(got.value.reviews?.[0]?.output).toContain("code.ts");
+    const prompt = got.value.reviews?.[0]?.output;
+    expect(prompt).toContain(r.base);
+    expect(prompt).toContain(head);
+    expect(prompt?.length).toBeLessThan(3_000);
+    expect(prompt).not.toContain("code.ts");
   });
 
   it("rejects traversal and absent audited paths", async () => {

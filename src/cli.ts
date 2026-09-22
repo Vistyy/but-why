@@ -3,14 +3,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { Data, Effect } from "effect";
 import { loadConfig } from "./config.js";
-import {
-  boundedDiff,
-  commonDirectory,
-  exactCommit,
-  git,
-  hasRegistration,
-  inspectOwnedWorktree,
-} from "./git.js";
+import { commonDirectory, exactCommit, git, hasRegistration, inspectOwnedWorktree } from "./git.js";
 import {
   effectiveThinkingLevel,
   parseModelSlug,
@@ -196,29 +189,7 @@ function scopeFor(repository: string, input: Invocation) {
       const base = yield* exactCommit(repository, yield* required(input.options, "--base"));
       const head = yield* exactCommit(repository, yield* required(input.options, "--head"));
 
-      const paths = yield* git(repository, [
-        "diff",
-        "--name-only",
-        "-z",
-        "--no-ext-diff",
-        base,
-        head,
-        "--",
-      ]);
-
-      const changed = paths
-        .split("\0")
-        .filter(Boolean)
-        .map((path) => JSON.stringify(path))
-        .join("\n");
-
-      const diff = yield* boundedDiff(repository, base, head);
-
-      return {
-        base,
-        head,
-        description: `Change ${base}..${head}\nChanged paths:\n${changed || "(none)"}\nDiff:\n${diff || "(none)"}`,
-      } satisfies Scope;
+      return { base, head, description: `Change ${base}..${head}` } satisfies Scope;
     }
 
     const head = yield* exactCommit(repository, yield* required(input.options, "--at"));

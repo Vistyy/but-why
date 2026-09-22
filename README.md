@@ -12,7 +12,7 @@ by review files --at <full-commit-sha> src/example.ts src/other.ts
 by review repository --at <full-commit-sha>
 ```
 
-Only committed revisions are supported. `change` asks the reviewer to inspect every changed path and diff hunk, using Git to continue beyond a truncated diff in the initial context. `files` covers the named regular files; `repository` gives the reviewer the whole repository as its scope. Reviewers may inspect related code and must disclose uninspected portions. Their observations are not guaranteed to exhaust the scope.
+Only committed revisions are supported. `change` supplies the exact base and head commit IDs, not an embedded diff; the reviewer uses Git in the detached checkout to enumerate and inspect every changed path and hunk. `files` covers the named regular files; `repository` gives the reviewer the whole repository as its scope. Reviewers may inspect related code and must disclose uninspected portions. Their observations are not guaranteed to exhaust the scope.
 
 Set a default model and thinking level in `<Pi agent directory>/but-why/config.json` (normally `~/.pi/agent/but-why/config.json`; follows `PI_CODING_AGENT_DIR`):
 
