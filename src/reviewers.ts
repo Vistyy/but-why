@@ -62,6 +62,8 @@ function failedReview(
 ): Effect.Effect<ReviewOutcome> {
   return Effect.gen(function* () {
     if (!finished()) {
+      // Keep the Effect.forEach slot occupied throughout this grace period.
+      // Other settled slots may run new rules, but this activity cannot be replaced.
       yield* Effect.sleep(settle);
 
       if (!finished()) markUncertain();

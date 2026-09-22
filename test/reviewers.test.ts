@@ -93,6 +93,39 @@ describe("Effect reviewer orchestration", () => {
     ]);
   });
 
+  it("keeps a timed-out activity's slot occupied while other reviewers finish during settlement", async () => {
+    let active = 0;
+    let maximum = 0;
+
+    const output = await run(
+      rules(6),
+      ({ prompt }) => {
+        active++;
+        maximum = Math.max(maximum, active);
+
+        if (prompt === "p0")
+          return new Promise(() => {
+            /* deliberately uncooperative */
+          });
+
+        const duration = prompt === "p3" || prompt === "p4" ? 225 : 75;
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            active--;
+            resolve(prompt);
+          }, duration);
+        });
+      },
+      { deadlineMs: 250, settleMs: 250 },
+    );
+
+    expect(maximum).toBe(3);
+    expect(output.results[0]?.failure?._tag).toBe("ReviewerTimedOut");
+    expect(output.results[5]?.output).toBe("p5");
+    expect(output.uncertain).toBe(true);
+  });
+
   it("reports cooperative and uncooperative timed-out activity distinctly", async () => {
     const cooperative = await run(
       rules(1),
