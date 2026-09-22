@@ -1,3 +1,4 @@
+import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
 
@@ -13,12 +14,42 @@ export interface SelectedModel {
   readonly runtime: ModelRuntime;
 }
 
+export type ThinkingLevel = Parameters<typeof clampThinkingLevel>[1];
+
 export class ModelSelectionError extends Data.TaggedError("ModelSelectionError")<{
   readonly message: string;
 }> {}
 
 function failure(message: string): ModelSelectionError {
   return new ModelSelectionError({ message });
+}
+
+export function parseThinkingLevel(
+  value: string | undefined,
+): Effect.Effect<ThinkingLevel, ModelSelectionError> {
+  const requested = value ?? "medium";
+
+  switch (requested) {
+    case "off":
+    case "minimal":
+    case "low":
+    case "medium":
+    case "high":
+    case "xhigh":
+    case "max":
+      return Effect.succeed(requested);
+    default:
+      return Effect.fail(
+        failure("Thinking level must be off, minimal, low, medium, high, xhigh, or max"),
+      );
+  }
+}
+
+export function effectiveThinkingLevel(
+  selected: SelectedModel,
+  requested: ThinkingLevel,
+): ThinkingLevel {
+  return clampThinkingLevel(selected.model, requested);
 }
 
 /** A model choice must not depend on Pi's saved settings or first-available fallback. */

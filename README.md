@@ -14,19 +14,20 @@ by review repository --at <full-commit-sha>
 
 Only committed revisions are supported. `change` reviews the direct difference between the two commits and may inspect related code. Large diffs are explicitly truncated in the review context rather than rejected. `files` reviews the named regular files and related code; `repository` gives the reviewer the whole repository as its scope. A reviewer's observations are not guaranteed to exhaust that scope.
 
-Set a default model in `~/.config/but-why/config.json`:
+Set a default model and thinking level in `~/.config/but-why/config.json`:
 
 ```json
-{ "model": "provider/model-id" }
+{ "model": "provider/model-id", "thinkingLevel": "high" }
 ```
 
-Any review command can add `--model provider/model-id` to override this default. The identifier must match a model in Pi's catalog with configured authentication. If neither the config nor the command supplies a model, the review fails; it never silently chooses another one.
+Any review command can add `--model provider/model-id` and/or `--thinking-level high` to override those defaults. The model identifier must match Pi's catalog with configured authentication. If neither the config nor the command supplies a model, the review fails; it never silently chooses another one. Thinking level defaults to `medium`; Pi supports `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`, and clamps unsupported choices to a level the model can use. The JSON result records the requested level and, once the model resolves, the effective level.
 
 To use a Pi extension in reviewers, list it in the same **user** config file:
 
 ```json
 {
   "model": "provider/model-id",
+  "thinkingLevel": "high",
   "extensions": ["/absolute/path/to/extension/index.ts", "npm:example-extension@1.0.0"]
 }
 ```
@@ -49,6 +50,6 @@ But Why supplies its own reviewer instructions and inspection tools. It does not
 
 ## Results
 
-`by` writes one JSON result to stdout with the exact revisions, chosen model, scope, rule provenance and content digest, and each reviewer's **unedited** final prose or mechanical failure. It makes no semantic pass/fail decision. If a reviewer fails or times out, the other running reviewers finish. If a timed-out reviewer has not settled after a bounded grace period, further queued reviews are skipped and the checkout is preserved. Reports remain in a result marked `incomplete`, and the command exits nonzero. Git, checkout-integrity, and cleanup failures also produce a nonzero incomplete result. There is no automatic retry or fix loop.
+`by` writes one JSON result to stdout with the exact revisions, chosen model, requested and effective thinking levels, scope, rule provenance and content digest, and each reviewer's **unedited** final prose or mechanical failure. It makes no semantic pass/fail decision. If a reviewer fails or times out, the other running reviewers finish. If a timed-out reviewer has not settled after a bounded grace period, further queued reviews are skipped and the checkout is preserved. Reports remain in a result marked `incomplete`, and the command exits nonzero. Git, checkout-integrity, and cleanup failures also produce a nonzero incomplete result. There is no automatic retry or fix loop.
 
 To develop But Why itself, see `AGENTS.md` and `VERIFICATION.md`.

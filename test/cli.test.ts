@@ -14,6 +14,8 @@ const OutputSchema = Schema.fromJsonString(
   Schema.Struct({
     incomplete: Schema.Boolean,
     model: Schema.optional(Schema.String),
+    requestedThinkingLevel: Schema.optional(Schema.String),
+    thinkingLevel: Schema.optional(Schema.String),
     rules: Schema.optional(
       Schema.Array(
         Schema.Struct({
@@ -113,7 +115,7 @@ describe("standalone reviewer", () => {
     expect(prose).toContain("code.ts");
     expect(prose).toContain("export const next = 2");
   });
-  it("uses the configured model, allows an explicit override, and never picks a fallback", async () => {
+  it("uses configured model and thinking defaults with per-review overrides", async () => {
     const r = await repo();
     const args = ["review", "repository", "--at", r.base];
     const reviewer: Reviewer = async () => "reviewed";
@@ -121,10 +123,29 @@ describe("standalone reviewer", () => {
     const configured = await execute(r.root, args, reviewer);
     expect(configured.status).toBe(0);
     expect(configured.value.model).toBe("fixture/model");
+    expect(configured.value.requestedThinkingLevel).toBe("medium");
+    expect(configured.value.thinkingLevel).toBeUndefined();
 
-    const overridden = await execute(r.root, [...args, "--model", "other/model"], reviewer);
+    await writeFile(
+      join(r.home, ".config", "but-why", "config.json"),
+      JSON.stringify({ model: "fixture/model", thinkingLevel: "high" }),
+    );
+    const configuredLevel = await execute(r.root, args, reviewer);
+    expect(configuredLevel.value.requestedThinkingLevel).toBe("high");
+
+    const overridden = await execute(
+      r.root,
+      [...args, "--model", "other/model", "--thinking-level", "low"],
+      reviewer,
+    );
+
     expect(overridden.status).toBe(0);
     expect(overridden.value.model).toBe("other/model");
+    expect(overridden.value.requestedThinkingLevel).toBe("low");
+
+    const invalidLevel = await execute(r.root, [...args, "--thinking-level", "ultra"], reviewer);
+    expect(invalidLevel.status).toBe(1);
+    expect(invalidLevel.value.error).toContain("Thinking level must be");
 
     await writeFile(join(r.home, ".config", "but-why", "config.json"), "{}");
     const absent = await execute(r.root, args, reviewer);
@@ -144,6 +165,35 @@ describe("standalone reviewer", () => {
     expect(relative.value.error).toContain(
       "extensions must be absolute paths or Pi package references",
     );
+  });
+
+  it("reports Pi's effective thinking level before starting reviewers", async () => {
+    const r = await repo();
+    const previousKey = process.env["OPENAI_API_KEY"];
+    process.env["OPENAI_API_KEY"] = "by-test-not-a-real-key";
+
+    try {
+      await writeFile(
+        join(r.home, ".config", "but-why", "config.json"),
+        JSON.stringify({
+          model: "openai/gpt-4.1-mini",
+          thinkingLevel: "high",
+          extensions: [join(r.root, "missing-extension.ts")],
+        }),
+      );
+      const got = await execute(r.root, ["review", "repository", "--at", r.base]);
+      expect(got.status).toBe(1);
+      expect(got.value.model).toBe("openai/gpt-4.1-mini");
+      expect(got.value.requestedThinkingLevel).toBe("high");
+      expect(got.value.thinkingLevel).toBe("off");
+      expect(got.value.error).toContain("No Pi extension found");
+      expect(
+        (await r.run("worktree", "list", "--porcelain")).stdout.match(/\nworktree /g),
+      ).toBeNull();
+    } finally {
+      if (previousKey === undefined) delete process.env["OPENAI_API_KEY"];
+      else process.env["OPENAI_API_KEY"] = previousKey;
+    }
   });
 
   it("rejects an unknown Pi model before creating a reviewer checkout", async () => {

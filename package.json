@@ -21,6 +21,7 @@
     "format-check": "biome format ."
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.84.2",
     "@earendil-works/pi-coding-agent": "0.84.2",
     "effect": "4.0.0-rc.112"
   },

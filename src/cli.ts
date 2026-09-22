@@ -11,7 +11,12 @@ import {
   hasRegistration,
   inspectOwnedWorktree,
 } from "./git.js";
-import { parseModelSlug, resolveReviewModel } from "./model.js";
+import {
+  effectiveThinkingLevel,
+  parseModelSlug,
+  parseThinkingLevel,
+  resolveReviewModel,
+} from "./model.js";
 import { resolveReviewerExtensions, reviewWithPi } from "./piReviewer.js";
 import { type Reviewer, type ReviewFailure, runReviewers } from "./reviewers.js";
 import { loadRules } from "./rules.js";
@@ -40,6 +45,8 @@ type Output = {
   mode?: Mode;
   commits?: { base: string; head: string } | { at: string };
   model?: string;
+  requestedThinkingLevel?: string;
+  thinkingLevel?: string;
   scope?: string;
   rules?: { identity: string; provenance: string; digest: string }[];
   reviews?: {
@@ -100,7 +107,7 @@ function parseMode(
   if (command !== "review" || (mode !== "change" && mode !== "files" && mode !== "repository"))
     return Effect.fail(
       invalid(
-        "Usage: by review change --base SHA --head SHA | by review files --at SHA <paths...> | by review repository --at SHA",
+        "Usage: by review change --base SHA --head SHA | by review files --at SHA <paths...> | by review repository --at SHA (all modes accept --model provider/model-id and --thinking-level LEVEL)",
       ),
     );
 
@@ -114,7 +121,7 @@ function parse(args: readonly string[]): Effect.Effect<Invocation, InputError> {
     const options: Record<string, string> = {};
     const paths: string[] = [];
     const requiredOptions = mode === "change" ? ["--base", "--head"] : ["--at"];
-    const allowed = [...requiredOptions, "--model"];
+    const allowed = [...requiredOptions, "--model", "--thinking-level"];
 
     for (let index = 0; index < rest.length; index++) {
       const arg = rest[index];
@@ -320,8 +327,13 @@ function runReview(
     const rules = yield* loadRules(repository, selected.base ?? selected.head, config);
     const slug = yield* parseModelSlug(input.options["--model"] ?? config.model);
 
+    const requestedThinkingLevel = yield* parseThinkingLevel(
+      input.options["--thinking-level"] ?? config.thinkingLevel,
+    );
+
     result.mode = input.mode;
     result.model = slug.value;
+    result.requestedThinkingLevel = requestedThinkingLevel;
     result.commits =
       selected.base === undefined
         ? { at: selected.head }
@@ -338,13 +350,16 @@ function runReview(
 
     if (activeReviewer === undefined) {
       const resolved = yield* resolveReviewModel(slug);
+      const thinkingLevel = effectiveThinkingLevel(resolved, requestedThinkingLevel);
+      result.thinkingLevel = thinkingLevel;
 
       const extensions = yield* Effect.tryPromise({
         try: () => resolveReviewerExtensions(repository, config.extensions ?? []),
         catch: (cause) => invalid(`Cannot resolve reviewer extensions: ${String(cause)}`),
       });
 
-      activeReviewer = (assignment) => reviewWithPi(assignment, resolved, extensions);
+      activeReviewer = (assignment) =>
+        reviewWithPi(assignment, resolved, extensions, thinkingLevel);
     }
 
     const commonDir = yield* commonDirectory(repository);

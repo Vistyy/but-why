@@ -33,9 +33,9 @@ it("builds an isolated Pi SDK session without discovering repository instruction
     );
 
     const runtime = await ModelRuntime.create({ refreshOnCreate: false });
-    const model = runtime.getModels()[0];
+    const model = runtime.getModels().find((candidate) => !candidate.reasoning);
 
-    if (model === undefined) throw new Error("Expected a built-in Pi model");
+    if (model === undefined) throw new Error("Expected a non-reasoning Pi model");
 
     const selected = {
       slug: { provider: model.provider, id: model.id, value: `${model.provider}/${model.id}` },
@@ -43,7 +43,7 @@ it("builds an isolated Pi SDK session without discovering repository instruction
       runtime,
     };
 
-    const { session, loader } = await openReviewerSession(cwd, selected);
+    const { session, loader } = await openReviewerSession(cwd, selected, [], "high");
 
     try {
       expect(session.agent.state.tools.map((tool) => tool.name).sort()).toEqual([
@@ -63,10 +63,38 @@ it("builds an isolated Pi SDK session without discovering repository instruction
       expect(loader.getAppendSystemPrompt()).toEqual([]);
       expect(session.sessionFile).toBeUndefined();
       expect(session.autoCompactionEnabled).toBe(true);
+      expect(session.thinkingLevel).toBe("off");
       expect(session.model?.provider).toBe(model.provider);
       expect(session.model?.id).toBe(model.id);
     } finally {
       session.dispose();
+    }
+
+    const reasoningModel = runtime
+      .getModels()
+      .find((candidate) => candidate.reasoning && candidate.thinkingLevelMap?.high !== null);
+
+    if (reasoningModel === undefined) throw new Error("Expected a reasoning Pi model");
+
+    const reasoning = await openReviewerSession(
+      cwd,
+      {
+        ...selected,
+        slug: {
+          provider: reasoningModel.provider,
+          id: reasoningModel.id,
+          value: `${reasoningModel.provider}/${reasoningModel.id}`,
+        },
+        model: reasoningModel,
+      },
+      [],
+      "high",
+    );
+
+    try {
+      expect(reasoning.session.thinkingLevel).toBe("high");
+    } finally {
+      reasoning.session.dispose();
     }
 
     const packageDir = join(root, "reviewer-package");
@@ -83,7 +111,7 @@ it("builds an isolated Pi SDK session without discovering repository instruction
     await writeFile(join(packageDir, "skills", "hostile", "SKILL.md"), "# HOSTILE_PACKAGE_SKILL");
     const chosenPaths = await resolveReviewerExtensions(cwd, [packageDir]);
     expect(chosenPaths).toEqual([extension]);
-    const optIn = await openReviewerSession(cwd, selected, chosenPaths);
+    const optIn = await openReviewerSession(cwd, selected, chosenPaths, "off");
 
     try {
       expect(optIn.loader.getExtensions().extensions.map(({ path }) => path)).toEqual([extension]);
@@ -98,9 +126,9 @@ it("builds an isolated Pi SDK session without discovering repository instruction
     await expect(resolveReviewerExtensions(cwd, [join(root, "missing.ts")])).rejects.toThrow(
       "No Pi extension found",
     );
-    await expect(openReviewerSession(cwd, selected, [join(root, "missing.ts")])).rejects.toThrow(
-      "Cannot load reviewer extensions",
-    );
+    await expect(
+      openReviewerSession(cwd, selected, [join(root, "missing.ts")], "off"),
+    ).rejects.toThrow("Cannot load reviewer extensions");
   } finally {
     if (previousAgent === undefined) delete process.env["PI_CODING_AGENT_DIR"];
     else process.env["PI_CODING_AGENT_DIR"] = previousAgent;

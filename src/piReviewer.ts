@@ -7,7 +7,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { SelectedModel } from "./model.js";
+import type { SelectedModel, ThinkingLevel } from "./model.js";
 import { ReviewerActivityUncertain } from "./reviewers.js";
 
 const CLEANUP_MS = 2_000;
@@ -39,7 +39,8 @@ export async function resolveReviewerExtensions(cwd: string, sources: readonly s
 export async function openReviewerSession(
   cwd: string,
   selected: SelectedModel,
-  extensions: readonly string[] = [],
+  extensions: readonly string[],
+  thinkingLevel: ThinkingLevel,
 ) {
   const settingsManager = SettingsManager.inMemory({ retry: { enabled: false } });
 
@@ -90,6 +91,7 @@ export async function openReviewerSession(
     resourceLoader: loader,
     model: selected.model,
     modelRuntime: selected.runtime,
+    thinkingLevel,
     tools: ["read", "grep", "find", "ls", "bash"],
   });
 
@@ -103,13 +105,14 @@ export async function reviewWithPi(
     signal: AbortSignal;
   },
   selected: SelectedModel,
-  extensions: readonly string[] = [],
+  extensions: readonly string[],
+  thinkingLevel: ThinkingLevel,
 ): Promise<string> {
   if (input.signal.aborted) throw new Error("Reviewer interrupted during setup");
 
   // Session creation has no AbortSignal API. If interrupted while it is pending,
   // the reviewer scheduler preserves the checkout until the activity settles.
-  const { session } = await openReviewerSession(input.cwd, selected, extensions);
+  const { session } = await openReviewerSession(input.cwd, selected, extensions, thinkingLevel);
   let promptTask: Promise<void> | undefined;
   let cleanupTask: Promise<boolean> | undefined;
 

@@ -6,7 +6,7 @@ await rm("dist", { recursive: true, force: true });
 const bundle = await rolldown({
   input: "src/main.ts",
   platform: "node",
-  external: ["@earendil-works/pi-coding-agent"],
+  external: ["@earendil-works/pi-ai", "@earendil-works/pi-coding-agent"],
 });
 
 await bundle.write({ dir: "dist", format: "esm", minify: true });

@@ -7,6 +7,7 @@ const ConfigSchema = Schema.fromJsonString(
   Schema.Struct({
     rulesDirectory: Schema.optional(Schema.String),
     model: Schema.optional(Schema.String),
+    thinkingLevel: Schema.optional(Schema.String),
     extensions: Schema.optional(Schema.Array(Schema.String)),
   }),
 );
@@ -14,6 +15,7 @@ const ConfigSchema = Schema.fromJsonString(
 export interface UserConfig {
   readonly rulesDirectory?: string | undefined;
   readonly model?: string | undefined;
+  readonly thinkingLevel?: string | undefined;
   readonly extensions?: readonly string[] | undefined;
 }
 
