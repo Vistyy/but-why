@@ -1,30 +1,7 @@
-# Verification
+# Verification boundaries
 
-## Recurring material risks
+- **Git and policy identity:** Use disposable repositories with real commits and independent Git common directories. A change review must load project rules from the comparison base even when the reviewed head and the caller's checkout contain different text. Test exact commit inputs, changed paths, selected files, and clean/dirty checkout disposition through the supported run entry point. Mocking Git cannot establish these guarantees.
+- **Reviewer behavior:** Inject a reviewer only at the Pi SDK boundary for routine tests. Assert each rule gets an independent assignment, that one failure preserves other reports and exits incomplete, and that a dirty checkout is reported and preserved. Tests need not call a paid model. Changes to Pi resource loading or tool availability need a focused SDK session check; a fabricated reviewer cannot establish that isolation.
+- **Executable and package:** Check the built `by` process when changing argument parsing, stdout, exit status, build, or package layout. A source import alone does not prove the shipped entry point works.
 
-- Acceptance Context identity can be lost.
-  But Why can then judge a Candidate against intent that was not approved for that Change.
-- Candidate or Validation Run identity can be lost.
-  But Why can then judge, reuse, publish, complete, or clean up the wrong Candidate.
-- External-target identity can be lost.
-  But Why can then mutate the wrong repository, branch, pull request, or commit.
-- Durable state can become inconsistent.
-  Concurrency, interruption, or uncertain external mutation can make Shared Repository State disagree with Git, remote, or workspace facts.
-- Terminal Cleanup or Discard Work can destroy work or evidence outside its authorized target.
-  A cleanup error can delete dirty Managed Worktree content, unique Repository Branch commits, an advanced Remote Change Branch, or Agent Transcripts that must be retained.
-- A false terminal result can complete or cancel work without authoritative facts.
-  Later operations can then rely on an operation, external mutation, or terminal state that did not occur.
-
-## Project-specific evidence constraints
-
-- Each retained check must protect supported behavior or detect an important failure.
-  Where checks overlap, retain only distinct protection and use the cheapest reliable supported seam.
-- Focused evidence for SQLite atomicity, the supported `0001_baseline` and forward migrations, and persisted Shared Repository State behavior must use real SQLite.
-- Focused evidence for Git identity and work-preservation behavior must use real Git.
-- Use a real process only when package, executable, stdin, process-tree, or agent-runtime behavior is at issue.
-  Captured Adapters are sufficient for GitHub classification and retry behavior.
-- A Validation Run does not prove changes to the Validation Gate unless its evidence shows that the exact Candidate implementation was exercised directly.
-- Installed-package isolation and current-worktree behavior require focused real-process sentinels in disposable repositories with independent Git Common Directories and state.
-- Evidence with a known intermittent failure cannot remain blocking.
-- Retain the shared capacity lock and the three-worker Vitest limit.
-  Change either only when a future Candidate demonstrates a valid result with three concurrent workloads for the changed portfolio.
+The pinned Biome, Oxlint/Effect, test, and build scripts are the ordinary static checks; run the applicable scripts rather than maintaining a second list here. Shell-capable reviewers are cooperative, not isolated from the host. Do not run live-review checks against an unrelated checkout, and do not delete a worktree whose ownership and cleanliness are unproven.
