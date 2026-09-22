@@ -473,6 +473,7 @@ export function runCli(
     .then(() => {
       if (controller.signal.aborted) result.error = "Interrupted";
       result.incomplete = result.error !== undefined || result.cleanupFailure !== undefined;
+      // oxlint-disable-next-line effecttsgo/global-console
       console.log(JSON.stringify(result));
 
       return result.incomplete ? 1 : 0;

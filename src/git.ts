@@ -55,6 +55,7 @@ export function boundedDiff(
     let complete = false;
 
     const stop = () => child.kill("SIGKILL");
+    // oxlint-disable-next-line effecttsgo/global-timers-in-effect
     const timeout = setTimeout(stop, COMMAND_TIMEOUT_MS);
     signal.addEventListener("abort", stop, { once: true });
 

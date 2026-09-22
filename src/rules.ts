@@ -28,6 +28,7 @@ function digest(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native filesystem exception boundary.
 function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

@@ -18,17 +18,5 @@ export default defineConfig({
       files: ["src/piReviewer.ts"],
       rules: { "effecttsgo/async-function": "off" },
     },
-    {
-      files: ["src/config.ts", "src/rules.ts"],
-      rules: { "anti-slop/no-unknown-parameters": "off" },
-    },
-    {
-      files: ["src/git.ts"],
-      rules: { "effecttsgo/global-timers-in-effect": "off" },
-    },
-    {
-      files: ["src/cli.ts"],
-      rules: { "effecttsgo/global-console": "off" },
-    },
   ],
 });

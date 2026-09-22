@@ -23,6 +23,7 @@ export class ConfigError extends Data.TaggedError("ConfigError")<{
 
 class ConfigAbsent extends Data.TaggedError("ConfigAbsent")<Record<string, never>> {}
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native filesystem exception boundary.
 function absent(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
