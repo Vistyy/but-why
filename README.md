@@ -48,7 +48,7 @@ Rules are additive. Filenames identify them as `global/<name>` or `project/<name
 
 ### Writing a rule
 
-But Why's shared reviewer instructions govern inspection, evidence, unresolved candidates, and reporting for every rule. Rule files specify individual judgments rather than repeating those duties. Run `by --rule-guide` for rule-authoring guidance, including when semantic review is appropriate, how to set a violation threshold and evidence-based exception, and how to try a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. The guide is bundled in the CLI; no Pi skill is needed to read it.
+But Why's shared reviewer instructions ask for locations and evidence of rule matches (or concrete unresolved candidates), not a fix proposal. Rule files specify each judgment, its rationale, and possible correction directions rather than repeating the reviewer's shared duties. Run `by --rule-guide` for rule-authoring guidance, including when semantic review is appropriate, how to set a violation threshold and evidence-based exception, and how to try a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. The guide is bundled in the CLI; no Pi skill is needed to read it.
 
 But Why supplies its own reviewer instructions and inspection tools. It does not load the reviewed repository's Pi extensions, skills, prompts, or `AGENTS.md` as reviewer instructions. Rule text is trusted configuration; repository source is review evidence, not an instruction channel.
 

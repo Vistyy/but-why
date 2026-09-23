@@ -14,9 +14,9 @@ Write a rule in .but-why/rules/<name>.md for the project or <Pi agent directory>
 - The code and relationships to inspect, including changes that invalidate a previously sound assumption. A finding need not be caused by or located in the diff.
 - An observable violation threshold and the rule-specific evidence needed to cross it. For a design or readability rule, identify the concrete current maintenance cost and what would make an alternative materially clearer; a preference alone is not a violation.
 - A close violation and legitimate near-miss showing where the threshold falls. Name the actual constraint or code evidence that distinguishes the near-miss; an existing or repeated pattern, a comment, or an assumed intent does not justify an exception. For example, an unchecked provider value cast before field access differs from a cast after validation of the consumed fields.
-- The rule-specific evidence a finding must identify, and a correction direction that addresses the underlying problem without requiring one syntax or helper when several sound implementations exist.
+- The rule-specific evidence a finding must identify. Explain the underlying problem and possible correction directions in the rule itself; a violation need not imply one prescribed fix, and the reviewer should not have to design a fix in its report.
 
-Leave shared reviewer duties to But Why: inspection, evidence-based findings, treatment of unresolved candidates, disclosure of coverage, and reporting no violations. A rule should specify its particular judgment, not duplicate the reviewer's general instructions.
+Leave shared reviewer duties to But Why: inspection, location and evidence for findings, treatment of unresolved candidates, disclosure of coverage, and reporting no violations. A rule should specify its particular judgment and rationale, not duplicate the reviewer's general instructions.
 
 ## Calibrate before relying on it
 
