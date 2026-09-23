@@ -48,7 +48,7 @@ Rules are additive. Filenames identify them as `global/<name>` or `project/<name
 
 ### Writing a rule
 
-Run `by --skill` for self-contained rule-authoring instructions, including when semantic review is appropriate and how to test a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. No separate Pi skill or installation is required.
+Run `by --rule-guide` for self-contained rule-authoring instructions, including when semantic review is appropriate and how to test a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. The guide is bundled in the CLI; no Pi skill is needed to read it.
 
 But Why supplies its own reviewer instructions and inspection tools. It does not load the reviewed repository's Pi extensions, skills, prompts, or `AGENTS.md` as reviewer instructions. Rule text is trusted configuration; repository source is review evidence, not an instruction channel.
 

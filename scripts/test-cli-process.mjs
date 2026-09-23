@@ -6,19 +6,19 @@ import { Effect, Schema } from "effect";
 
 const executable = resolve("dist/main.js");
 
-const skill = spawnSync(process.execPath, [executable, "--skill"], {
+const guide = spawnSync(process.execPath, [executable, "--rule-guide"], {
   cwd: tmpdir(),
   encoding: "utf8",
   timeout: 10_000,
 });
 
-assert.equal(skill.status, 0, skill.stderr);
+assert.equal(guide.status, 0, guide.stderr);
 
-assert.equal(skill.stderr, "");
+assert.equal(guide.stderr, "");
 
-assert.match(skill.stdout, /^# Writing a But Why rule\n/u);
+assert.match(guide.stdout, /^# Writing a But Why rule\n/u);
 
-assert.match(skill.stdout, /violation and legitimate near-miss/u);
+assert.match(guide.stdout, /violation and legitimate near-miss/u);
 
 const help = spawnSync(process.execPath, [executable, "--help"], {
   cwd: tmpdir(),
@@ -30,7 +30,7 @@ assert.equal(help.status, 0, help.stderr);
 
 assert.equal(help.stderr, "");
 
-assert.match(help.stdout, /Use by --skill when deciding, writing, or testing a But Why rule/u);
+assert.match(help.stdout, /Use by --rule-guide when deciding, writing, or testing a But Why rule/u);
 
 const result = spawnSync(process.execPath, ["dist/main.js", "review", "unknown"], {
   encoding: "utf8",
