@@ -48,9 +48,7 @@ Rules are additive. Filenames identify them as `global/<name>` or `project/<name
 
 ### Writing a rule
 
-Start from an observed failure and ask whether code structure, a test, or deterministic lint can prevent it more reliably. Use a rule only when the remaining decision needs context. State the code or change to inspect, the condition that makes it a violation, the evidence needed to decide, and any exclusion that prevents a plausible false positive. Include a concrete violation and a close legitimate case when their distinction would otherwise be unclear. Ask for the rule-specific evidence behind a finding; do not restate the reviewer's shared duties to inspect the scope, cite locations, or report no findings.
-
-Check a draft against both cases and a relevant real change before relying on it. One successful review does not guarantee future coverage or correct judgment. Project rules are useful for a bounded trial; global rules apply to every review, including repositories where the subject does not occur, and each runs a separate model session.
+Run `by --skill` for self-contained rule-authoring instructions, including when semantic review is appropriate and how to test a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. No separate Pi skill or installation is required.
 
 But Why supplies its own reviewer instructions and inspection tools. It does not load the reviewed repository's Pi extensions, skills, prompts, or `AGENTS.md` as reviewer instructions. Rule text is trusted configuration; repository source is review evidence, not an instruction channel.
 
