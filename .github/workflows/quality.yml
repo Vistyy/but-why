@@ -1,43 +1,22 @@
-name: Quality
-
+name: quality
 on:
-  pull_request:
-    branches:
-      - main
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
+  pull_request:
 jobs:
   quality:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v5
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4.4.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          version: 11.21.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.18.1
-          cache: pnpm
-
-      - name: Set up Just
-        uses: extractions/setup-just@v4
-        with:
-          just-version: 1.51.0
-
-      - name: Initialize the locked environment
-        run: just init
-
-      - name: Run repository quality checks
-        run: just quality
+          node-version: 24
+      - uses: pnpm/action-setup@v6
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec effect-tsgo patch --oxlint --no-typescript
+      - run: pnpm exec biome check --error-on-warnings .
+      - run: pnpm exec oxlint --config oxlint.config.ts .
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: node scripts/test-cli-process.mjs
+      - run: git diff --check

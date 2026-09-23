@@ -1,36 +1,4 @@
 #!/usr/bin/env node
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { bestEffortStderrWriter } from "./cli/bestEffortStderr.js";
-import { mapRuntimeError, runCli } from "./cli.js";
-import { hostInterruptionExitCode, runWithHostInterruption } from "./command/hostInterruption.js";
-import { serializeOutput } from "./output/serialize.js";
+import { runCli } from "./cli.js";
 
-const executablePath =
-  // biome-ignore lint/complexity/useLiteralKeys: TS index signature
-  process.env["BUT_WHY_EXECUTABLE_PATH"] ?? process.argv[1] ?? process.execPath;
-const args = process.argv.slice(2);
-// biome-ignore lint/complexity/useLiteralKeys: TS index signature
-const fixedNow = process.env["BUT_WHY_NOW"];
-// biome-ignore lint/complexity/useLiteralKeys: TS index signature
-const herdrSocketPath = process.env["HERDR_SOCKET_PATH"];
-const writeStderr = bestEffortStderrWriter(process.stderr);
-
-void runWithHostInterruption(
-  runCli(args, {
-    executablePath,
-    cwd: process.cwd(),
-    globalConfigPath: join(homedir(), ".config/but-why/config.json"),
-    ...(herdrSocketPath === undefined ? {} : { herdrSocketPath }),
-    now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
-    platform: process.platform,
-    stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
-    writeStderr,
-  }),
-  (completion) => {
-    const result = completion.ok ? completion.value : mapRuntimeError();
-    process.stdout.write(serializeOutput(result.stdout));
-    process.exitCode = hostInterruptionExitCode(completion.signal, result.exitCode);
-  },
-  process,
-);
+process.exitCode = await runCli();
