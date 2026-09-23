@@ -25,8 +25,8 @@ importers:
         specifier: 0.45.0
         version: 0.45.0
       '@syzom/typescript-quality':
-        specifier: 0.4.2
-        version: 0.4.2(@biomejs/biome@2.5.12)(@effect/tsgo@0.45.0)(effect@4.0.0-rc.112)(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)
+        specifier: 0.5.0
+        version: 0.5.0(@biomejs/biome@2.5.12)(@effect/tsgo@0.45.0)(effect@4.0.0-rc.112)(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)
       '@types/node':
         specifier: 24.0.0
         version: 24.0.0
@@ -1037,8 +1037,8 @@ packages:
     resolution: {integrity: sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A==}
     engines: {node: '>=14.0.0'}
 
-  '@syzom/typescript-quality@0.4.2':
-    resolution: {integrity: sha512-DtrJPErCU4zvHdU0upmXEqyr0x5u/cK/vfJ3ZzrBX7hTVuko99hVgFblTQarzw5gJYXSV3Xms/IV/xVYma5vIA==}
+  '@syzom/typescript-quality@0.5.0':
+    resolution: {integrity: sha512-Kh4mqbsSG0M8qDiRIsXXc97J9dajlHmtbAO1pwayv8G/7RFMvxRLz4IYVTGbc9iJtUjhPgK7skVHabzFUqBMJg==}
     engines: {node: '>=22.18.0'}
     peerDependencies:
       '@biomejs/biome': 2.5.12
@@ -2592,7 +2592,7 @@ snapshots:
       '@smithy/util-buffer-from': 2.2.0
       tslib: 2.8.1
 
-  '@syzom/typescript-quality@0.4.2(@biomejs/biome@2.5.12)(@effect/tsgo@0.45.0)(effect@4.0.0-rc.112)(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)':
+  '@syzom/typescript-quality@0.5.0(@biomejs/biome@2.5.12)(@effect/tsgo@0.45.0)(effect@4.0.0-rc.112)(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)':
     dependencies:
       '@biomejs/biome': 2.5.12
       '@oxlint/plugins': 1.82.0
