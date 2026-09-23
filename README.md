@@ -12,7 +12,7 @@ by review files --at <full-commit-sha> src/example.ts src/other.ts
 by review repository --at <full-commit-sha>
 ```
 
-Only committed revisions are supported. `change` supplies the exact base and head commit IDs, not an embedded diff; the reviewer uses Git in the detached checkout to enumerate and inspect every changed path and hunk. `files` covers the named regular files; `repository` gives the reviewer the whole repository as its scope. Reviewers may inspect related code and must disclose uninspected portions. Their observations are not guaranteed to exhaust the scope.
+Only committed revisions are supported. `change` supplies the exact base and head commit IDs, not an embedded diff; the reviewer uses Git in the detached checkout to enumerate and inspect every changed path and hunk, then follows relevant code. Changed paths and named files are inspection starting points, not limits on findings: a substantiated issue in the pinned commit may be reported even if it predates the change or lies outside its diff. `files` starts at the named regular files; `repository` assigns the whole repository for inspection. Reviewers disclose what they inspected and what they could not inspect; a change or file review does not claim repository-wide coverage. Their observations are not guaranteed to exhaust the scope.
 
 Set a default model and thinking level in `<Pi agent directory>/but-why/config.json` (normally `~/.pi/agent/but-why/config.json`; follows `PI_CODING_AGENT_DIR`):
 
@@ -48,7 +48,7 @@ Rules are additive. Filenames identify them as `global/<name>` or `project/<name
 
 ### Writing a rule
 
-Run `by --rule-guide` for self-contained rule-authoring instructions, including when semantic review is appropriate and how to test a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. The guide is bundled in the CLI; no Pi skill is needed to read it.
+But Why's shared reviewer instructions ask for locations and evidence of rule matches (or concrete unresolved candidates), not a fix proposal. Rule files specify each judgment, its rationale, and possible correction directions rather than repeating the reviewer's shared duties. Run `by --rule-guide` for rule-authoring guidance, including when semantic review is appropriate, how to set a violation threshold and evidence-based exception, and how to try a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. The guide is bundled in the CLI; no Pi skill is needed to read it.
 
 But Why supplies its own reviewer instructions and inspection tools. It does not load the reviewed repository's Pi extensions, skills, prompts, or `AGENTS.md` as reviewer instructions. Rule text is trusted configuration; repository source is review evidence, not an instruction channel.
 
