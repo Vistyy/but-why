@@ -17,6 +17,9 @@ import { loadRules } from "./rules.js";
 
 export type { Reviewer } from "./reviewers.js";
 
+export const usage =
+  "Usage: by review change --base SHA --head SHA | by review files --at SHA <paths...> | by review repository --at SHA (all modes accept --model provider/model-id, --thinking-level LEVEL, and --concurrency N) | by --rule-guide | by --help";
+
 type Mode = "change" | "files" | "repository";
 
 type Invocation = { mode: Mode; options: Record<string, string>; paths: string[] };
@@ -113,11 +116,7 @@ function parseMode(
   mode: string | undefined,
 ): Effect.Effect<Mode, InputError> {
   if (command !== "review" || (mode !== "change" && mode !== "files" && mode !== "repository"))
-    return Effect.fail(
-      invalid(
-        "Usage: by review change --base SHA --head SHA | by review files --at SHA <paths...> | by review repository --at SHA (all modes accept --model provider/model-id, --thinking-level LEVEL, and --concurrency N)",
-      ),
-    );
+    return Effect.fail(invalid(usage));
 
   return Effect.succeed(mode);
 }

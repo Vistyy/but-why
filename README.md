@@ -46,6 +46,10 @@ One Markdown file is one rule. But Why ships no rules yet.
 
 Rules are additive. Filenames identify them as `global/<name>` or `project/<name>`; the same name in both locations runs twice. With no rules, the command fails rather than claiming a review occurred.
 
+### Writing a rule
+
+Run `by --rule-guide` for self-contained rule-authoring instructions, including when semantic review is appropriate and how to test a rule against a violation and a legitimate near-miss. `by --help` advertises this flag. The guide is bundled in the CLI; no Pi skill is needed to read it.
+
 But Why supplies its own reviewer instructions and inspection tools. It does not load the reviewed repository's Pi extensions, skills, prompts, or `AGENTS.md` as reviewer instructions. Rule text is trusted configuration; repository source is review evidence, not an instruction channel.
 
 ## Results

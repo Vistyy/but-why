@@ -1,6 +1,34 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import { Effect, Schema } from "effect";
+
+const executable = resolve("dist/main.js");
+
+const guide = spawnSync(process.execPath, [executable, "--rule-guide"], {
+  cwd: tmpdir(),
+  encoding: "utf8",
+  timeout: 10_000,
+});
+
+assert.equal(guide.status, 0, guide.stderr);
+
+assert.equal(guide.stderr, "");
+
+assert.ok(guide.stdout.trim().length > 0, "Rule guide produced no output");
+
+const help = spawnSync(process.execPath, [executable, "--help"], {
+  cwd: tmpdir(),
+  encoding: "utf8",
+  timeout: 10_000,
+});
+
+assert.equal(help.status, 0, help.stderr);
+
+assert.equal(help.stderr, "");
+
+assert.ok(help.stdout.trim().length > 0, "Help produced no output");
 
 const result = spawnSync(process.execPath, ["dist/main.js", "review", "unknown"], {
   encoding: "utf8",
