@@ -56,4 +56,10 @@ But Why supplies its own reviewer instructions and inspection tools. It does not
 
 `by` writes one JSON result to stdout with the exact revisions, chosen model, requested and effective thinking levels, concurrency limit, scope, rule provenance and content digest, and each reviewer's **unedited** final prose or mechanical failure. It makes no semantic pass/fail decision. If a reviewer fails or times out, the other running reviewers finish. If a timed-out reviewer has not settled after a bounded grace period, further queued reviews are skipped and the checkout is preserved. Reports remain in a result marked `incomplete`, and the command exits nonzero. Git, checkout-integrity, and cleanup failures also produce a nonzero incomplete result. There is no automatic retry or fix loop.
 
+## Release
+
+Version `0.1.0` was published manually before the tag-triggered workflow existed. For later versions, update `package.json`, merge the checked change, then push the matching annotated `v<version>` tag. `.github/workflows/publish.yml` verifies the tag and package version, installs from the lockfile, runs the checks, packs, and publishes the tarball using npm trusted publishing. Do not push a release tag until the trusted publisher is configured.
+
+For `@syzom/but-why` on npm, open **Settings → Trusted publishing**, select **GitHub Actions**, and enter user `Vistyy`, repository `but-why`, workflow filename `publish.yml`, no environment, and allow `npm publish`. The workflow uses OIDC; do not add an npm token to GitHub.
+
 To develop But Why itself, see `AGENTS.md` and `VERIFICATION.md`.
