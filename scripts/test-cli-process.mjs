@@ -32,6 +32,10 @@ assert.equal(help.stderr, "");
 
 assert.match(help.stdout, /Use by --rule-guide when deciding, writing, or testing a But Why rule/u);
 
+assert.match(help.stdout, /no review ran/u);
+
+assert.match(help.stdout, /a completed review is not approval/u);
+
 const result = spawnSync(process.execPath, ["dist/main.js", "review", "unknown"], {
   encoding: "utf8",
   timeout: 10_000,
